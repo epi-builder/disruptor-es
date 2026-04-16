@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-04-16T22:43:40.876Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-04-16T22:50:56.566Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
-  percent: 63
+  completed_plans: 6
+  percent: 75
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 02 (durable-event-store-source-of-truth) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-04-16
 
@@ -53,6 +53,7 @@ Progress: [██████░░░░] 63%
 
 *Updated after each plan completion*
 | Phase 02-durable-event-store-source-of-truth P01 | 443 | 3 tasks | 7 files |
+| Phase 02-durable-event-store-source-of-truth P02 | 264 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Use SQLx 0.8.6 and Testcontainers 0.25.0/0.13.0 to stay compatible with the Rust 1.85 workspace floor.
 - [Phase 02]: Use PostgreSQL identity global positions and Rust-supplied UUIDs; the migration does not use DB-side uuidv7 defaults.
 - [Phase 02]: Connect to the local Testcontainers PostgreSQL instance with SSL disabled while preserving the postgres:18 test target.
+- [Phase 02]: AppendRequest derives tenant ownership from CommandMetadata rather than accepting a separate append-level tenant field.
+- [Phase 02]: PostgresEventStore exposes the storage method surface now while append/read SQL remains owned by Plans 03 and 04.
+- [Phase 02]: Event IDs are generated in Rust through a small IdGenerator trait using UUIDv7.
 
 ### Pending Todos
 
@@ -87,6 +91,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-16T22:43:40.871Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-04-16T22:50:56.558Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
