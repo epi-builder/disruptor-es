@@ -12,7 +12,7 @@ This roadmap delivers a Rust service template where committed events are the sou
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Workspace and Typed Kernel Contracts** - Developers can build the Rust workspace and define deterministic typed aggregate contracts.
+- [x] **Phase 1: Workspace and Typed Kernel Contracts** - Developers can build the Rust workspace and define deterministic typed aggregate contracts. Completed 2026-04-16.
 - [ ] **Phase 2: Durable Event Store Source of Truth** - Commands can persist committed events, metadata, dedupe records, snapshots, and global reads through the event store boundary.
 - [ ] **Phase 3: Local Command Runtime and Disruptor Execution** - Adapter requests flow through bounded local shards that own hot state and reply only after durable append.
 - [ ] **Phase 4: Commerce Fixture Domain** - User, product, and order behavior proves typed decisions, replay, relationships, and invariants.
@@ -33,10 +33,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Developer can inspect crate boundaries and see that lower-level core/kernel crates do not depend on HTTP, gRPC, PostgreSQL, broker, or Tokio adapter concerns.
 **Plans**: 4 plans
 Plans:
-- [ ] 01-01-PLAN.md — Create root Rust 2024 workspace policy, toolchain pin, dependency policy, and validation strategy.
-- [ ] 01-02-PLAN.md — Implement typed core IDs/metadata and synchronous aggregate kernel contracts.
-- [ ] 01-03-PLAN.md — Create runtime, storage, projection, outbox, adapter, and app boundary crate placeholders.
-- [ ] 01-04-PLAN.md — Add example aggregate, replay tests, dependency boundary tests, and full workspace verification.
+- [x] 01-01-PLAN.md — Create root Rust 2024 workspace policy, toolchain pin, dependency policy, and validation strategy.
+- [x] 01-02-PLAN.md — Implement typed core IDs/metadata and synchronous aggregate kernel contracts.
+- [x] 01-03-PLAN.md — Create runtime, storage, projection, outbox, adapter, and app boundary crate placeholders.
+- [x] 01-04-PLAN.md — Add example aggregate, replay tests, dependency boundary tests, and full workspace verification.
 
 ### Phase 2: Durable Event Store Source of Truth
 **Goal**: Command success is anchored to durable append-only event-store commits, with stream concurrency, metadata, dedupe, snapshots, replay, and global-position reads available before runtime behavior depends on them.
@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Workspace and Typed Kernel Contracts | 0/TBD | Not started | - |
+| 1. Workspace and Typed Kernel Contracts | 4/4 | Complete | 2026-04-16 |
 | 2. Durable Event Store Source of Truth | 0/TBD | Not started | - |
 | 3. Local Command Runtime and Disruptor Execution | 0/TBD | Not started | - |
 | 4. Commerce Fixture Domain | 0/TBD | Not started | - |

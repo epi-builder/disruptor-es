@@ -14,7 +14,7 @@ Provide a reusable, production-shaped Rust service template where committed even
 
 ### Validated
 
-(None yet - ship to validate)
+- [x] Phase 01 validated a Rust 2024 workspace with typed core metadata, synchronous aggregate kernel contracts, visible service boundary crates, an example commerce aggregate, and dependency-boundary tests for deterministic lower-level crates.
 
 ### Active
 
@@ -106,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-16 after initialization*
+*Last updated: 2026-04-16 after Phase 01 completion*
