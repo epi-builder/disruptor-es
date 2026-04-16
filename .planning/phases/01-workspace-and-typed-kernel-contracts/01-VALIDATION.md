@@ -20,8 +20,9 @@ created: 2026-04-16
 | **Framework** | Rust built-in test harness via `cargo test`; `proptest` for generated replay checks |
 | **Config file** | `Cargo.toml`, `rust-toolchain.toml`, `deny.toml` |
 | **Quick run command** | `cargo test -p es-core -p es-kernel -p example-commerce` |
+| **Final gate smoke command** | `cargo test -p example-commerce aggregate_contract && cargo test --test dependency_boundaries` |
 | **Full suite command** | `cargo check --workspace && cargo test --workspace && cargo tree -p es-core && cargo tree -p es-kernel` |
-| **Estimated runtime** | ~60 seconds after dependencies are cached |
+| **Estimated runtime** | Smoke command should stay under focused feedback latency after crates exist; full suite is final-only and may take ~60 seconds after dependencies are cached |
 
 ---
 
@@ -29,7 +30,7 @@ created: 2026-04-16
 
 - **After every task commit:** Run `cargo test -p es-core -p es-kernel -p example-commerce` once those crates exist; before then run the task's grep/file verification command.
 - **After every plan wave:** Run `cargo check --workspace && cargo test --workspace` once all workspace crates exist.
-- **Before `$gsd-verify-work`:** Full suite must be green.
+- **Before `$gsd-verify-work`:** Run the final gate smoke command first, then the full suite must be green.
 - **Max feedback latency:** < 60 seconds for focused crate tests.
 
 ---
@@ -43,11 +44,11 @@ created: 2026-04-16
 | 01-01-03 | 01 | 1 | CORE-01, CORE-04 | T-01-03 | Validation commands are actionable and automated | docs | `grep -E 'nyquist_compliant: true\|cargo test -p es-core -p es-kernel -p example-commerce\|cargo check --workspace && cargo test --workspace\|All phase behaviors have automated verification\.' .planning/phases/01-workspace-and-typed-kernel-contracts/01-VALIDATION.md` | W1 | pending |
 | 01-02-01 | 02 | 2 | CORE-03, CORE-04 | T-02-01 / T-02-02 | Core IDs and metadata reject invalid empty identifiers and avoid arbitrary payloads | unit | `cargo test -p es-core metadata_contracts` | W2 | pending |
 | 01-02-02 | 02 | 2 | CORE-02, CORE-04 | T-02-03 | Aggregate trait is synchronous, typed, and replayable | unit | `cargo test -p es-kernel aggregate_kernel_contracts` | W2 | pending |
-| 01-03-01 | 03 | 2 | CORE-01, CORE-04 | T-03-01 / T-03-03 | Runtime/storage/projection/outbox crates are boundary-only placeholders | config | `test -f crates/es-runtime/src/lib.rs && test -f crates/es-store-postgres/src/lib.rs && test -f crates/es-projection/src/lib.rs && test -f crates/es-outbox/src/lib.rs && grep -R 'PHASE_BOUNDARY' crates/es-runtime/src crates/es-store-postgres/src crates/es-projection/src crates/es-outbox/src` | W2 | pending |
+| 01-03-01 | 03 | 2 | CORE-01, CORE-04 | T-03-01 / T-03-03 | Runtime/storage/projection/outbox crates are boundary-only placeholders | config | `test -f crates/es-runtime/src/lib.rs && test -f crates/es-store-postgres/src/lib.rs && test -f crates/es-projection/src/lib.rs && test -f crates/es-outbox/src/lib.rs && grep -R 'PHASE_BOUNDARY' crates/es-runtime/src crates/es-store-postgres/src crates/es-projection/src crates/es-outbox/src && for manifest in crates/es-runtime/Cargo.toml crates/es-store-postgres/Cargo.toml crates/es-projection/Cargo.toml crates/es-outbox/Cargo.toml; do awk '/^\[dependencies\]/{in_deps=1; next} /^\[/{in_deps=0} in_deps && $0 !~ /^[[:space:]]*(#.*)?$/ { print FILENAME ":" $0; found=1 } END { exit found }' "$manifest"; done` | W2 | pending |
 | 01-03-02 | 03 | 2 | CORE-01, CORE-04 | T-03-02 | Adapter/app crates exist without network runtime dependencies | config | `test -f crates/adapter-http/src/lib.rs && test -f crates/adapter-grpc/src/lib.rs && test -f crates/app/src/main.rs && grep -E 'name = "adapter-http"\|name = "adapter-grpc"\|name = "app"' crates/adapter-http/Cargo.toml crates/adapter-grpc/Cargo.toml crates/app/Cargo.toml` | W2 | pending |
 | 01-04-01 | 04 | 3 | CORE-02, CORE-03, CORE-04 | T-04-01 | Example aggregate proves typed deterministic decisions and replay | unit/property | `cargo test -p example-commerce aggregate_contract` | W3 | pending |
 | 01-04-02 | 04 | 3 | CORE-01, CORE-04 | T-04-02 / T-04-03 | Dependency boundary tests block forbidden core/kernel dependencies | integration | `cargo test --test dependency_boundaries` | W3 | pending |
-| 01-04-03 | 04 | 3 | CORE-01, CORE-02, CORE-03, CORE-04 | T-04-03 | Full workspace builds and dependency boundaries are inspectable | full | `cargo check --workspace && cargo test --workspace && cargo tree -p es-core && cargo tree -p es-kernel` | W3 | pending |
+| 01-04-03 | 04 | 3 | CORE-01, CORE-02, CORE-03, CORE-04 | T-04-03 | Full workspace builds and dependency boundaries are inspectable | full | `cargo test -p example-commerce aggregate_contract && cargo test --test dependency_boundaries && cargo check --workspace && cargo test --workspace && cargo tree -p es-core && cargo tree -p es-kernel` | W3 | pending |
 
 *Status: pending · green · red · flaky*
 

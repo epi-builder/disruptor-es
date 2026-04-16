@@ -463,16 +463,16 @@ cargo test --workspace
 | A5 | A pinned `rust-toolchain.toml` should be added only if the project wants pinning. | Common Pitfalls | If wrong, planners may under-specify toolchain setup. |
 | A6 | Boundary tests should include `cargo tree` absence checks. | Common Pitfalls | If wrong, planner may choose a different dependency-boundary enforcement mechanism. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should Phase 1 pin a toolchain with `rust-toolchain.toml`?**
+1. **RESOLVED by D-01: Should Phase 1 pin a toolchain with `rust-toolchain.toml`?**
    - What we know: Rust 2024 requires Rust 1.85.0, and the local toolchain is Rust/Cargo 1.82.0-nightly. [CITED: https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/] [VERIFIED: `rustc --version`]
-   - What's unclear: Whether the project prefers a pinned channel/version or a documented minimum only. [ASSUMED]
-   - Recommendation: Add a Wave 0 task to upgrade or pin Rust 1.85+ before creating the workspace. [ASSUMED]
-2. **Should `StreamId`/`PartitionKey` be string-backed or structured enum-backed in Phase 1?**
+   - Resolution: Add `rust-toolchain.toml` and pin the workspace to Rust 1.85 or newer so Rust 2024 support is reproducible locally and in downstream automation. [VERIFIED: `.planning/phases/01-workspace-and-typed-kernel-contracts/01-CONTEXT.md` D-01]
+   - Planning impact: Phase 1 plans must create the toolchain pin before workspace build/test gates.
+2. **RESOLVED by D-07: Should `StreamId`/`PartitionKey` be string-backed or structured enum-backed in Phase 1?**
    - What we know: CORE-03 requires reusable stream ID and partition key types. [VERIFIED: .planning/REQUIREMENTS.md]
-   - What's unclear: Whether the template wants opaque strings for flexibility or structured fields for stricter routing. [ASSUMED]
-   - Recommendation: Start with opaque validated newtypes and add constructors from aggregate type/id so storage/runtime can evolve without breaking domain code. [ASSUMED]
+   - Resolution: Start with opaque core newtypes, not highly structured aggregate-specific key types: `StreamId(String)`, `PartitionKey(String)`, `TenantId(String)`, and `StreamRevision(u64)`. [VERIFIED: `.planning/phases/01-workspace-and-typed-kernel-contracts/01-CONTEXT.md` D-07]
+   - Planning impact: Phase 1 plans must implement string-backed opaque newtypes and avoid aggregate-specific routing key structures.
 
 ## Environment Availability
 
