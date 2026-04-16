@@ -22,7 +22,7 @@ created: 2026-04-16
 | **Quick run command** | `cargo test -p es-core -p es-kernel -p example-commerce` |
 | **Final gate smoke command** | `cargo test -p example-commerce aggregate_contract && cargo test -p example-commerce --test dependency_boundaries` |
 | **Full suite command** | `cargo check --workspace && cargo test --workspace && cargo tree -p es-core && cargo tree -p es-kernel` |
-| **Estimated runtime** | Smoke command should stay under focused feedback latency after crates exist; full suite is final-only and may take ~60 seconds after dependencies are cached |
+| **Estimated runtime** | ~60 seconds after dependencies are cached |
 
 ---
 
