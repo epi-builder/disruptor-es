@@ -1,14 +1,14 @@
-# Disruptor Event Sourcing Business Kernel
+# Disruptor Event Sourcing Template
 
 ## What This Is
 
-This project builds a reusable Rust template for high-throughput business logic services using disruptor-rs as the in-process execution fabric, event sourcing as the durable source of truth, and CQRS for read-side models. The first implementation uses a small Wallet bounded context as an example domain, but the primary product is the technical architecture and reusable kernel for future domain services.
+A Rust reference project for building generic business-logic processing services with `disruptor-rs`, event sourcing, CQRS, outbox-based integration, and partitioned single-owner execution. The first implementation uses a compact commerce domain with users, products, and orders so the architecture can prove relationships, command routing, event append, projection, and cross-entity workflow patterns without turning the project into a full product.
 
-It is intended for building large-traffic backend services where HTTP, WebSocket, or gRPC adapters remain thin while command processing, aggregate ownership, durable event appends, projection, and outbox publishing are handled by a domain command service.
+The output should be usable as a template for later domain services. Domain behavior matters only insofar as it validates the technical architecture, extension points, performance boundaries, and operational practices.
 
 ## Core Value
 
-The system must preserve correct per-aggregate command ordering and durable event-store commits while keeping the hot path free from shared mutable locks and slow external side effects.
+Provide a reusable, production-shaped Rust service template where committed events are the source of truth and `disruptor-rs` is used only as the in-process ordered execution engine.
 
 ## Requirements
 
@@ -18,63 +18,74 @@ The system must preserve correct per-aggregate command ordering and durable even
 
 ### Active
 
-- [ ] Provide a Rust workspace template for disruptor-based command processing services.
-- [ ] Implement a generic event-sourcing domain kernel with strongly typed commands, events, state, replies, and errors.
-- [ ] Route each aggregate to a stable shard owner so write-side state can be processed without Arc<Mutex<...>> in the hot path.
-- [ ] Treat the event store append commit as the source-of-truth success boundary.
-- [ ] Separate domain events, integration events, outbox publishing, projectors, and query models.
-- [ ] Provide thin HTTP/gRPC/WebSocket adapter patterns that communicate with the domain engine through bounded queues/RPC and oneshot replies.
-- [ ] Include load-test and benchmark harnesses that measure ring-only, domain-only, adapter-only, full E2E, and soak/chaos scenarios separately.
-- [ ] Document production deployment guidance for adapter tier, command service tier, event store, broker/outbox relay, projector workers, query APIs, and realtime fanout.
+- [ ] Implement a generic command-processing kernel that supports typed aggregates, commands, events, replies, and domain errors.
+- [ ] Use partitioned routing so commands for the same aggregate key are handled by the same logical shard owner.
+- [ ] Use `disruptor-rs` as an in-process execution fabric while keeping durability in an append-only event store.
+- [ ] Provide event sourcing primitives: stream IDs, expected revisions, append results, snapshots, command deduplication, and replay.
+- [ ] Provide CQRS projection primitives with checkpointed projector offsets and rebuild/catch-up support.
+- [ ] Provide outbox-based integration events so external publication is decoupled from the hot command path.
+- [ ] Include at least two related domain entities, with user, product, and order as the preferred initial example.
+- [ ] Demonstrate domain workflows that cross entity boundaries without distributed transactions.
+- [ ] Expose a thin adapter boundary suitable for HTTP/gRPC/WebSocket frontends without putting shared mutable business state behind `Arc<Mutex<_>>`.
+- [ ] Include stress-test and observability hooks that measure ring wait, routing latency, decision time, append latency, projection lag, outbox lag, and p95/p99 latency.
+- [ ] Document what must stay inside the hot path and what must be moved to projector, outbox, or saga/process-manager paths.
 
 ### Out of Scope
 
-- Full production trading, wallet, or settlement product semantics - the example domain exists to prove the architecture, not to model a regulated financial product.
-- Distributed transaction support across bounded contexts - cross-service consistency will be modeled through outbox, broker events, saga/process manager patterns, and compensation.
-- Using disruptor-rs as a remote inter-process bus - disruptor remains an in-process execution primitive only.
-- Direct client push or external broker publishing from the write-side hot path - these belong behind committed events, outbox, read models, or integration streams.
-- A UI-first application - this project focuses on backend architecture, runtime behavior, correctness, and performance testing.
+- Full exchange matching engine v1 - valuable later, but it would dominate the initial architecture with price-time priority, market data, and hot-symbol failover concerns.
+- Production-grade distributed partition ownership v1 - specify the interface and assumptions first; implement local/single-node ownership before Raft/etcd/Kubernetes controller integration.
+- Full user-facing commerce product - the commerce domain is a technical fixture, not the product being built.
+- Broker-specific production deployment v1 - define outbox contracts and provide an adapter seam before committing to Kafka, NATS, Redpanda, or another broker.
+- Multi-language SDKs - Rust service template first.
 
 ## Context
 
-The motivating architecture is:
+The design should preserve a hard boundary between execution and durability:
 
-- External clients connect through HTTP, gRPC, or WebSocket gateways.
-- Adapter services normalize client requests into canonical command envelopes.
-- Domain command services own disruptor-based shard runtimes inside each process.
-- Each aggregate is routed by tenant, bounded context, aggregate type, and aggregate id to a stable shard owner.
-- The shard owner rehydrates state, runs decision logic, appends domain events transactionally, advances local cache only after commit, and replies after durable commit.
-- Projectors, outbox relay, integration events, and realtime fanout run outside the critical write path and must recover from durable checkpoints.
+- `disruptor-rs` is an in-process hot-path execution engine, not a durable queue or distributed bus.
+- The event store commit is the authoritative success point for commands.
+- Only committed events can feed projectors, outbox rows, sagas, metrics, and client-visible state changes.
+- CQRS read models are eventually consistent and must not be treated as part of command success.
+- Slow consumers, broker publishing, WebSocket fanout, analytics, and heavy projection work must stay off the critical command ring.
 
-The prior design discussion established several implementation constraints:
+Prior exploration established several important pitfalls to avoid:
 
-- disruptor-rs is an execution fabric, not a durability layer.
-- Benchmarks for disruptor-rs do not represent end-to-end WebSocket or HTTP request latency because network I/O, parsing, serialization, async scheduling, DB append latency, Arc refcounting, mutex contention, and socket write fanout dominate once adapters are included.
-- The hot path should prefer single-owner shard state, bounded queues, preallocated or small payloads, batch-friendly flow, and dedicated threads/cores where appropriate.
-- Adapter and domain tiers may run in one process for small deployments, but large traffic systems should split adapter services from command services so connection churn, TLS, compression, slow clients, and realtime fanout do not contend with the business engine.
-- Production readiness requires phase-separated stress testing: ring-only, domain-only, adapter-only, full E2E, and soak/chaos.
+- Do not wrap the hot aggregate state in global `Arc<Mutex<HashMap<...>>>` structures.
+- Do not let async adapters own business state directly; use thin request decoding plus bounded message passing.
+- Do not let slow projectors or outbox dispatchers gate command throughput.
+- Do not assume disruptor microbenchmarks predict end-to-end WebSocket or HTTP performance.
+- Do not use sequence modulo workload splitting for ordered business state; route by aggregate or partition key.
+- Do not publish to external brokers directly from request handling; use an outbox committed with the domain events.
+
+The initial example domain should be intentionally small:
+
+- `User` represents the actor/customer.
+- `Product` represents a sellable item with inventory or availability rules.
+- `Order` represents reservation/placement/cancellation and references both user and product.
+
+This gives enough relationships to test uniqueness, entity references, projection joins, idempotency, inventory reservation, and process-manager behavior while keeping the architectural work visible.
 
 ## Constraints
 
-- **Package managers**: Use `pnpm` for Node tooling and `uv` for Python tooling - project-level instruction.
-- **Language**: Rust is the primary implementation language because disruptor-rs, event-sourcing kernel traits, and low-level runtime ownership are central to the design.
-- **Hot path concurrency**: Avoid shared mutable state guarded by `Arc<Mutex<_>>` in command decision and aggregate mutation paths - it destroys the single-owner performance model.
-- **Durability boundary**: A command may only be acknowledged as successful after the event store append transaction commits - ring publication alone is not success.
-- **Integration boundary**: External broker publishing must go through an outbox committed with the domain events - prevents dual-write loss and keeps broker failures out of the request path.
-- **Read consistency**: CQRS read models are eventually consistent - command replies must expose positions/revisions so clients can request read-your-own-write waits when needed.
-- **Backpressure**: All ingress paths must be bounded - unbounded queues hide overload until memory or latency collapses.
-- **Performance evidence**: Benchmarks must report p50/p95/p99, queue depth, append latency, outbox lag, projection lag, and per-core CPU behavior, not only average throughput.
+- **Package manager**: Prefer `pnpm` for Node tooling and `uv` for Python tooling - required by local project instructions.
+- **Language**: Rust-first service implementation - the core value is a Rust template around `disruptor-rs`.
+- **Architecture**: Event store is the source of truth - disruptor rings must never be treated as durable state.
+- **Consistency**: Same aggregate or ordered partition key must map to the same shard owner - required for replayable ordering and hot aggregate cache locality.
+- **Concurrency**: Hot business state should be single-owner and processor-local where practical - avoid shared mutable state in adapter handlers.
+- **Integration**: External publication must flow through outbox rows committed in the same transaction as domain events - avoids double-write failure modes.
+- **Scalability**: Adapter, command engine, projection, and outbox concerns should be separable - enables later MSA deployment and independent stress testing.
+- **Testing**: Performance tests must separate ring-only, domain-only, adapter-only, full E2E, soak, and chaos scenarios - otherwise bottlenecks are hidden.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Use disruptor-rs only inside domain command service processes | The library optimizes in-process thread handoff and consumer graphs, not distributed service communication | - Pending |
-| Use Wallet as the first example bounded context | It is small enough to keep domain logic secondary while still exercising aggregate ordering, dedupe, event append, projection, and outbox | - Pending |
-| Build strongly typed domain kernels instead of JSON/Any hot path reflection | Preserves Rust type safety, monomorphization, and disruptor-style performance assumptions | - Pending |
-| Keep HTTP/gRPC/WebSocket adapters thin | Prevents protocol handling, sockets, slow clients, and async locks from becoming the business state owner | - Pending |
-| Model production MSA communication as internal RPC for commands and outbox/broker for cross-context events | Maintains immediate command success/failure semantics without coupling bounded contexts through synchronous chains | - Pending |
-| Treat benchmarking as layered, not only end-to-end | Layered tests reveal whether bottlenecks are ring handoff, decision CPU, DB append, adapter I/O, projection, broker, or fanout | - Pending |
+| Use commerce/order as the initial example domain | It provides multiple related entities and realistic workflows without the complexity of a matching engine. | - Pending |
+| Keep `disruptor-rs` inside the command service process | The library is for in-process sequencing and fan-out, not cross-service communication. | - Pending |
+| Treat event store append commit as command success | Durability must not depend on ring publication or projection completion. | - Pending |
+| Use typed domain kernels instead of JSON/reflection in the hot path | Preserves Rust type safety and avoids erasing the performance benefits of preallocated ring entries. | - Pending |
+| Split generic infrastructure from domain rules | Enables reuse across future services while keeping domain logic strongly typed. | - Pending |
+| Model adapters as thin ingress layers with bounded queues and reply channels | Prevents HTTP/gRPC/WebSocket concerns from forcing mutex-heavy business state. | - Pending |
 
 ## Evolution
 
