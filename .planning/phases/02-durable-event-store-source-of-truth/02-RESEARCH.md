@@ -6,7 +6,7 @@
 
 ## User Constraints
 
-No `02-CONTEXT.md` file exists for this phase, so there are no discuss-phase locked decisions to copy verbatim. [VERIFIED: filesystem check]
+`02-CONTEXT.md` exists and supplies locked Phase 02 decisions D-01 through D-18. This research is aligned to those decisions: PostgreSQL is the only v1 durable event-store backend (D-01), SQLite/mocks/in-memory substitutes cannot replace PostgreSQL acceptance tests (D-02, D-04, D-15), storage rejects new empty appends (D-10), PostgreSQL 18 is the default development/integration-test target (D-11), and UUIDs are generated in Rust rather than through DB-side `uuidv7()` defaults (D-14). [VERIFIED: .planning/phases/02-durable-event-store-source-of-truth/02-CONTEXT.md]
 
 Phase constraints still apply: Rust-first service template; event store is the source of truth; disruptor rings must not be durable state; external publication later flows through outbox rows committed with domain events; prefer `pnpm` for Node tooling and `uv` for Python tooling. [VERIFIED: .planning/PROJECT.md] [VERIFIED: user prompt]
 
@@ -26,7 +26,7 @@ Use PostgreSQL tables and constraints to enforce correctness: `streams` owns the
 | Stream optimistic concurrency | Database / Storage | API / Backend | Unique constraints and transaction updates enforce revision correctness; Rust maps conflicts into typed errors. [CITED: https://www.postgresql.org/docs/18/ddl-constraints.html] |
 | Command deduplication | Database / Storage | API / Backend | `(tenant_id, idempotency_key)` uniqueness must be durable and cross-process, not shard-local memory. [VERIFIED: .planning/REQUIREMENTS.md] |
 | Event metadata storage | Database / Storage | API / Backend | The event table must persist command/correlation/causation/tenant/type/schema/payload/metadata/timestamp for inspection and replay. [VERIFIED: .planning/REQUIREMENTS.md] |
-| Snapshot storage and rehydration | Database / Storage | API / Backend | PostgreSQL stores latest snapshot; Rust loads snapshot plus later events and applies aggregate replay. [VERIFIED: .planning/REQUIREMENTS.md] |
+| Snapshot storage and rehydration | Database / Storage | API / Backend | PostgreSQL stores snapshots; Rust storage loads the latest snapshot plus later events while aggregate replay remains kernel/runtime responsibility per D-07. [VERIFIED: .planning/REQUIREMENTS.md] [VERIFIED: .planning/phases/02-durable-event-store-source-of-truth/02-CONTEXT.md] |
 | Global-position reads | Database / Storage | Projection / Outbox workers later | Committed global positions are read by future projectors/outbox workers independent of ring sequences. [VERIFIED: .planning/REQUIREMENTS.md] |
 
 ## Phase Requirements
@@ -327,7 +327,7 @@ ORDER BY stream_revision ASC;
 
 **Why it happens:** Event-sourced command APIs often return replies even when no state change occurs. [VERIFIED: current `Decision<E, R>` supports any `Vec<E>` length]
 
-**How to avoid:** Define Phase 2 behavior explicitly: either reject empty appends in storage or support idempotent no-op command results without event rows and with clear result metadata. [ASSUMED]
+**How to avoid:** Follow D-10: reject new empty appends in the low-level store; future runtime code can handle no-op command replies explicitly outside the Phase 02 append contract. [VERIFIED: .planning/phases/02-durable-event-store-source-of-truth/02-CONTEXT.md]
 
 **Warning signs:** `CommittedAppend` with no event IDs but non-null revision/global position fields. [ASSUMED]
 
@@ -412,19 +412,15 @@ Use this pattern only with the Rust-1.85-compatible module version, not latest 0
 |---|-------|---------|---------------|
 | A1 | Concurrent dedupe warning signs will show as intermittent "not found" results. | Common Pitfalls | Test design might look for the wrong symptom; still test concurrent duplicates directly. |
 | A2 | Payload tests should compare parsed JSON values rather than raw strings. | Common Pitfalls | If exact byte preservation is desired, schema must add a raw payload column. |
-| A3 | Empty event append behavior needs a project decision. | Common Pitfalls / Open Questions | Planner must either create a decision task or encode a default that may not match desired command semantics. |
+| A3 | Concurrent duplicate dedupe must be tested directly, not inferred from sequential duplicate behavior. | Common Pitfalls / Validation Architecture | Without an explicit concurrent duplicate test, an implementation might insert events before discovering a late dedupe conflict. |
 
 ## Open Questions
 
-1. **Should storage reject empty appends or allow no-op command dedupe results?**
-   - What we know: `Decision<E, R>` can contain an empty event vector. [VERIFIED: crates/es-kernel/src/lib.rs]
-   - What's unclear: Phase 2 success criteria focus on appending events, not no-op replies. [VERIFIED: .planning/ROADMAP.md]
-   - Recommendation: Reject empty event appends in the low-level event store for Phase 2 and let future command runtime handle no-op replies explicitly. [ASSUMED]
+All previously open Phase 02 research questions are resolved by `02-CONTEXT.md`.
 
-2. **Should event IDs be generated in Rust or PostgreSQL?**
-   - What we know: Workspace already uses Rust `uuid` with `v7`; PostgreSQL 18 also has `uuidv7()`. [VERIFIED: Cargo.toml] [CITED: https://www.postgresql.org/docs/18/functions-uuid.html]
-   - What's unclear: Whether template users should be able to preconstruct events before storage. [ASSUMED]
-   - Recommendation: Generate event IDs in Rust when building `NewEvent` so committed results can map input events to stored positions. [ASSUMED]
+1. **Resolved by D-10:** Storage rejects new empty appends. No-op command replies are a later runtime concern, not a Phase 02 storage append behavior. [VERIFIED: .planning/phases/02-durable-event-store-source-of-truth/02-CONTEXT.md]
+
+2. **Resolved by D-14:** Event IDs are generated in Rust through a dedicated module/helper, not through DB-side `uuidv7()` defaults. [VERIFIED: .planning/phases/02-durable-event-store-source-of-truth/02-CONTEXT.md]
 
 ## Environment Availability
 
