@@ -167,10 +167,10 @@ pub struct SnapshotRecord {
     pub stream_id: StreamId,
     /// Stream revision captured by the snapshot.
     pub stream_revision: StreamRevision,
-    /// Snapshot payload stored in PostgreSQL JSONB.
-    pub payload: serde_json::Value,
-    /// Snapshot schema version.
-    pub schema_version: i32,
+    /// Snapshot state payload stored in PostgreSQL JSONB.
+    pub state_payload: serde_json::Value,
+    /// Snapshot metadata stored beside the state payload.
+    pub metadata: serde_json::Value,
     /// Time the snapshot was saved.
     pub recorded_at: OffsetDateTime,
 }
@@ -184,10 +184,10 @@ pub struct SaveSnapshotRequest {
     pub stream_id: StreamId,
     /// Stream revision captured by the snapshot.
     pub stream_revision: StreamRevision,
-    /// Snapshot payload stored in PostgreSQL JSONB.
-    pub payload: serde_json::Value,
-    /// Snapshot schema version.
-    pub schema_version: i32,
+    /// Snapshot state payload stored in PostgreSQL JSONB.
+    pub state_payload: serde_json::Value,
+    /// Snapshot metadata stored beside the state payload.
+    pub metadata: serde_json::Value,
 }
 
 /// Latest snapshot plus subsequent stream events for aggregate rehydration.

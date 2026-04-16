@@ -43,6 +43,18 @@ pub enum StoreError {
         /// Rejected revision value.
         value: i64,
     },
+    /// Stored stream identifier from PostgreSQL could not be represented by core stream ID type.
+    #[error("invalid stored stream id {value}")]
+    InvalidStoredStreamId {
+        /// Rejected stream identifier.
+        value: String,
+    },
+    /// Stored tenant identifier from PostgreSQL could not be represented by core tenant ID type.
+    #[error("invalid stored tenant id {value}")]
+    InvalidStoredTenantId {
+        /// Rejected tenant identifier.
+        value: String,
+    },
     /// Global event position from PostgreSQL was invalid.
     #[error("invalid global event position {value}")]
     InvalidGlobalPosition {

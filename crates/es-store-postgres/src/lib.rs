@@ -10,6 +10,7 @@ mod event_store;
 /// Identifier generation helpers.
 pub mod ids;
 mod models;
+mod rehydrate;
 mod sql;
 
 pub use error::{StoreError, StoreResult};

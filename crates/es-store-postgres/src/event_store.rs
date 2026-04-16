@@ -1,6 +1,6 @@
 use crate::{
     AppendOutcome, AppendRequest, RehydrationBatch, SaveSnapshotRequest, SnapshotRecord,
-    StoreError, StoreResult, StoredEvent, sql,
+    StoreError, StoreResult, StoredEvent, rehydrate, sql,
 };
 
 /// PostgreSQL-backed durable event store.
@@ -51,29 +51,26 @@ impl PostgresEventStore {
     }
 
     /// Saves a stream snapshot.
-    pub async fn save_snapshot(
-        &self,
-        _request: SaveSnapshotRequest,
-    ) -> StoreResult<SnapshotRecord> {
-        pending_sql()
+    pub async fn save_snapshot(&self, request: SaveSnapshotRequest) -> StoreResult<SnapshotRecord> {
+        sql::save_snapshot(&self.pool, request).await
     }
 
     /// Loads the latest snapshot for a stream.
     pub async fn load_latest_snapshot(
         &self,
-        _tenant_id: &es_core::TenantId,
-        _stream_id: &es_core::StreamId,
+        tenant_id: &es_core::TenantId,
+        stream_id: &es_core::StreamId,
     ) -> StoreResult<Option<SnapshotRecord>> {
-        pending_sql()
+        sql::load_latest_snapshot(&self.pool, tenant_id, stream_id).await
     }
 
     /// Loads the latest snapshot and subsequent stream events.
     pub async fn load_rehydration(
         &self,
-        _tenant_id: &es_core::TenantId,
-        _stream_id: &es_core::StreamId,
+        tenant_id: &es_core::TenantId,
+        stream_id: &es_core::StreamId,
     ) -> StoreResult<RehydrationBatch> {
-        pending_sql()
+        rehydrate::load_rehydration(&self.pool, tenant_id, stream_id).await
     }
 }
 

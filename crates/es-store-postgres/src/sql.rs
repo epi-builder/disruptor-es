@@ -1,8 +1,11 @@
-use es_core::{ExpectedRevision, StreamId, StreamRevision};
+use es_core::{ExpectedRevision, StreamId, StreamRevision, TenantId};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::{AppendOutcome, AppendRequest, CommittedAppend, NewEvent, StoreError, StoreResult};
+use crate::{
+    AppendOutcome, AppendRequest, CommittedAppend, NewEvent, SaveSnapshotRequest, SnapshotRecord,
+    StoreError, StoreResult, StoredEvent,
+};
 
 pub(crate) async fn append(pool: &PgPool, request: AppendRequest) -> StoreResult<AppendOutcome> {
     let mut tx = pool.begin().await?;
@@ -345,4 +348,193 @@ fn revision_from_i64(value: i64) -> StoreResult<StreamRevision> {
     }
 
     Ok(StreamRevision::new(revision))
+}
+
+pub(crate) async fn read_stream_after(
+    pool: &PgPool,
+    tenant_id: &TenantId,
+    stream_id: &StreamId,
+    after_revision: i64,
+    limit: i64,
+) -> StoreResult<Vec<StoredEvent>> {
+    let rows = sqlx::query_as::<_, EventRow>(
+        r#"
+        SELECT
+            global_position,
+            stream_id,
+            stream_revision,
+            event_id,
+            event_type,
+            schema_version,
+            payload,
+            metadata,
+            tenant_id,
+            command_id,
+            correlation_id,
+            causation_id,
+            recorded_at
+        FROM events
+        WHERE tenant_id = $1 AND stream_id = $2 AND stream_revision > $3
+        ORDER BY stream_revision ASC
+        LIMIT $4
+        "#,
+    )
+    .bind(tenant_id.as_str())
+    .bind(stream_id.as_str())
+    .bind(after_revision)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter().map(EventRow::try_into).collect()
+}
+
+pub(crate) async fn save_snapshot(
+    pool: &PgPool,
+    request: SaveSnapshotRequest,
+) -> StoreResult<SnapshotRecord> {
+    let stream_revision = i64::try_from(request.stream_revision.value())
+        .map_err(|_| StoreError::InvalidStoredRevision { value: i64::MAX })?;
+
+    let row = sqlx::query_as::<_, SnapshotRow>(
+        r#"
+        INSERT INTO snapshots (
+            tenant_id,
+            stream_id,
+            stream_revision,
+            state_payload,
+            metadata
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (tenant_id, stream_id, stream_revision)
+        DO UPDATE SET
+            state_payload = EXCLUDED.state_payload,
+            metadata = EXCLUDED.metadata,
+            recorded_at = now()
+        RETURNING tenant_id, stream_id, stream_revision, state_payload, metadata, recorded_at
+        "#,
+    )
+    .bind(request.tenant_id.as_str())
+    .bind(request.stream_id.as_str())
+    .bind(stream_revision)
+    .bind(&request.state_payload)
+    .bind(&request.metadata)
+    .fetch_one(pool)
+    .await?;
+
+    row.try_into()
+}
+
+pub(crate) async fn load_latest_snapshot(
+    pool: &PgPool,
+    tenant_id: &TenantId,
+    stream_id: &StreamId,
+) -> StoreResult<Option<SnapshotRecord>> {
+    let row = sqlx::query_as::<_, SnapshotRow>(
+        r#"
+        SELECT tenant_id, stream_id, stream_revision, state_payload, metadata, recorded_at
+        FROM snapshots
+        WHERE tenant_id = $1 AND stream_id = $2
+        ORDER BY stream_revision DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(tenant_id.as_str())
+    .bind(stream_id.as_str())
+    .fetch_optional(pool)
+    .await?;
+
+    row.map(TryInto::try_into).transpose()
+}
+
+#[derive(sqlx::FromRow)]
+struct EventRow {
+    global_position: i64,
+    stream_id: String,
+    stream_revision: i64,
+    event_id: Uuid,
+    event_type: String,
+    schema_version: i32,
+    payload: serde_json::Value,
+    metadata: serde_json::Value,
+    tenant_id: String,
+    command_id: Uuid,
+    correlation_id: Uuid,
+    causation_id: Option<Uuid>,
+    recorded_at: time::OffsetDateTime,
+}
+
+impl TryFrom<EventRow> for StoredEvent {
+    type Error = StoreError;
+
+    fn try_from(row: EventRow) -> StoreResult<Self> {
+        if row.global_position < 1 {
+            return Err(StoreError::InvalidGlobalPosition {
+                value: row.global_position,
+            });
+        }
+
+        let stream_id = StreamId::new(row.stream_id.clone()).map_err(|_| {
+            StoreError::InvalidStoredStreamId {
+                value: row.stream_id,
+            }
+        })?;
+        let tenant_id = TenantId::new(row.tenant_id.clone()).map_err(|_| {
+            StoreError::InvalidStoredTenantId {
+                value: row.tenant_id,
+            }
+        })?;
+
+        Ok(Self {
+            global_position: row.global_position,
+            stream_id,
+            stream_revision: revision_from_i64(row.stream_revision)?,
+            event_id: row.event_id,
+            event_type: row.event_type,
+            schema_version: row.schema_version,
+            payload: row.payload,
+            metadata: row.metadata,
+            tenant_id,
+            command_id: row.command_id,
+            correlation_id: row.correlation_id,
+            causation_id: row.causation_id,
+            recorded_at: row.recorded_at,
+        })
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct SnapshotRow {
+    tenant_id: String,
+    stream_id: String,
+    stream_revision: i64,
+    state_payload: serde_json::Value,
+    metadata: serde_json::Value,
+    recorded_at: time::OffsetDateTime,
+}
+
+impl TryFrom<SnapshotRow> for SnapshotRecord {
+    type Error = StoreError;
+
+    fn try_from(row: SnapshotRow) -> StoreResult<Self> {
+        let tenant_id = TenantId::new(row.tenant_id.clone()).map_err(|_| {
+            StoreError::InvalidStoredTenantId {
+                value: row.tenant_id,
+            }
+        })?;
+        let stream_id = StreamId::new(row.stream_id.clone()).map_err(|_| {
+            StoreError::InvalidStoredStreamId {
+                value: row.stream_id,
+            }
+        })?;
+
+        Ok(Self {
+            tenant_id,
+            stream_id,
+            stream_revision: revision_from_i64(row.stream_revision)?,
+            state_payload: row.state_payload,
+            metadata: row.metadata,
+            recorded_at: row.recorded_at,
+        })
+    }
 }
