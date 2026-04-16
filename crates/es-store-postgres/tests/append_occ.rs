@@ -6,6 +6,7 @@ use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, Tenan
 use es_store_postgres::{AppendOutcome, AppendRequest, NewEvent, PostgresEventStore, StoreError};
 use serde_json::json;
 use sqlx::Row;
+use std::sync::Arc;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -288,6 +289,143 @@ async fn conflict_rolls_back_without_extra_events() -> anyhow::Result<()> {
     .await?;
 
     assert_eq!(1, event_count);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn concurrent_no_stream_first_appends_return_one_conflict() -> anyhow::Result<()> {
+    let harness = common::start_postgres().await?;
+    let store = Arc::new(PostgresEventStore::new(harness.pool.clone()));
+    let tenant = tenant_id("tenant-a");
+    let stream = stream_id("order-race");
+
+    let left = {
+        let store = Arc::clone(&store);
+        let tenant = tenant.clone();
+        let stream = stream.clone();
+        tokio::spawn(async move {
+            store
+                .append(append_request(
+                    tenant,
+                    stream,
+                    ExpectedRevision::NoStream,
+                    "command-left",
+                    1_000,
+                    vec![new_event(1_100, "OrderPlaced", "order-race")],
+                ))
+                .await
+        })
+    };
+    let right = {
+        let store = Arc::clone(&store);
+        let tenant = tenant.clone();
+        let stream = stream.clone();
+        tokio::spawn(async move {
+            store
+                .append(append_request(
+                    tenant,
+                    stream,
+                    ExpectedRevision::NoStream,
+                    "command-right",
+                    2_000,
+                    vec![new_event(2_100, "OrderPlaced", "order-race")],
+                ))
+                .await
+        })
+    };
+
+    let left = left.await.expect("left task joins");
+    let right = right.await.expect("right task joins");
+    let committed = [left.as_ref().ok(), right.as_ref().ok()]
+        .into_iter()
+        .flatten()
+        .filter(|outcome| matches!(outcome, AppendOutcome::Committed(_)))
+        .count();
+    let conflicts = [left.as_ref().err(), right.as_ref().err()]
+        .into_iter()
+        .flatten()
+        .filter(|error| {
+            matches!(
+                error,
+                StoreError::StreamConflict {
+                    actual: Some(1),
+                    ..
+                }
+            )
+        })
+        .count();
+
+    assert_eq!(1, committed);
+    assert_eq!(1, conflicts);
+
+    let event_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM events WHERE tenant_id = $1 AND stream_id = $2",
+    )
+    .bind("tenant-a")
+    .bind("order-race")
+    .fetch_one(&harness.pool)
+    .await?;
+
+    assert_eq!(1, event_count);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn concurrent_any_first_appends_serialize_revisions() -> anyhow::Result<()> {
+    let harness = common::start_postgres().await?;
+    let store = Arc::new(PostgresEventStore::new(harness.pool.clone()));
+    let tenant = tenant_id("tenant-a");
+    let stream = stream_id("order-any-race");
+
+    let left = {
+        let store = Arc::clone(&store);
+        let tenant = tenant.clone();
+        let stream = stream.clone();
+        tokio::spawn(async move {
+            store
+                .append(append_request(
+                    tenant,
+                    stream,
+                    ExpectedRevision::Any,
+                    "command-left",
+                    3_000,
+                    vec![new_event(3_100, "OrderPlaced", "order-any-race")],
+                ))
+                .await
+        })
+    };
+    let right = {
+        let store = Arc::clone(&store);
+        let tenant = tenant.clone();
+        let stream = stream.clone();
+        tokio::spawn(async move {
+            store
+                .append(append_request(
+                    tenant,
+                    stream,
+                    ExpectedRevision::Any,
+                    "command-right",
+                    4_000,
+                    vec![new_event(4_100, "OrderConfirmed", "order-any-race")],
+                ))
+                .await
+        })
+    };
+
+    left.await.expect("left task joins")?;
+    right.await.expect("right task joins")?;
+
+    let revisions = sqlx::query_scalar::<_, i64>(
+        "SELECT stream_revision FROM events WHERE tenant_id = $1 AND stream_id = $2 ORDER BY stream_revision",
+    )
+    .bind("tenant-a")
+    .bind("order-any-race")
+    .fetch_all(&harness.pool)
+    .await?;
+
+    assert_eq!(vec![1, 2], revisions);
 
     Ok(())
 }

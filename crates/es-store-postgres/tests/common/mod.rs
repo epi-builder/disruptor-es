@@ -1,5 +1,5 @@
-use sqlx::{postgres::PgPoolOptions, PgPool};
-use testcontainers::{runners::AsyncRunner, ContainerAsync, ImageExt};
+use sqlx::{PgPool, postgres::PgPoolOptions};
+use testcontainers::{ContainerAsync, ImageExt, runners::AsyncRunner};
 use testcontainers_modules::postgres::Postgres;
 
 pub struct PostgresHarness {
@@ -10,9 +10,11 @@ pub struct PostgresHarness {
 pub async fn start_postgres() -> anyhow::Result<PostgresHarness> {
     let container = Postgres::default().with_tag("18").start().await?;
     let port = container.get_host_port_ipv4(5432).await?;
-    let database_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres?sslmode=disable");
+    let database_url =
+        format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres?sslmode=disable");
 
-    let pool = PgPoolOptions::new().max_connections(5)
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
         .connect(&database_url)
         .await?;
 

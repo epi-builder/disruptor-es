@@ -37,6 +37,16 @@ pub enum StoreError {
         /// Actual stream revision, or `None` when the stream does not exist.
         actual: Option<u64>,
     },
+    /// Snapshot revision is ahead of the durable stream revision.
+    #[error("snapshot revision conflict for {stream_id}: requested {requested}, current {current}")]
+    SnapshotRevisionConflict {
+        /// Conflicting stream identifier.
+        stream_id: String,
+        /// Snapshot revision requested by the caller.
+        requested: u64,
+        /// Durable stream revision currently stored.
+        current: u64,
+    },
     /// Stored revision from PostgreSQL could not be represented by core revision types.
     #[error("invalid stored stream revision {value}")]
     InvalidStoredRevision {

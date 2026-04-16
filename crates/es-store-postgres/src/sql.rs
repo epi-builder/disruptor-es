@@ -17,6 +17,8 @@ pub(crate) async fn append(pool: &PgPool, request: AppendRequest) -> StoreResult
         return Ok(AppendOutcome::Duplicate(committed));
     }
 
+    acquire_stream_lock(&mut tx, &request).await?;
+
     let current_revision = select_stream_revision_for_update(&mut tx, &request).await?;
     validate_expected_revision(&request, current_revision)?;
 
@@ -68,6 +70,25 @@ async fn acquire_dedupe_lock(
     )
     .bind(request.command_metadata.tenant_id.as_str())
     .bind(&request.idempotency_key)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+async fn acquire_stream_lock(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &AppendRequest,
+) -> StoreResult<()> {
+    sqlx::query(
+        r#"
+        SELECT pg_advisory_xact_lock(
+            hashtextextended($1 || ':' || $2, 1)
+        )
+        "#,
+    )
+    .bind(request.command_metadata.tenant_id.as_str())
+    .bind(request.stream_id.as_str())
     .execute(&mut **tx)
     .await?;
 
@@ -454,6 +475,41 @@ pub(crate) async fn save_snapshot(
 ) -> StoreResult<SnapshotRecord> {
     let stream_revision = i64::try_from(request.stream_revision.value())
         .map_err(|_| StoreError::InvalidStoredRevision { value: i64::MAX })?;
+    let mut tx = pool.begin().await?;
+
+    let current_revision = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT revision
+        FROM streams
+        WHERE tenant_id = $1 AND stream_id = $2
+        FOR UPDATE
+        "#,
+    )
+    .bind(request.tenant_id.as_str())
+    .bind(request.stream_id.as_str())
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    match current_revision {
+        Some(current) if stream_revision <= current => {}
+        Some(current) => {
+            tx.rollback().await?;
+            return Err(StoreError::SnapshotRevisionConflict {
+                stream_id: request.stream_id.as_str().to_owned(),
+                requested: request.stream_revision.value(),
+                current: u64::try_from(current)
+                    .map_err(|_| StoreError::InvalidStoredRevision { value: current })?,
+            });
+        }
+        None => {
+            tx.rollback().await?;
+            return Err(StoreError::StreamConflict {
+                stream_id: request.stream_id.as_str().to_owned(),
+                expected: "existing stream".to_owned(),
+                actual: None,
+            });
+        }
+    }
 
     let row = sqlx::query_as::<_, SnapshotRow>(
         r#"
@@ -478,10 +534,13 @@ pub(crate) async fn save_snapshot(
     .bind(stream_revision)
     .bind(&request.state_payload)
     .bind(&request.metadata)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
 
-    row.try_into()
+    let snapshot = row.try_into()?;
+    tx.commit().await?;
+
+    Ok(snapshot)
 }
 
 pub(crate) async fn load_latest_snapshot(

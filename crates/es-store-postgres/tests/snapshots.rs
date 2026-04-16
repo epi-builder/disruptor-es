@@ -4,7 +4,7 @@ mod common;
 
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
 use es_store_postgres::{
-    AppendRequest, NewEvent, PostgresEventStore, SaveSnapshotRequest, SnapshotRecord,
+    AppendRequest, NewEvent, PostgresEventStore, SaveSnapshotRequest, SnapshotRecord, StoreError,
 };
 use serde_json::json;
 use time::OffsetDateTime;
@@ -87,6 +87,19 @@ async fn load_latest_snapshot_returns_highest_revision() -> anyhow::Result<()> {
     let stream = stream_id("order-1");
 
     store
+        .append(append_request(
+            tenant.clone(),
+            stream.clone(),
+            ExpectedRevision::NoStream,
+            "command-1",
+            10,
+            vec![
+                new_event(100, "OrderPlaced", "order-1"),
+                new_event(101, "OrderConfirmed", "order-1"),
+            ],
+        ))
+        .await?;
+    store
         .save_snapshot(snapshot_request(tenant.clone(), stream.clone(), 1, 1))
         .await?;
     store
@@ -122,6 +135,74 @@ async fn load_latest_snapshot_returns_highest_revision() -> anyhow::Result<()> {
 
     assert!(other_tenant.is_none());
     assert!(other_stream.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn save_snapshot_rejects_nonexistent_stream() -> anyhow::Result<()> {
+    let harness = common::start_postgres().await?;
+    let store = PostgresEventStore::new(harness.pool.clone());
+
+    let error = store
+        .save_snapshot(snapshot_request(
+            tenant_id("tenant-a"),
+            stream_id("order-missing"),
+            1,
+            1,
+        ))
+        .await
+        .expect_err("snapshot without stream should conflict");
+
+    assert!(matches!(
+        error,
+        StoreError::StreamConflict { actual: None, .. }
+    ));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn save_snapshot_rejects_future_revision() -> anyhow::Result<()> {
+    let harness = common::start_postgres().await?;
+    let store = PostgresEventStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let stream = stream_id("order-1");
+
+    store
+        .append(append_request(
+            tenant.clone(),
+            stream.clone(),
+            ExpectedRevision::NoStream,
+            "command-1",
+            10,
+            vec![new_event(100, "OrderPlaced", "order-1")],
+        ))
+        .await?;
+
+    let error = store
+        .save_snapshot(snapshot_request(tenant.clone(), stream.clone(), 2, 2))
+        .await
+        .expect_err("future snapshot should conflict");
+
+    assert!(matches!(
+        error,
+        StoreError::SnapshotRevisionConflict {
+            requested: 2,
+            current: 1,
+            ..
+        }
+    ));
+
+    let snapshots = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM snapshots WHERE tenant_id = $1 AND stream_id = $2",
+    )
+    .bind(tenant.as_str())
+    .bind(stream.as_str())
+    .fetch_one(&harness.pool)
+    .await?;
+
+    assert_eq!(0, snapshots);
 
     Ok(())
 }
