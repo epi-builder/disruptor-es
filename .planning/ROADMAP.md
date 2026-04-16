@@ -31,7 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Developer can define a typed aggregate with commands, events, replies, errors, stream IDs, partition keys, expected revisions, and metadata through reusable contracts.
   3. Developer can run domain decision logic synchronously and deterministically without adapter, database, broker, network, or shared mutable runtime dependencies.
   4. Developer can inspect crate boundaries and see that lower-level core/kernel crates do not depend on HTTP, gRPC, PostgreSQL, broker, or Tokio adapter concerns.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 01-01-PLAN.md — Create root Rust 2024 workspace policy, toolchain pin, dependency policy, and validation strategy.
+- [ ] 01-02-PLAN.md — Implement typed core IDs/metadata and synchronous aggregate kernel contracts.
+- [ ] 01-03-PLAN.md — Create runtime, storage, projection, outbox, adapter, and app boundary crate placeholders.
+- [ ] 01-04-PLAN.md — Add example aggregate, replay tests, dependency boundary tests, and full workspace verification.
 
 ### Phase 2: Durable Event Store Source of Truth
 **Goal**: Command success is anchored to durable append-only event-store commits, with stream concurrency, metadata, dedupe, snapshots, replay, and global-position reads available before runtime behavior depends on them.
