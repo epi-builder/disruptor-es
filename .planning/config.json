@@ -16,7 +16,7 @@
     "research": true,
     "plan_check": true,
     "verifier": true,
-    "nyquist_validation": false,
+    "nyquist_validation": true,
     "auto_advance": false,
     "node_repair": true,
     "node_repair_budget": 2,
@@ -46,5 +46,5 @@
   "claude_md_path": "./CLAUDE.md",
   "resolve_model_ids": "omit",
   "mode": "yolo",
-  "granularity": "coarse"
+  "granularity": "standard"
 }
