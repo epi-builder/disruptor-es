@@ -52,7 +52,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Create PostgreSQL schema, storage dependencies, and migrated integration-test harness.
 - [x] 02-02-PLAN.md — Define storage API contracts, validation models, typed errors, and Rust UUID helper.
-- [ ] 02-03-PLAN.md — Implement durable append, optimistic concurrency, metadata persistence, and command dedupe.
+- [x] 02-03-PLAN.md — Implement durable append, optimistic concurrency, metadata persistence, and command dedupe.
 - [ ] 02-04-PLAN.md — Implement snapshot rehydration and tenant-scoped global-position reads.
 
 ### Phase 3: Local Command Runtime and Disruptor Execution
@@ -122,7 +122,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Workspace and Typed Kernel Contracts | 4/4 | Complete | 2026-04-16 |
-| 2. Durable Event Store Source of Truth | 0/TBD | Not started | - |
+| 2. Durable Event Store Source of Truth | 3/4 | In Progress | - |
 | 3. Local Command Runtime and Disruptor Execution | 0/TBD | Not started | - |
 | 4. Commerce Fixture Domain | 0/TBD | Not started | - |
 | 5. CQRS Projection and Query Catch-Up | 0/TBD | Not started | - |

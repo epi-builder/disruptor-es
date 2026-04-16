@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-04-16T22:50:56.566Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-04-16T23:00:47.554Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 88
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 02 (durable-event-store-source-of-truth) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-04-16
 
@@ -54,6 +54,7 @@ Progress: [██████░░░░] 63%
 *Updated after each plan completion*
 | Phase 02-durable-event-store-source-of-truth P01 | 443 | 3 tasks | 7 files |
 | Phase 02-durable-event-store-source-of-truth P02 | 264 | 3 tasks | 5 files |
+| Phase 02-durable-event-store-source-of-truth P03 | 415 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,9 @@ Recent decisions affecting current work:
 - [Phase 02]: AppendRequest derives tenant ownership from CommandMetadata rather than accepting a separate append-level tenant field.
 - [Phase 02]: PostgresEventStore exposes the storage method surface now while append/read SQL remains owned by Plans 03 and 04.
 - [Phase 02]: Event IDs are generated in Rust through a small IdGenerator trait using UUIDv7.
+- [Phase 02]: Use a transaction-scoped PostgreSQL advisory lock derived from tenant/idempotency key before stream or event writes.
+- [Phase 02]: Store the full CommittedAppend JSON in command_dedup.response_payload so duplicate replies preserve exact event IDs and global positions.
+- [Phase 02]: Keep append SQL in a private sql.rs helper while PostgresEventStore remains the public storage facade.
 
 ### Pending Todos
 
@@ -91,6 +95,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-16T22:50:56.558Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-04-16T23:00:47.549Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
