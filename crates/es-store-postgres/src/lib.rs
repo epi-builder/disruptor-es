@@ -2,3 +2,6 @@
 
 /// Phase ownership marker for the durable event-store crate.
 pub const PHASE_BOUNDARY: &str = "Phase 2 owns durable event append and transaction contracts.";
+
+mod error;
+mod models;
