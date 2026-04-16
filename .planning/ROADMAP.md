@@ -50,7 +50,7 @@ Plans:
   5. Projectors and outbox workers can read committed events by global position, independent of any disruptor ring sequence.
 **Plans**: 4 plans
 Plans:
-- [ ] 02-01-PLAN.md — Create PostgreSQL schema, storage dependencies, and migrated integration-test harness.
+- [x] 02-01-PLAN.md — Create PostgreSQL schema, storage dependencies, and migrated integration-test harness.
 - [ ] 02-02-PLAN.md — Define storage API contracts, validation models, typed errors, and Rust UUID helper.
 - [ ] 02-03-PLAN.md — Implement durable append, optimistic concurrency, metadata persistence, and command dedupe.
 - [ ] 02-04-PLAN.md — Implement snapshot rehydration and tenant-scoped global-position reads.

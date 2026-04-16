@@ -16,11 +16,11 @@ Requirements for the initial template release. Each maps to roadmap phases.
 
 ### Event Store
 
-- [ ] **STORE-01**: Command handling can append domain events to a durable event store with per-stream optimistic concurrency.
-- [ ] **STORE-02**: Event store records include event ID, stream ID, stream revision, global position, command ID, causation ID, correlation ID, tenant ID, event type, schema version, payload, metadata, and recorded timestamp.
-- [ ] **STORE-03**: Command deduplication returns the prior committed result for a repeated tenant/idempotency key.
-- [ ] **STORE-04**: Aggregate rehydration can load the latest snapshot and replay subsequent stream events.
-- [ ] **STORE-05**: Event store exposes global-position reads for projector and outbox catch-up.
+- [x] **STORE-01**: Command handling can append domain events to a durable event store with per-stream optimistic concurrency.
+- [x] **STORE-02**: Event store records include event ID, stream ID, stream revision, global position, command ID, causation ID, correlation ID, tenant ID, event type, schema version, payload, metadata, and recorded timestamp.
+- [x] **STORE-03**: Command deduplication returns the prior committed result for a repeated tenant/idempotency key.
+- [x] **STORE-04**: Aggregate rehydration can load the latest snapshot and replay subsequent stream events.
+- [x] **STORE-05**: Event store exposes global-position reads for projector and outbox catch-up.
 
 ### Command Runtime
 
@@ -116,11 +116,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-02 | Phase 1 | Pending |
 | CORE-03 | Phase 1 | Pending |
 | CORE-04 | Phase 1 | Pending |
-| STORE-01 | Phase 2 | Pending |
-| STORE-02 | Phase 2 | Pending |
-| STORE-03 | Phase 2 | Pending |
-| STORE-04 | Phase 2 | Pending |
-| STORE-05 | Phase 2 | Pending |
+| STORE-01 | Phase 2 | Complete |
+| STORE-02 | Phase 2 | Complete |
+| STORE-03 | Phase 2 | Complete |
+| STORE-04 | Phase 2 | Complete |
+| STORE-05 | Phase 2 | Complete |
 | RUNTIME-01 | Phase 3 | Pending |
 | RUNTIME-02 | Phase 3 | Pending |
 | RUNTIME-03 | Phase 3 | Pending |
