@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Commerce Fixture Domain** - User, product, and order behavior proves typed decisions, replay, relationships, and invariants.
 - [ ] **Phase 5: CQRS Projection and Query Catch-Up** - Committed events feed checkpointed read models with restart and read-your-own-write support.
 - [ ] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions.
-- [ ] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, benchmarks, and documentation make the template credible.
+- [ ] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible.
 
 ## Phase Details
 
@@ -93,13 +93,15 @@ Decimal phases appear between their surrounding integers in numeric order.
 ### Phase 7: Adapters, Observability, Stress, and Template Guidance
 **Goal**: The template is usable from thin HTTP boundaries, observable under load, verified against real storage paths, benchmarked by layer, and documented with the rules that keep the architecture correct.
 **Depends on**: Phase 6
-**Requirements**: API-01, API-02, API-03, API-04, OBS-01, OBS-02, TEST-02, TEST-03, DOC-01
+**Requirements**: API-01, API-02, API-03, API-04, OBS-01, OBS-02, TEST-02, TEST-03, TEST-04, DOC-01
 **Success Criteria** (what must be TRUE):
   1. HTTP command endpoints decode requests, attach metadata, send through bounded ingress, and return stream revision, global position, correlation ID, and typed success/error payloads.
   2. Adapter code can be inspected and shown not to mutate aggregate state, projector state, or outbox state directly.
   3. Structured traces and metrics expose command identity, shard/global positions when available, ingress and shard depth, ring wait, decision latency, append latency, conflicts, dedupe hits, projection lag, outbox lag, and p95/p99 command latency.
   4. Integration tests verify append, conflicts, dedupe, snapshots, projector checkpoints, and outbox dispatch against real or containerized PostgreSQL.
-  5. Benchmark and documentation artifacts separate ring-only, domain-only, adapter-only, storage-only, full E2E, projector/outbox, hot-key, burst, and degraded-dependency behavior, and state hot-path rules plus service-boundary guidance.
+  5. Benchmark artifacts separate ring-only, domain-only, adapter-only, storage-only, single-service integrated, full E2E, projector/outbox, hot-key, burst, and degraded-dependency behavior.
+  6. A single-service integrated stress test exercises the actual production-shaped service composition in one process and reports throughput, p50/p95/p99 latency, queue depths, append latency, projection lag, outbox lag, reject rate, and CPU/core utilization.
+  7. Documentation states hot-path rules plus service-boundary guidance and explains how to interpret single-service stress results separately from ring-only microbenchmarks.
 **Plans**: TBD
 
 ## Progress

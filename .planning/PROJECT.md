@@ -28,6 +28,7 @@ Provide a reusable, production-shaped Rust service template where committed even
 - [ ] Demonstrate domain workflows that cross entity boundaries without distributed transactions.
 - [ ] Expose a thin adapter boundary suitable for HTTP/gRPC/WebSocket frontends without putting shared mutable business state behind `Arc<Mutex<_>>`.
 - [ ] Include stress-test and observability hooks that measure ring wait, routing latency, decision time, append latency, projection lag, outbox lag, and p95/p99 latency.
+- [ ] Include a single-service integrated stress test that runs the actual production-shaped process composition: adapter, bounded ingress, partition router, shard runtime, disruptor command path, event store append, projection, outbox dispatcher, and query path.
 - [ ] Document what must stay inside the hot path and what must be moved to projector, outbox, or saga/process-manager paths.
 
 ### Out of Scope
@@ -74,7 +75,7 @@ This gives enough relationships to test uniqueness, entity references, projectio
 - **Concurrency**: Hot business state should be single-owner and processor-local where practical - avoid shared mutable state in adapter handlers.
 - **Integration**: External publication must flow through outbox rows committed in the same transaction as domain events - avoids double-write failure modes.
 - **Scalability**: Adapter, command engine, projection, and outbox concerns should be separable - enables later MSA deployment and independent stress testing.
-- **Testing**: Performance tests must separate ring-only, domain-only, adapter-only, full E2E, soak, and chaos scenarios - otherwise bottlenecks are hidden.
+- **Testing**: Performance tests must separate ring-only, domain-only, adapter-only, single-service integrated, full E2E, soak, and chaos scenarios - otherwise bottlenecks are hidden.
 
 ## Key Decisions
 

@@ -45,6 +45,7 @@ Recent decisions affecting current work:
 - [Phase 1]: Start with Rust 2024 workspace and typed kernel contracts before runtime/storage coupling.
 - [Phase 2]: Event store append commit is the authoritative command success point.
 - [Phase 3]: `disruptor-rs` is in-process execution fabric only; distributed partition ownership is v2/out of scope.
+- [Phase 7]: Single-service integrated stress testing is required in addition to ring-only and full distributed/E2E benchmarks.
 
 ### Pending Todos
 

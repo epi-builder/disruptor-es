@@ -66,7 +66,8 @@ Requirements for the initial template release. Each maps to roadmap phases.
 - [ ] **OBS-02**: Metrics expose ingress depth, shard queue depth, ring wait, decision latency, append latency, OCC conflicts, dedupe hits, projection lag, outbox lag, and p95/p99 command latency.
 - [ ] **TEST-01**: Test suite verifies aggregate replay determinism and domain invariants with generated command sequences or equivalent coverage.
 - [ ] **TEST-02**: Integration tests verify event append, OCC conflicts, deduplication, snapshots, projector checkpoints, and outbox dispatch against a real or containerized PostgreSQL database.
-- [ ] **TEST-03**: Benchmark harnesses separately measure ring-only, domain-only, adapter-only, storage-only, full E2E, projector/outbox, hot-key, burst, and degraded dependency scenarios.
+- [ ] **TEST-03**: Benchmark harnesses separately measure ring-only, domain-only, adapter-only, storage-only, single-service integrated, full E2E, projector/outbox, hot-key, burst, and degraded dependency scenarios.
+- [ ] **TEST-04**: A single-service integrated stress test runs the production-shaped composition in one service process and reports throughput, p50/p95/p99 latency, queue depths, append latency, projection lag, outbox lag, reject rate, and CPU/core utilization under realistic traffic.
 - [ ] **DOC-01**: Documentation states hot-path rules, forbidden patterns, service-boundary guidance, and how to create a new domain service from the template.
 
 ## v2 Requirements
@@ -148,11 +149,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-01 | Phase 4 | Pending |
 | TEST-02 | Phase 7 | Pending |
 | TEST-03 | Phase 7 | Pending |
+| TEST-04 | Phase 7 | Pending |
 | DOC-01 | Phase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 38 total
-- Mapped to phases: 38
+- v1 requirements: 39 total
+- Mapped to phases: 39
 - Unmapped: 0
 
 ---

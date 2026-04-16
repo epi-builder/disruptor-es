@@ -30,7 +30,7 @@ The project should not adopt a generic Rust CQRS framework as the foundation. Th
 - Outbox dispatcher sourced from committed outbox rows.
 - Commerce fixture domain with `User`, `Product`, and `Order`.
 - Thin adapter boundary that avoids shared mutable business state.
-- Stress-test harnesses that isolate ring, domain, adapter, storage, full E2E, projection, and outbox behavior.
+- Stress-test harnesses that isolate ring, domain, adapter, storage, single-service integrated, full E2E, projection, and outbox behavior.
 
 ### Architecture
 
@@ -74,7 +74,7 @@ The disruptor ring is not the source of truth. It is a local scheduling and fan-
 3. Validate `disruptor` integration with ring-only and domain-only benchmarks before relying on it.
 4. Add the commerce fixture after kernel/runtime contracts exist.
 5. Add projections, outbox, and adapter skeletons after durable command handling works.
-6. Add stress tests and observability before considering the template credible.
+6. Add stress tests and observability before considering the template credible, including a single-service integrated test of the actual production-shaped process composition.
 7. Defer distributed owner failover until the local single-owner model is correct and measurable.
 
 ## Decisions to Carry Forward
