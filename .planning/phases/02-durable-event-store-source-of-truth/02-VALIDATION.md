@@ -20,7 +20,7 @@ created: 2026-04-17
 | **Framework** | Rust `cargo test` with `sqlx` migrations and PostgreSQL integration tests |
 | **Config file** | `Cargo.toml`, `crates/es-store-postgres/Cargo.toml`, `crates/es-store-postgres/migrations/` |
 | **Quick run command** | `cargo test -p es-store-postgres --lib` |
-| **Full suite command** | `cargo test --workspace` plus PostgreSQL-backed integration tests when database/container runtime is available |
+| **Full suite command** | `cargo test --workspace` plus `cargo test -p es-store-postgres --test harness_smoke -- --nocapture` when database/container runtime is available |
 | **Estimated runtime** | ~30-180 seconds depending on PostgreSQL container startup |
 
 ---
@@ -38,7 +38,7 @@ created: 2026-04-17
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 01 | 1 | STORE-01, STORE-02, STORE-03, STORE-04, STORE-05 | T-02-01 / T-02-02 | Schema constraints enforce stream revision, event identity, tenant-scoped dedupe, snapshot ordering, and global-position reads | migration/schema | `cargo test -p es-store-postgres --lib` | W0 | pending |
+| 02-01-01 | 01 | 1 | STORE-01, STORE-02, STORE-03, STORE-04, STORE-05 | T-02-01 / T-02-02 | Schema constraints enforce stream revision, event identity, tenant-scoped dedupe, snapshot ordering, and global-position reads | migration/schema + harness smoke | `cargo test -p es-store-postgres --lib` and `cargo test -p es-store-postgres --test harness_smoke -- --nocapture` | yes | green |
 | 02-02-01 | 02 | 1 | STORE-01, STORE-02, STORE-05 | T-02-01 / T-02-03 | Append API exposes typed committed results and rejects invalid/empty appends before persistence | unit | `cargo test -p es-store-postgres --lib` | W0 | pending |
 | 02-03-01 | 03 | 2 | STORE-01, STORE-03 | T-02-01 / T-02-02 | PostgreSQL transaction provides OCC conflict behavior and idempotency replay without duplicate events | integration | `cargo test -p es-store-postgres --test append_occ --test dedupe` | W0 | pending |
 | 02-04-01 | 04 | 2 | STORE-04, STORE-05 | T-02-04 | Snapshot plus stream-event reads and global-position reads use committed event-store state only | integration | `cargo test -p es-store-postgres --test snapshots --test global_reads` | W0 | pending |
@@ -49,7 +49,7 @@ created: 2026-04-17
 
 ## Wave 0 Requirements
 
-- [ ] `crates/es-store-postgres/tests/support/mod.rs` — PostgreSQL test pool/container helpers and migration setup.
+- [x] `crates/es-store-postgres/tests/common/mod.rs` — PostgreSQL test pool/container helpers and migration setup.
 - [ ] `crates/es-store-postgres/tests/append_occ.rs` — append success and optimistic concurrency coverage.
 - [ ] `crates/es-store-postgres/tests/dedupe.rs` — tenant/idempotency replay coverage.
 - [ ] `crates/es-store-postgres/tests/snapshots.rs` — latest snapshot plus subsequent event reads.
