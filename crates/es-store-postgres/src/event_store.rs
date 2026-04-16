@@ -1,6 +1,6 @@
 use crate::{
     AppendOutcome, AppendRequest, RehydrationBatch, SaveSnapshotRequest, SnapshotRecord,
-    StoreError, StoreResult, StoredEvent,
+    StoreError, StoreResult, StoredEvent, sql,
 };
 
 /// PostgreSQL-backed durable event store.
@@ -26,7 +26,7 @@ impl PostgresEventStore {
             return Err(StoreError::EmptyAppend);
         }
 
-        pending_sql()
+        sql::append(&self.pool, request).await
     }
 
     /// Reads stream events after an optional stream revision.

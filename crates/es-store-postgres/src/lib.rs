@@ -10,6 +10,7 @@ mod event_store;
 /// Identifier generation helpers.
 pub mod ids;
 mod models;
+mod sql;
 
 pub use error::{StoreError, StoreResult};
 pub use event_store::PostgresEventStore;

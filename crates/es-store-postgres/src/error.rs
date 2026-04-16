@@ -57,6 +57,13 @@ pub enum StoreError {
         /// Conflicting idempotency key.
         idempotency_key: String,
     },
+    /// Stored command dedupe response could not be decoded.
+    #[error("stored dedupe result could not be decoded")]
+    DedupeResultDecode {
+        /// JSON decode error.
+        #[source]
+        source: serde_json::Error,
+    },
     /// SQLx returned a database error.
     #[error("database error")]
     Database(#[from] sqlx::Error),
