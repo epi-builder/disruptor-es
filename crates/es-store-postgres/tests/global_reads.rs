@@ -119,7 +119,10 @@ async fn global_reads_return_events_after_position() -> anyhow::Result<()> {
         vec![first_position, second_position, third_position],
         global_positions(&all_events)
     );
-    assert_eq!(vec!["order-1", "order-2", "order-3"], stream_ids(&all_events));
+    assert_eq!(
+        vec!["order-1", "order-2", "order-3"],
+        stream_ids(&all_events)
+    );
 
     let later_events = store.read_global(&tenant, first_position, 100).await?;
     assert_eq!(
@@ -178,15 +181,7 @@ async fn global_reads_are_scoped_by_tenant() -> anyhow::Result<()> {
         100,
     )
     .await?;
-    append_one(
-        &store,
-        tenant_b,
-        stream_id("order-1"),
-        "command-1",
-        20,
-        200,
-    )
-    .await?;
+    append_one(&store, tenant_b, stream_id("order-1"), "command-1", 20, 200).await?;
 
     let events = store.read_global(&tenant_a, 0, 100).await?;
 

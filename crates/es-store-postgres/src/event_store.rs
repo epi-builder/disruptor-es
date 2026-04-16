@@ -32,22 +32,26 @@ impl PostgresEventStore {
     /// Reads stream events after an optional stream revision.
     pub async fn read_stream(
         &self,
-        _tenant_id: &es_core::TenantId,
-        _stream_id: &es_core::StreamId,
-        _after_revision: Option<es_core::StreamRevision>,
-        _limit: i64,
+        tenant_id: &es_core::TenantId,
+        stream_id: &es_core::StreamId,
+        after_revision: Option<es_core::StreamRevision>,
+        limit: i64,
     ) -> StoreResult<Vec<StoredEvent>> {
-        pending_sql()
+        let after_revision = after_revision.map(|revision| revision.value()).unwrap_or(0);
+        let after_revision = i64::try_from(after_revision)
+            .map_err(|_| StoreError::InvalidStoredRevision { value: i64::MAX })?;
+
+        sql::read_stream_after(&self.pool, tenant_id, stream_id, after_revision, limit).await
     }
 
     /// Reads events by durable global position.
     pub async fn read_global(
         &self,
-        _tenant_id: &es_core::TenantId,
-        _after_global_position: i64,
-        _limit: i64,
+        tenant_id: &es_core::TenantId,
+        after_global_position: i64,
+        limit: i64,
     ) -> StoreResult<Vec<StoredEvent>> {
-        pending_sql()
+        sql::read_global(&self.pool, tenant_id, after_global_position, limit).await
     }
 
     /// Saves a stream snapshot.
@@ -72,8 +76,4 @@ impl PostgresEventStore {
     ) -> StoreResult<RehydrationBatch> {
         rehydrate::load_rehydration(&self.pool, tenant_id, stream_id).await
     }
-}
-
-fn pending_sql<T>() -> StoreResult<T> {
-    Err(StoreError::Database(sqlx::Error::RowNotFound))
 }

@@ -61,6 +61,12 @@ pub enum StoreError {
         /// Rejected global position value.
         value: i64,
     },
+    /// Read batch limit was invalid.
+    #[error("invalid read limit {value}")]
+    InvalidReadLimit {
+        /// Rejected read limit.
+        value: i64,
+    },
     /// Idempotency key exists for a different command result.
     #[error("dedupe conflict for tenant {tenant_id} and idempotency key {idempotency_key}")]
     DedupeConflict {

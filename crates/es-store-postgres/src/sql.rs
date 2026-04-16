@@ -357,6 +357,13 @@ pub(crate) async fn read_stream_after(
     after_revision: i64,
     limit: i64,
 ) -> StoreResult<Vec<StoredEvent>> {
+    if after_revision < 0 {
+        return Err(StoreError::InvalidStoredRevision {
+            value: after_revision,
+        });
+    }
+    validate_limit(limit)?;
+
     let rows = sqlx::query_as::<_, EventRow>(
         r#"
         SELECT
@@ -387,6 +394,58 @@ pub(crate) async fn read_stream_after(
     .await?;
 
     rows.into_iter().map(EventRow::try_into).collect()
+}
+
+pub(crate) async fn read_global(
+    pool: &PgPool,
+    tenant_id: &TenantId,
+    after_global_position: i64,
+    limit: i64,
+) -> StoreResult<Vec<StoredEvent>> {
+    if after_global_position < 0 {
+        return Err(StoreError::InvalidGlobalPosition {
+            value: after_global_position,
+        });
+    }
+    validate_limit(limit)?;
+
+    let rows = sqlx::query_as::<_, EventRow>(
+        r#"
+        SELECT
+            global_position,
+            stream_id,
+            stream_revision,
+            event_id,
+            event_type,
+            schema_version,
+            payload,
+            metadata,
+            tenant_id,
+            command_id,
+            correlation_id,
+            causation_id,
+            recorded_at
+        FROM events
+        WHERE tenant_id = $1 AND global_position > $2
+        ORDER BY global_position ASC
+        LIMIT $3
+        "#,
+    )
+    .bind(tenant_id.as_str())
+    .bind(after_global_position)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter().map(EventRow::try_into).collect()
+}
+
+fn validate_limit(limit: i64) -> StoreResult<()> {
+    if limit < 0 {
+        return Err(StoreError::InvalidReadLimit { value: limit });
+    }
+
+    Ok(())
 }
 
 pub(crate) async fn save_snapshot(
