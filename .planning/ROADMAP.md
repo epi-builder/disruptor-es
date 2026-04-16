@@ -48,7 +48,12 @@ Plans:
   3. Repeating a command with the same tenant/idempotency key returns the prior committed result instead of appending duplicate events.
   4. Aggregate state can be rehydrated from the latest snapshot plus subsequent stream events.
   5. Projectors and outbox workers can read committed events by global position, independent of any disruptor ring sequence.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 02-01-PLAN.md — Create PostgreSQL schema, storage dependencies, and migrated integration-test harness.
+- [ ] 02-02-PLAN.md — Define storage API contracts, validation models, typed errors, and Rust UUID helper.
+- [ ] 02-03-PLAN.md — Implement durable append, optimistic concurrency, metadata persistence, and command dedupe.
+- [ ] 02-04-PLAN.md — Implement snapshot rehydration and tenant-scoped global-position reads.
 
 ### Phase 3: Local Command Runtime and Disruptor Execution
 **Goal**: Requests enter a bounded local command engine, route by aggregate/partition key to a single shard owner, execute through an in-process disruptor path, and reply only after event-store commit.
