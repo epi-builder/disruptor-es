@@ -111,49 +111,49 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | TBD | Pending |
-| CORE-02 | TBD | Pending |
-| CORE-03 | TBD | Pending |
-| CORE-04 | TBD | Pending |
-| STORE-01 | TBD | Pending |
-| STORE-02 | TBD | Pending |
-| STORE-03 | TBD | Pending |
-| STORE-04 | TBD | Pending |
-| STORE-05 | TBD | Pending |
-| RUNTIME-01 | TBD | Pending |
-| RUNTIME-02 | TBD | Pending |
-| RUNTIME-03 | TBD | Pending |
-| RUNTIME-04 | TBD | Pending |
-| RUNTIME-05 | TBD | Pending |
-| RUNTIME-06 | TBD | Pending |
-| DOM-01 | TBD | Pending |
-| DOM-02 | TBD | Pending |
-| DOM-03 | TBD | Pending |
-| DOM-04 | TBD | Pending |
-| DOM-05 | TBD | Pending |
-| PROJ-01 | TBD | Pending |
-| PROJ-02 | TBD | Pending |
-| PROJ-03 | TBD | Pending |
-| PROJ-04 | TBD | Pending |
-| INT-01 | TBD | Pending |
-| INT-02 | TBD | Pending |
-| INT-03 | TBD | Pending |
-| INT-04 | TBD | Pending |
-| API-01 | TBD | Pending |
-| API-02 | TBD | Pending |
-| API-03 | TBD | Pending |
-| API-04 | TBD | Pending |
-| OBS-01 | TBD | Pending |
-| OBS-02 | TBD | Pending |
-| TEST-01 | TBD | Pending |
-| TEST-02 | TBD | Pending |
-| TEST-03 | TBD | Pending |
-| DOC-01 | TBD | Pending |
+| CORE-01 | Phase 1 | Pending |
+| CORE-02 | Phase 1 | Pending |
+| CORE-03 | Phase 1 | Pending |
+| CORE-04 | Phase 1 | Pending |
+| STORE-01 | Phase 2 | Pending |
+| STORE-02 | Phase 2 | Pending |
+| STORE-03 | Phase 2 | Pending |
+| STORE-04 | Phase 2 | Pending |
+| STORE-05 | Phase 2 | Pending |
+| RUNTIME-01 | Phase 3 | Pending |
+| RUNTIME-02 | Phase 3 | Pending |
+| RUNTIME-03 | Phase 3 | Pending |
+| RUNTIME-04 | Phase 3 | Pending |
+| RUNTIME-05 | Phase 3 | Pending |
+| RUNTIME-06 | Phase 3 | Pending |
+| DOM-01 | Phase 4 | Pending |
+| DOM-02 | Phase 4 | Pending |
+| DOM-03 | Phase 4 | Pending |
+| DOM-04 | Phase 4 | Pending |
+| DOM-05 | Phase 4 | Pending |
+| PROJ-01 | Phase 5 | Pending |
+| PROJ-02 | Phase 5 | Pending |
+| PROJ-03 | Phase 5 | Pending |
+| PROJ-04 | Phase 5 | Pending |
+| INT-01 | Phase 6 | Pending |
+| INT-02 | Phase 6 | Pending |
+| INT-03 | Phase 6 | Pending |
+| INT-04 | Phase 6 | Pending |
+| API-01 | Phase 7 | Pending |
+| API-02 | Phase 7 | Pending |
+| API-03 | Phase 7 | Pending |
+| API-04 | Phase 7 | Pending |
+| OBS-01 | Phase 7 | Pending |
+| OBS-02 | Phase 7 | Pending |
+| TEST-01 | Phase 4 | Pending |
+| TEST-02 | Phase 7 | Pending |
+| TEST-03 | Phase 7 | Pending |
+| DOC-01 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 38 total
-- Mapped to phases: 0
-- Unmapped: 38
+- Mapped to phases: 38
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-16*
