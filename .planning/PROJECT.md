@@ -15,13 +15,13 @@ Provide a reusable, production-shaped Rust service template where committed even
 ### Validated
 
 - [x] Phase 01 validated a Rust 2024 workspace with typed core metadata, synchronous aggregate kernel contracts, visible service boundary crates, an example commerce aggregate, and dependency-boundary tests for deterministic lower-level crates.
+- [x] Phase 02 validated PostgreSQL as the durable event-store source of truth with stream optimistic concurrency, full event metadata, tenant-scoped command dedupe, snapshot rehydration inputs, and global-position reads.
 
 ### Active
 
 - [ ] Implement a generic command-processing kernel that supports typed aggregates, commands, events, replies, and domain errors.
 - [ ] Use partitioned routing so commands for the same aggregate key are handled by the same logical shard owner.
 - [ ] Use `disruptor-rs` as an in-process execution fabric while keeping durability in an append-only event store.
-- [ ] Provide event sourcing primitives: stream IDs, expected revisions, append results, snapshots, command deduplication, and replay.
 - [ ] Provide CQRS projection primitives with checkpointed projector offsets and rebuild/catch-up support.
 - [ ] Provide outbox-based integration events so external publication is decoupled from the hot command path.
 - [ ] Include at least two related domain entities, with user, product, and order as the preferred initial example.
@@ -83,7 +83,7 @@ This gives enough relationships to test uniqueness, entity references, projectio
 |----------|-----------|---------|
 | Use commerce/order as the initial example domain | It provides multiple related entities and realistic workflows without the complexity of a matching engine. | - Pending |
 | Keep `disruptor-rs` inside the command service process | The library is for in-process sequencing and fan-out, not cross-service communication. | - Pending |
-| Treat event store append commit as command success | Durability must not depend on ring publication or projection completion. | - Pending |
+| Treat event store append commit as command success | Durability must not depend on ring publication or projection completion. | Validated in Phase 02 with PostgreSQL append/OCC/dedupe transactions. |
 | Use typed domain kernels instead of JSON/reflection in the hot path | Preserves Rust type safety and avoids erasing the performance benefits of preallocated ring entries. | - Pending |
 | Split generic infrastructure from domain rules | Enables reuse across future services while keeping domain logic strongly typed. | - Pending |
 | Model adapters as thin ingress layers with bounded queues and reply channels | Prevents HTTP/gRPC/WebSocket concerns from forcing mutex-heavy business state. | - Pending |
@@ -106,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-16 after Phase 01 completion*
+*Last updated: 2026-04-17 after Phase 02 completion*

@@ -13,7 +13,7 @@ This roadmap delivers a Rust service template where committed events are the sou
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Workspace and Typed Kernel Contracts** - Developers can build the Rust workspace and define deterministic typed aggregate contracts. Completed 2026-04-16.
-- [ ] **Phase 2: Durable Event Store Source of Truth** - Commands can persist committed events, metadata, dedupe records, snapshots, and global reads through the event store boundary.
+- [x] **Phase 2: Durable Event Store Source of Truth** - Commands can persist committed events, metadata, dedupe records, snapshots, and global reads through the event store boundary. Completed 2026-04-17.
 - [ ] **Phase 3: Local Command Runtime and Disruptor Execution** - Adapter requests flow through bounded local shards that own hot state and reply only after durable append.
 - [ ] **Phase 4: Commerce Fixture Domain** - User, product, and order behavior proves typed decisions, replay, relationships, and invariants.
 - [ ] **Phase 5: CQRS Projection and Query Catch-Up** - Committed events feed checkpointed read models with restart and read-your-own-write support.
@@ -122,7 +122,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Workspace and Typed Kernel Contracts | 4/4 | Complete | 2026-04-16 |
-| 2. Durable Event Store Source of Truth | 3/4 | In Progress | - |
+| 2. Durable Event Store Source of Truth | 4/4 | Complete | 2026-04-17 |
 | 3. Local Command Runtime and Disruptor Execution | 0/TBD | Not started | - |
 | 4. Commerce Fixture Domain | 0/TBD | Not started | - |
 | 5. CQRS Projection and Query Catch-Up | 0/TBD | Not started | - |
