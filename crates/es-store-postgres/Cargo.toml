@@ -6,6 +6,19 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+es-core = { path = "../es-core" }
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+anyhow.workspace = true
+testcontainers.workspace = true
+testcontainers-modules.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true
