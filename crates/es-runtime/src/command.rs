@@ -1,3 +1,80 @@
+use es_kernel::Aggregate;
+
+use crate::{RuntimeError, RuntimeResult};
+
+/// One-shot command reply used by runtime callers.
+pub type CommandReply<R> = tokio::sync::oneshot::Sender<RuntimeResult<CommandOutcome<R>>>;
+
+/// Command accepted into the runtime with precomputed routing and concurrency fields.
+pub struct CommandEnvelope<A: Aggregate> {
+    /// Typed aggregate command.
+    pub command: A::Command,
+    /// Command metadata, including tenant and trace identifiers.
+    pub metadata: es_core::CommandMetadata,
+    /// Tenant-scoped idempotency key.
+    pub idempotency_key: String,
+    /// Stream affected by the command.
+    pub stream_id: es_core::StreamId,
+    /// Ordered partition key used by the runtime router.
+    pub partition_key: es_core::PartitionKey,
+    /// Expected stream revision for optimistic concurrency.
+    pub expected_revision: es_core::ExpectedRevision,
+    /// One-shot reply channel completed after durable append.
+    pub reply: CommandReply<A::Reply>,
+}
+
+impl<A: Aggregate> CommandEnvelope<A> {
+    /// Builds an envelope and derives routing fields from the aggregate contract.
+    pub fn new(
+        command: A::Command,
+        metadata: es_core::CommandMetadata,
+        idempotency_key: impl Into<String>,
+        reply: CommandReply<A::Reply>,
+    ) -> RuntimeResult<Self> {
+        let idempotency_key = idempotency_key.into();
+        if idempotency_key.is_empty() {
+            return Err(RuntimeError::Codec {
+                message: "idempotency key cannot be empty".to_owned(),
+            });
+        }
+
+        let stream_id = A::stream_id(&command);
+        let partition_key = A::partition_key(&command);
+        let expected_revision = A::expected_revision(&command);
+
+        Ok(Self {
+            command,
+            metadata,
+            idempotency_key,
+            stream_id,
+            partition_key,
+            expected_revision,
+            reply,
+        })
+    }
+}
+
+/// Successful command result returned only after durable append succeeds.
+pub struct CommandOutcome<R> {
+    /// Aggregate reply.
+    pub reply: R,
+    /// Durable append result assigned by the event store.
+    pub append: es_store_postgres::CommittedAppend,
+}
+
+/// Runtime boundary for encoding typed aggregate events into durable store DTOs.
+pub trait RuntimeEventCodec<A: Aggregate>: Clone + Send + Sync + 'static {
+    /// Encodes a typed event for durable storage.
+    fn encode(
+        &self,
+        event: &A::Event,
+        metadata: &es_core::CommandMetadata,
+    ) -> RuntimeResult<es_store_postgres::NewEvent>;
+
+    /// Decodes a stored event for aggregate replay.
+    fn decode(&self, stored: &es_store_postgres::StoredEvent) -> RuntimeResult<A::Event>;
+}
+
 #[cfg(test)]
 mod tests {
     use es_core::{CommandMetadata, ExpectedRevision, PartitionKey, StreamId, TenantId};
