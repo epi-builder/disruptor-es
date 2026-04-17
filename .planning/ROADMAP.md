@@ -81,7 +81,12 @@ Plans:
   2. Orders reference user and product identifiers explicitly, and domain behavior validates the relationship assumptions needed by later process managers.
   3. Invalid orders, negative inventory, duplicate order placement, inactive users, and unavailable products are rejected by typed domain errors.
   4. Generated or equivalent command-sequence tests verify replay determinism and domain invariants for the fixture aggregates.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 04-01-PLAN.md — Create commerce module foundation, typed IDs, quantity value object, and compile-visible aggregate module contracts.
+- [ ] 04-02-PLAN.md — Implement user registration, activation, deactivation, replay, and typed lifecycle errors.
+- [ ] 04-03-PLAN.md — Implement product creation, inventory adjustment, reservation, release, replay, and nonnegative inventory invariants.
+- [ ] 04-04-PLAN.md — Implement order lifecycle relationships and generated command-sequence invariant tests.
 
 ### Phase 5: CQRS Projection and Query Catch-Up
 **Goal**: Committed events drive eventually consistent read models through checkpointed projectors that can restart, rebuild, catch up, and optionally satisfy read-your-own-write queries.
