@@ -41,8 +41,8 @@ created: 2026-04-18
 | 05-01-01 | 01 | 1 | PROJ-04 | T-05-01 / T-05-02 | Query wait policy rejects invalid positions and bounds waits | unit | `cargo test -p es-projection minimum_position -- --nocapture` | No - Wave 0 | pending |
 | 05-02-01 | 02 | 1 | PROJ-01 | T-05-01 / T-05-03 | Tenant-scoped offsets and read models commit atomically | integration | `cargo test -p es-store-postgres projections_offset_commits_with_read_models -- --nocapture` | No - Wave 0 | pending |
 | 05-03-01 | 03 | 2 | PROJ-02 | T-05-01 / T-05-04 | Read models derive only from committed events | integration | `cargo test -p es-store-postgres projections_build_commerce_read_models -- --nocapture` | No - Wave 0 | pending |
-| 05-04-01 | 04 | 2 | PROJ-03 | T-05-03 / T-05-04 | Restart resumes from checkpoint without duplicate effects | integration | `cargo test -p es-store-postgres projections_resume_without_duplicate_effects -- --nocapture` | No - Wave 0 | pending |
-| 05-04-02 | 04 | 2 | PROJ-04 | T-05-02 | Minimum-position query returns lag timeout instead of blocking indefinitely | unit + integration | `cargo test -p es-projection minimum_position -- --nocapture` | No - Wave 0 | pending |
+| 05-03-02 | 03 | 2 | PROJ-03 | T-05-03 / T-05-04 | Restart resumes from checkpoint without duplicate effects | integration | `cargo test -p es-store-postgres projections_resume_without_duplicate_effects -- --nocapture` | No - Wave 0 | pending |
+| 05-03-03 | 03 | 2 | PROJ-04 | T-05-02 | Minimum-position query returns lag timeout instead of blocking indefinitely | unit + integration | `cargo test -p es-store-postgres projections_queries_wait_for_minimum_position -- --nocapture` | No - Wave 0 | pending |
 
 *Status: pending / green / red / flaky*
 

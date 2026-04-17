@@ -79,7 +79,8 @@ Use PostgreSQL as both the source cursor store and the initial read-model store.
 
 ```bash
 # No new workspace dependency is required for the first implementation.
-# Add es-store-postgres, es-core, serde_json, sqlx, tokio, thiserror to crates/es-projection/Cargo.toml as path/workspace dependencies.
+# Add es-core, serde, serde_json, tokio, time, and thiserror to crates/es-projection/Cargo.toml as path/workspace dependencies.
+# Add es-projection and example-commerce to crates/es-store-postgres/Cargo.toml for the PostgreSQL implementation.
 ```
 
 ## Architecture Patterns
@@ -286,16 +287,26 @@ CREATE TABLE product_inventory_read_models (
 
 ```rust
 // Source: project-owned boundary recommendation from current crate layout.
+// es-projection owns storage-neutral DTOs and traits. PostgreSQL-specific
+// StoredEvent conversion and SQLx transaction ownership live in es-store-postgres.
+pub struct ProjectionEvent {
+    pub global_position: i64,
+    pub event_type: String,
+    pub schema_version: i32,
+    pub payload: serde_json::Value,
+    pub metadata: serde_json::Value,
+    pub tenant_id: TenantId,
+}
+
 pub trait Projector {
     fn name(&self) -> &'static str;
 
     fn handles(&self, event_type: &str, schema_version: i32) -> bool;
 
-    async fn apply(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        event: &StoredEvent,
-    ) -> ProjectionResult<()>;
+    fn apply<'a>(
+        &'a self,
+        event: &'a ProjectionEvent,
+    ) -> Pin<Box<dyn Future<Output = ProjectionResult<()>> + Send + 'a>>;
 }
 ```
 
@@ -319,17 +330,17 @@ pub trait Projector {
 | A2 | Query wait should use a short bounded timeout rather than block indefinitely. | Architecture Patterns, Common Pitfalls | Product/API behavior may need user confirmation in Phase 7. |
 | A3 | Order summaries do not need pricing totals because Phase 4 order lines contain product, SKU, quantity, and availability but no price. | Code Examples | If pricing is added later, read-model schema must migrate. |
 
-## Open Questions
+## Open Questions — RESOLVED
 
-1. **Should Phase 5 add event payload codecs for commerce events?**
+1. **RESOLVED: Should Phase 5 add event payload codecs for commerce events?**
    - What we know: Stored events are JSONB `serde_json::Value`; Phase 4 commerce events currently do not derive serde. [VERIFIED: crates/es-store-postgres/src/models.rs; crates/example-commerce/src/order.rs; crates/example-commerce/src/product.rs]
-   - What's unclear: Whether Phase 5 should add serde derives to example-commerce event/value types or project from known JSON fixture shapes only. [ASSUMED]
-   - Recommendation: Add serde derives to commerce event/read-model payload types in Phase 5 if no dependency-boundary test forbids it; serde is already a workspace dependency. [VERIFIED: Cargo.toml]
+   - Decision: Phase 5 adds serde derives and JSON round-trip tests for commerce event payload DTOs in `example-commerce`, then decodes those typed payloads in `es-store-postgres`.
+   - Boundary: Phase 5 does not add a generic upcaster framework. Schema-version-specific projection handling remains explicit in the PostgreSQL projection implementation; broader upcaster tooling stays out of this phase.
 
-2. **Should one worker own multiple projectors or one projector own one worker?**
+2. **RESOLVED: Should one worker own multiple projectors or one projector own one worker?**
    - What we know: Phase 5 needs order and product projections; Phase 7 metrics/stress will later care about per-projector lag. [VERIFIED: .planning/ROADMAP.md]
-   - What's unclear: Required runtime composition API is not specified yet. [VERIFIED: .planning/ROADMAP.md]
-   - Recommendation: Implement a generic batch runner that accepts a list of projectors but stores offsets per projector name. [ASSUMED]
+   - Decision: Phase 5 implements one worker/batch runner that can run named projectors sequentially per tenant for this milestone, while storing offsets per `(tenant_id, projector_name)`.
+   - Boundary: Distributed or multi-worker projector ownership is deferred to later phases; this milestone proves durable checkpointing, atomic read-model updates, restart catch-up, and bounded read-your-own-write queries.
 
 ## Environment Availability
 

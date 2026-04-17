@@ -42,7 +42,7 @@ time.workspace = true
 uuid.workspace = true
 ```
 
-**Apply:** Add only phase-needed dependencies to `es-projection`: `es-core`, `es-store-postgres`, `serde`, `serde_json`, `thiserror`, `tokio`, and `time` if query wait policies expose durations/timestamps. Keep versions inherited from workspace.
+**Apply:** Add only phase-needed dependencies to `es-projection`: `es-core`, `serde`, `serde_json`, `thiserror`, `tokio`, and `time` if query wait policies expose durations/timestamps. Do not add `es-store-postgres` here; `es-projection` must remain storage-neutral and PostgreSQL-specific conversion belongs in `crates/es-store-postgres/src/projection.rs`. Keep versions inherited from workspace.
 
 **Dev dependency pattern** (lines 17-21):
 
@@ -123,12 +123,12 @@ Conflict {
     expected: String,
     actual: Option<u64>,
 },
-/// Durable event store returned an infrastructure error.
-#[error("store error")]
-Store(#[from] es_store_postgres::StoreError),
+/// Projection storage returned an infrastructure error.
+#[error("store error: {message}")]
+Store { message: String },
 ```
 
-**Apply:** Define `ProjectionResult<T> = Result<T, ProjectionError>`. Include typed variants for invalid projector name, invalid/minimum global position, invalid batch limit, projection lag timeout, payload decode, and store/database passthrough.
+**Apply:** Define `ProjectionResult<T> = Result<T, ProjectionError>`. Include typed variants for invalid projector name, invalid/minimum global position, invalid batch limit, projection lag timeout, payload decode, and storage/database passthrough as a storage-neutral message variant. Do not depend on `es_store_postgres::StoreError` from `es-projection`; PostgreSQL code maps concrete store errors at the storage boundary.
 
 **Error conversion test pattern** (lines 91-107):
 
@@ -245,7 +245,7 @@ pub async fn read_global(
 }
 ```
 
-**Apply:** The projector runner should call `read_global(tenant_id, offset.last_global_position, limit)` and return an explicit `CatchUpOutcome` such as `Idle` or `Applied { event_count, last_global_position }`.
+**Apply:** `es-projection` should define storage-neutral `ProjectionEvent` and `Projector` contracts. The PostgreSQL projector runner in `es-store-postgres` should call `read_global(tenant_id, offset.last_global_position, limit)`, convert each `StoredEvent` to `ProjectionEvent`, and return an explicit `CatchUpOutcome` such as `Idle` or `Applied { event_count, last_global_position }`.
 
 ---
 
@@ -480,7 +480,8 @@ pub use event_store::PostgresEventStore;
 disruptor.workspace = true
 es-core = { path = "../es-core" }
 es-kernel = { path = "../es-kernel" }
-es-store-postgres = { path = "../es-store-postgres" }
+es-projection = { path = "../es-projection" }
+example-commerce = { path = "../example-commerce" }
 futures.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
