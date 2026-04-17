@@ -32,6 +32,9 @@ enum CounterCommand {
         stream_id: &'static str,
         amount: i64,
     },
+    Reject {
+        stream_id: &'static str,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -39,8 +42,10 @@ enum CounterEvent {
     Added(i64),
 }
 
-#[derive(Clone)]
-struct CounterCodec;
+#[derive(Clone, Default)]
+struct CounterCodec {
+    fail_encode: bool,
+}
 
 struct CounterAggregate;
 
@@ -54,12 +59,16 @@ impl Aggregate for CounterAggregate {
     fn stream_id(command: &Self::Command) -> StreamId {
         match command {
             CounterCommand::Add { stream_id, .. } => StreamId::new(*stream_id).expect("stream id"),
+            CounterCommand::Reject { stream_id } => StreamId::new(*stream_id).expect("stream id"),
         }
     }
 
     fn partition_key(command: &Self::Command) -> es_core::PartitionKey {
         match command {
             CounterCommand::Add { stream_id, .. } => {
+                es_core::PartitionKey::new(*stream_id).expect("partition key")
+            }
+            CounterCommand::Reject { stream_id } => {
                 es_core::PartitionKey::new(*stream_id).expect("partition key")
             }
         }
@@ -79,6 +88,7 @@ impl Aggregate for CounterAggregate {
                 vec![CounterEvent::Added(amount)],
                 state.value + amount,
             )),
+            CounterCommand::Reject { .. } => Err("rejected by domain"),
         }
     }
 
@@ -97,6 +107,12 @@ impl RuntimeEventCodec<CounterAggregate> for CounterCodec {
         event: &CounterEvent,
         _metadata: &CommandMetadata,
     ) -> es_runtime::RuntimeResult<NewEvent> {
+        if self.fail_encode {
+            return Err(RuntimeError::Codec {
+                message: "encode failed".to_owned(),
+            });
+        }
+
         match event {
             CounterEvent::Added(amount) => NewEvent::new(
                 Uuid::from_u128(*amount as u128 + 100),
@@ -184,6 +200,14 @@ impl FakeStore {
 
     fn set_rehydration(&self, rehydration: RehydrationBatch) {
         *self.inner.rehydration.lock().expect("rehydration") = rehydration;
+    }
+
+    fn set_rehydration_error(&self, error: StoreError) {
+        *self
+            .inner
+            .rehydration_error
+            .lock()
+            .expect("rehydration error") = Some(error);
     }
 
     async fn wait_for_append_start(&self) {
@@ -285,6 +309,24 @@ fn envelope(
     (envelope, receiver)
 }
 
+fn rejecting_envelope() -> (
+    CommandEnvelope<CounterAggregate>,
+    oneshot::Receiver<es_runtime::RuntimeResult<es_runtime::CommandOutcome<i64>>>,
+) {
+    let (reply, receiver) = oneshot::channel();
+    let envelope = CommandEnvelope::<CounterAggregate>::new(
+        CounterCommand::Reject {
+            stream_id: "counter-1",
+        },
+        metadata(),
+        "idem-1",
+        reply,
+    )
+    .expect("command envelope");
+
+    (envelope, receiver)
+}
+
 fn record_handoff(
     state: &mut ShardState<CounterAggregate>,
     envelope: CommandEnvelope<CounterAggregate>,
@@ -299,6 +341,22 @@ fn committed_append(position: i64) -> CommittedAppend {
         last_revision: StreamRevision::new(position as u64),
         global_positions: vec![position],
         event_ids: vec![Uuid::from_u128(position as u128)],
+    }
+}
+
+fn warm_cache(state: &mut ShardState<CounterAggregate>, value: i64) {
+    state.cache_mut().commit_state(
+        StreamId::new("counter-1").expect("stream id"),
+        CounterState { value },
+    );
+}
+
+fn expect_runtime_error(
+    result: es_runtime::RuntimeResult<es_runtime::CommandOutcome<i64>>,
+) -> RuntimeError {
+    match result {
+        Ok(_) => panic!("expected runtime error"),
+        Err(error) => error,
     }
 }
 
@@ -324,7 +382,7 @@ fn stored_event(position: i64, amount: i64) -> StoredEvent {
 async fn reply_is_sent_after_append_commit() {
     let (release_append, wait_for_release) = oneshot::channel();
     let store = FakeStore::with_delayed_commit(wait_for_release);
-    let codec = CounterCodec;
+    let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
     let (envelope, receiver) = envelope(3);
     record_handoff(&mut state, envelope);
@@ -358,13 +416,137 @@ async fn reply_is_sent_after_append_commit() {
 }
 
 #[tokio::test]
+async fn conflict_does_not_mutate_cache() {
+    let store = FakeStore::with_append_result(Err(StoreError::StreamConflict {
+        stream_id: "counter-1".to_owned(),
+        expected: "exact 99".to_owned(),
+        actual: Some(1),
+    }));
+    let codec = CounterCodec::default();
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    warm_cache(&mut state, 10);
+    let (envelope, receiver) = envelope(3);
+    record_handoff(&mut state, envelope);
+
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
+
+    let error = expect_runtime_error(receiver.await.expect("reply"));
+    assert!(matches!(
+        error,
+        RuntimeError::Conflict {
+            stream_id,
+            expected,
+            actual: Some(1),
+        } if stream_id == "counter-1" && expected == "exact 99"
+    ));
+    assert_eq!(1, store.appended_len());
+    assert_eq!(0, state.dedupe().len());
+    assert_eq!(
+        Some(&CounterState { value: 10 }),
+        state
+            .cache()
+            .get(&StreamId::new("counter-1").expect("stream id"))
+    );
+}
+
+#[tokio::test]
+async fn domain_error_does_not_append_or_mutate_cache() {
+    let store = FakeStore::committed();
+    let codec = CounterCodec::default();
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    warm_cache(&mut state, 10);
+    let (envelope, receiver) = rejecting_envelope();
+    record_handoff(&mut state, envelope);
+
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
+
+    let error = expect_runtime_error(receiver.await.expect("reply"));
+    assert!(matches!(error, RuntimeError::Domain { message } if message == "rejected by domain"));
+    assert_eq!(0, store.appended_len());
+    assert_eq!(0, state.dedupe().len());
+    assert_eq!(
+        Some(&CounterState { value: 10 }),
+        state
+            .cache()
+            .get(&StreamId::new("counter-1").expect("stream id"))
+    );
+}
+
+#[tokio::test]
+async fn codec_error_does_not_append_or_mutate_cache() {
+    let store = FakeStore::committed();
+    let codec = CounterCodec { fail_encode: true };
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    warm_cache(&mut state, 10);
+    let (envelope, receiver) = envelope(3);
+    record_handoff(&mut state, envelope);
+
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
+
+    let error = expect_runtime_error(receiver.await.expect("reply"));
+    assert!(matches!(error, RuntimeError::Codec { message } if message == "encode failed"));
+    assert_eq!(0, store.appended_len());
+    assert_eq!(0, state.dedupe().len());
+    assert_eq!(
+        Some(&CounterState { value: 10 }),
+        state
+            .cache()
+            .get(&StreamId::new("counter-1").expect("stream id"))
+    );
+}
+
+#[tokio::test]
+async fn rehydration_error_does_not_decide_append_or_mutate_cache() {
+    let store = FakeStore::committed();
+    store.set_rehydration_error(StoreError::DedupeConflict {
+        tenant_id: "tenant-a".to_owned(),
+        idempotency_key: "idem-1".to_owned(),
+    });
+    let codec = CounterCodec::default();
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    let (envelope, receiver) = envelope(3);
+    record_handoff(&mut state, envelope);
+
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
+
+    let error = expect_runtime_error(receiver.await.expect("reply"));
+    assert!(matches!(
+        error,
+        RuntimeError::Store(StoreError::DedupeConflict { .. })
+    ));
+    assert_eq!(0, store.appended_len());
+    assert_eq!(0, state.dedupe().len());
+    assert!(state.cache().is_empty());
+}
+
+#[tokio::test]
 async fn cache_miss_rehydrates_before_decide() {
     let store = FakeStore::committed();
     store.set_rehydration(RehydrationBatch {
         snapshot: None,
         events: vec![stored_event(1, 5)],
     });
-    let codec = CounterCodec;
+    let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
     let (envelope, receiver) = envelope(3);
     record_handoff(&mut state, envelope);
@@ -389,7 +571,7 @@ async fn cache_miss_rehydrates_before_decide() {
 #[tokio::test]
 async fn duplicate_append_returns_successful_command_outcome() {
     let store = FakeStore::duplicate();
-    let codec = CounterCodec;
+    let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
     let (envelope, receiver) = envelope(3);
     record_handoff(&mut state, envelope);
@@ -416,12 +598,9 @@ async fn duplicate_append_returns_successful_command_outcome() {
 #[tokio::test]
 async fn duplicate_after_warmed_cache_does_not_apply_newly_decided_events() {
     let store = FakeStore::duplicate();
-    let codec = CounterCodec;
+    let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
-    state.cache_mut().commit_state(
-        StreamId::new("counter-1").expect("stream id"),
-        CounterState { value: 10 },
-    );
+    warm_cache(&mut state, 10);
     let (envelope, receiver) = envelope(3);
     record_handoff(&mut state, envelope);
 
@@ -445,7 +624,7 @@ async fn duplicate_after_warmed_cache_does_not_apply_newly_decided_events() {
 #[tokio::test]
 async fn reply_drop_after_append_still_advances_cache_and_dedupe() {
     let store = FakeStore::committed();
-    let codec = CounterCodec;
+    let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
     let (envelope, receiver) = envelope(3);
     drop(receiver);
