@@ -85,8 +85,8 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md — Create commerce module foundation, typed IDs, quantity value object, and compile-visible aggregate module contracts.
 - [x] 04-02-PLAN.md — Implement user registration, activation, deactivation, replay, and typed lifecycle errors.
-- [ ] 04-03-PLAN.md — Implement product creation, inventory adjustment, reservation, release, replay, and nonnegative inventory invariants.
-- [ ] 04-04-PLAN.md — Implement order lifecycle relationships and generated command-sequence invariant tests.
+- [x] 04-03-PLAN.md — Implement product creation, inventory adjustment, reservation, release, replay, and nonnegative inventory invariants.
+- [x] 04-04-PLAN.md — Implement order lifecycle relationships and generated command-sequence invariant tests.
 
 ### Phase 5: CQRS Projection and Query Catch-Up
 **Goal**: Committed events drive eventually consistent read models through checkpointed projectors that can restart, rebuild, catch up, and optionally satisfy read-your-own-write queries.

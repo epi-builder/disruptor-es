@@ -36,7 +36,7 @@ Requirements for the initial template release. Each maps to roadmap phases.
 - [x] **DOM-01**: Example domain includes `User`, `Product`, and `Order` aggregates or entity models with explicit relationships.
 - [x] **DOM-02**: User commands can register, activate/deactivate, and emit replayable user events.
 - [ ] **DOM-03**: Product commands can create products, adjust inventory, reserve inventory, and release inventory.
-- [ ] **DOM-04**: Order commands can place, confirm, reject, and cancel orders referencing user and product identifiers.
+- [x] **DOM-04**: Order commands can place, confirm, reject, and cancel orders referencing user and product identifiers.
 - [x] **DOM-05**: Domain invariants prevent invalid orders, negative inventory, duplicate order placement, and operations against inactive users or unavailable products.
 
 ### Projection and Query
@@ -64,7 +64,7 @@ Requirements for the initial template release. Each maps to roadmap phases.
 
 - [ ] **OBS-01**: Runtime emits structured traces with command ID, correlation ID, causation ID, tenant ID, stream ID, shard ID, and global position when available.
 - [ ] **OBS-02**: Metrics expose ingress depth, shard queue depth, ring wait, decision latency, append latency, OCC conflicts, dedupe hits, projection lag, outbox lag, and p95/p99 command latency.
-- [ ] **TEST-01**: Test suite verifies aggregate replay determinism and domain invariants with generated command sequences or equivalent coverage.
+- [x] **TEST-01**: Test suite verifies aggregate replay determinism and domain invariants with generated command sequences or equivalent coverage.
 - [ ] **TEST-02**: Integration tests verify event append, OCC conflicts, deduplication, snapshots, projector checkpoints, and outbox dispatch against a real or containerized PostgreSQL database.
 - [ ] **TEST-03**: Benchmark harnesses separately measure ring-only, domain-only, adapter-only, storage-only, single-service integrated, full E2E, projector/outbox, hot-key, burst, and degraded dependency scenarios.
 - [ ] **TEST-04**: A single-service integrated stress test runs the production-shaped composition in one service process and reports throughput, p50/p95/p99 latency, queue depths, append latency, projection lag, outbox lag, reject rate, and CPU/core utilization under realistic traffic.
@@ -130,7 +130,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOM-01 | Phase 4 | Complete |
 | DOM-02 | Phase 4 | Complete |
 | DOM-03 | Phase 4 | Pending |
-| DOM-04 | Phase 4 | Pending |
+| DOM-04 | Phase 4 | Complete |
 | DOM-05 | Phase 4 | Complete |
 | PROJ-01 | Phase 5 | Pending |
 | PROJ-02 | Phase 5 | Pending |
@@ -146,7 +146,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | API-04 | Phase 7 | Pending |
 | OBS-01 | Phase 7 | Pending |
 | OBS-02 | Phase 7 | Pending |
-| TEST-01 | Phase 4 | Pending |
+| TEST-01 | Phase 4 | Complete |
 | TEST-02 | Phase 7 | Pending |
 | TEST-03 | Phase 7 | Pending |
 | TEST-04 | Phase 7 | Pending |

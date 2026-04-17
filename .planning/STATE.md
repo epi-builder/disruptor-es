@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-04-17T08:18:13.020Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-04-17T08:26:26.864Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 16
-  completed_plans: 14
-  percent: 88
+  completed_plans: 16
+  percent: 100
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 04 (commerce-fixture-domain) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-04-17
 
@@ -61,6 +61,7 @@ Progress: [███░░░░░░░] 29%
 | Phase 03-local-command-runtime-and-disruptor-execution P01 | 11 min | 3 tasks | 10 files |
 | Phase 04-commerce-fixture-domain P01 | 3min 27s | 2 tasks | 6 files |
 | Phase 04-commerce-fixture-domain P02 | 4min 4s | 2 tasks | 2 files |
+| Phase 04-commerce-fixture-domain P04 | 4min 9s | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ Recent decisions affecting current work:
 - [Phase 04-commerce-fixture-domain]: User registration emits UserRegistered and leaves the lifecycle Inactive until ActivateUser is accepted.
 - [Phase 04-commerce-fixture-domain]: User stream IDs and partition keys use the same user-{UserId} routing key for ordered single-owner execution.
 - [Phase 04-commerce-fixture-domain]: User aggregate remains synchronous and dependency-light, with no storage, async runtime, adapter, or shared mutable state.
+- [Phase 04-commerce-fixture-domain]: Order stores UserId, ProductId, SKU, quantity, and product availability assumptions, not UserState or ProductState objects.
+- [Phase 04-commerce-fixture-domain]: PlaceOrder uses ExpectedRevision::NoStream; confirm, reject, and cancel use ExpectedRevision::Any.
+- [Phase 04-commerce-fixture-domain]: Generated Phase 04 tests use plain proptest command sequences rather than adding proptest-state-machine.
 
 ### Pending Todos
 
@@ -113,6 +117,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-17T08:18:13.013Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-04-17T08:26:26.860Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None
