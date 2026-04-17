@@ -17,13 +17,13 @@ Provide a reusable, production-shaped Rust service template where committed even
 - [x] Phase 01 validated a Rust 2024 workspace with typed core metadata, synchronous aggregate kernel contracts, visible service boundary crates, an example commerce aggregate, and dependency-boundary tests for deterministic lower-level crates.
 - [x] Phase 02 validated PostgreSQL as the durable event-store source of truth with stream optimistic concurrency, full event metadata, tenant-scoped command dedupe, snapshot rehydration inputs, and global-position reads.
 - [x] Phase 03 validated a bounded local command runtime with tenant-aware partition routing, shard-local aggregate and dedupe caches, nonblocking disruptor handoff, and commit-gated replies wired through `CommandEngine`.
+- [x] Phase 04 validated the commerce fixture domain with typed user, product, and order aggregates, replayable lifecycle/inventory/order events, explicit cross-entity IDs, typed invalid-state errors, and generated replay/invariant tests.
 
 ### Active
 
 - [ ] Implement a generic command-processing kernel that supports typed aggregates, commands, events, replies, and domain errors.
 - [ ] Provide CQRS projection primitives with checkpointed projector offsets and rebuild/catch-up support.
 - [ ] Provide outbox-based integration events so external publication is decoupled from the hot command path.
-- [ ] Include at least two related domain entities, with user, product, and order as the preferred initial example.
 - [ ] Demonstrate domain workflows that cross entity boundaries without distributed transactions.
 - [ ] Expose a thin adapter boundary suitable for HTTP/gRPC/WebSocket frontends without putting shared mutable business state behind `Arc<Mutex<_>>`.
 - [ ] Include stress-test and observability hooks that measure ring wait, routing latency, decision time, append latency, projection lag, outbox lag, and p95/p99 latency.
@@ -80,7 +80,7 @@ This gives enough relationships to test uniqueness, entity references, projectio
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Use commerce/order as the initial example domain | It provides multiple related entities and realistic workflows without the complexity of a matching engine. | - Pending |
+| Use commerce/order as the initial example domain | It provides multiple related entities and realistic workflows without the complexity of a matching engine. | Validated in Phase 04 with user, product, and order aggregates plus generated replay/invariant tests. |
 | Keep `disruptor-rs` inside the command service process | The library is for in-process sequencing and fan-out, not cross-service communication. | Validated in Phase 03 with shard-local disruptor handoff and no durability coupling. |
 | Treat event store append commit as command success | Durability must not depend on ring publication or projection completion. | Validated in Phase 02 with PostgreSQL append/OCC/dedupe transactions. |
 | Use typed domain kernels instead of JSON/reflection in the hot path | Preserves Rust type safety and avoids erasing the performance benefits of preallocated ring entries. | - Pending |
@@ -105,4 +105,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-17 after Phase 03 completion*
+*Last updated: 2026-04-17 after Phase 04 completion*
