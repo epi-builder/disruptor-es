@@ -2,10 +2,12 @@
 
 mod command;
 mod error;
+mod router;
 mod store;
 
 pub use command::{CommandEnvelope, CommandOutcome, CommandReply, RuntimeEventCodec};
 pub use error::{RuntimeError, RuntimeResult};
+pub use router::{PartitionRouter, ROUTING_HASH_SEED, ShardId};
 pub use store::{PostgresRuntimeEventStore, RuntimeEventStore};
 
 /// Phase ownership marker for the runtime crate.

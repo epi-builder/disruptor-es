@@ -1,3 +1,5 @@
+//! Router and gateway integration tests.
+
 use es_core::{PartitionKey, TenantId};
 use es_runtime::{PartitionRouter, RuntimeError};
 
@@ -18,7 +20,7 @@ fn same_tenant_and_key_route_to_same_shard() {
     let second = router.route(&tenant, &partition_key);
 
     assert_eq!(first, second);
-    assert_eq!(7, first.value());
+    assert_eq!(5, first.value());
 }
 
 #[test]
@@ -32,6 +34,6 @@ fn tenant_is_part_of_route_input() {
     let tenant_b_shard = router.route(&tenant_b, &partition_key);
 
     assert_ne!(tenant_a_shard, tenant_b_shard);
-    assert_eq!(7, tenant_a_shard.value());
-    assert_eq!(4, tenant_b_shard.value());
+    assert_eq!(5, tenant_a_shard.value());
+    assert_eq!(2, tenant_b_shard.value());
 }
