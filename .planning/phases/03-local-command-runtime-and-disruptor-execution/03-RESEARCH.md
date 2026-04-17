@@ -375,22 +375,19 @@ fn same_partition_key_routes_to_same_shard() {
 | A2 | Route drift after shard-count changes needs a migration policy beyond Phase 3. | Common Pitfalls | Planner may need to add documentation/tests limiting shard-count changes in v1. |
 | A3 | Best async bridge is likely disruptor handoff plus Tokio-owned async append or Event Poller API spike. | Common Pitfalls | Implementation may discover managed-thread stateful closures are awkward for async storage and require a narrower disruptor integration wrapper. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should Phase 3 use `PostgresEventStore` concrete type or introduce a runtime storage trait?**
    - What we know: `PostgresEventStore` exposes the needed async append and rehydration methods. [VERIFIED: crates/es-store-postgres/src/event_store.rs]
-   - What's unclear: Generic runtime tests are easier with a trait, but async traits add either boxed futures or an additional crate. [ASSUMED]
-   - Recommendation: Define a small project-owned `RuntimeEventStore` trait returning `BoxFuture` only if tests need fake stores; otherwise start concrete and add the trait when the second implementation appears. [ASSUMED]
+   - RESOLVED: Phase 3 will define a small project-owned `RuntimeEventStore` trait returning `BoxFuture` and a `PostgresRuntimeEventStore` adapter over `PostgresEventStore`. This is required now because the runtime commit, conflict, duplicate, and rehydration paths need deterministic fake-store tests without coupling every runtime test to PostgreSQL. The trait remains narrow: `append` and `load_rehydration` only; transaction/dedupe/OCC behavior stays in storage. [VERIFIED: 03-01-PLAN.md]
 
 2. **Should shard cache use `HashMap` or `moka` in Phase 3?**
    - What we know: RUNTIME-03 requires shard-local ownership, not a specific eviction policy. [VERIFIED: .planning/REQUIREMENTS.md]
-   - What's unclear: The phase has no cache-size/TTL requirement. [VERIFIED: .planning/REQUIREMENTS.md]
-   - Recommendation: Use shard-local `HashMap` first; add `moka` only when bounded eviction behavior is explicitly tested. [ASSUMED]
+   - RESOLVED: Phase 3 will use shard-owned `HashMap` caches for both aggregate state and command dedupe summaries inside `ShardState`. `moka` is not added because no phase requirement specifies TTL, max capacity, or eviction semantics. Runtime dedupe cache is an optimization/observation cache only; PostgreSQL command dedupe remains authoritative for duplicate command success. [VERIFIED: RUNTIME-03 in .planning/REQUIREMENTS.md] [VERIFIED: 03-03-PLAN.md]
 
 3. **How exactly should async append run after disruptor sequencing?**
    - What we know: `disruptor` processors are sync closures; storage append is async. [CITED: https://docs.rs/disruptor/4.0.0/disruptor/] [VERIFIED: crates/es-store-postgres/src/event_store.rs]
-   - What's unclear: The cleanest bridge may be managed processor state, Event Poller API, or a shard-owned Tokio task with a synchronous handoff. [ASSUMED]
-   - Recommendation: Planner should schedule an early spike/test plan proving the chosen bridge compiles and preserves ordering before implementing full command handling. [ASSUMED]
+   - RESOLVED: The critical path is `CommandGateway::try_submit` -> routed receiver/shard pump -> `DisruptorPath::try_publish` -> `ShardState::record_handoff` -> async shard owner loop calling `process_next_handoff`. The synchronous disruptor handler records ordered handoff only; it must not call `append`, `block_on`, create a nested Tokio runtime, or treat the disruptor sequence as durable position. Async append runs after handoff in the shard-owned Tokio processing path. [VERIFIED: 03-03-PLAN.md] [VERIFIED: 03-04-PLAN.md]
 
 ## Environment Availability
 

@@ -39,9 +39,9 @@ created: 2026-04-17
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 03-01-01 | 01 | 1 | RUNTIME-01, RUNTIME-02 | T-03-01 / T-03-02 | Bounded ingress rejects full capacity explicitly and routes tenant-scoped keys deterministically | unit | `cargo test -p es-runtime gateway router` | W0 | pending |
-| 03-02-01 | 02 | 1 | RUNTIME-03, RUNTIME-04 | T-03-02 / T-03-03 | Shard-local state stays single-owner and disruptor publication returns typed overload instead of spinning through hidden backpressure | unit | `cargo test -p es-runtime shard disruptor_path` | W0 | pending |
-| 03-03-01 | 03 | 2 | RUNTIME-05, RUNTIME-06 | T-03-04 / T-03-05 | Replies are emitted only after durable append and OCC conflicts never mutate shard cache | unit/integration | `cargo test -p es-runtime commit_path conflict_path` | W0 | pending |
-| 03-04-01 | 04 | 2 | RUNTIME-01, RUNTIME-05, RUNTIME-06 | T-03-01 / T-03-04 / T-03-05 | End-to-end runtime path maps overload/conflict/store failures to typed outcomes while preserving durable source-of-truth semantics | integration | `cargo test -p es-runtime runtime_flow -- --nocapture` and `cargo test --workspace` | W0 | pending |
+| 03-02-01 | 02 | 1 | RUNTIME-03, RUNTIME-04 | T-03-02 / T-03-03 | Shard-local aggregate and dedupe caches stay single-owner; accepted routed commands pass through `DisruptorPath::try_publish` before shard handoff; disruptor publication returns typed overload instead of spinning through hidden backpressure | unit | `cargo test -p es-runtime shard_cache && cargo test -p es-runtime disruptor_path && cargo test -p es-runtime shard_handle` | W0 | pending |
+| 03-03-01 | 03 | 2 | RUNTIME-05, RUNTIME-06 | T-03-04 / T-03-05 | Cache misses rehydrate from durable storage before decide; replies are emitted only after durable append; OCC conflicts never mutate shard cache with newly decided events | unit/integration | `cargo test -p es-runtime cache_miss_rehydrates_before_decide && cargo test -p es-runtime reply_after_commit && cargo test -p es-runtime conflict_does_not_mutate_cache` | W0 | pending |
+| 03-04-01 | 04 | 2 | RUNTIME-01, RUNTIME-05, RUNTIME-06 | T-03-01 / T-03-04 / T-03-05 | End-to-end runtime path maps overload/conflict/store failures to typed outcomes while preserving durable source-of-truth semantics and committed cache advancement when reply receivers are dropped | integration | `cargo test -p es-runtime runtime_flow -- --nocapture` and `cargo test --workspace` | W0 | pending |
 
 *Status: pending, green, red, flaky*
 
@@ -52,7 +52,7 @@ created: 2026-04-17
 - [ ] `crates/es-runtime/src/error.rs` — typed runtime errors for overload, unavailable, conflict, and store failures
 - [ ] `crates/es-runtime/src/router.rs` — stable tenant-aware routing plus golden tests
 - [ ] `crates/es-runtime/src/gateway.rs` — bounded ingress and reply channel behavior tests
-- [ ] `crates/es-runtime/src/shard.rs` — shard-local cache ownership and command processor tests
+- [ ] `crates/es-runtime/src/shard.rs` — shard-local aggregate cache ownership, dedupe cache ownership, disruptor-backed shard handle, rehydration-before-decide, and command processor tests
 - [ ] `crates/es-runtime/src/disruptor_path.rs` — `try_publish` wrapper and full-ring behavior tests
 - [ ] `crates/es-runtime/tests/` or equivalent module tests — reply-after-commit, conflict-without-cache-mutation, and runtime flow coverage
 
