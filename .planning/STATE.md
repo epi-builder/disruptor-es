@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-04-17T01:00:30.743Z"
-last_activity: 2026-04-17 -- Phase 03 planning complete
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-04-17T04:43:33.276Z"
+last_activity: 2026-04-17
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
-  completed_plans: 8
-  percent: 67
+  completed_plans: 12
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Provide a reusable, production-shaped Rust service template where committed events are the source of truth and `disruptor-rs` is used only as the in-process ordered execution engine.
-**Current focus:** Phase 3: Local Command Runtime and Disruptor Execution
+**Current focus:** Phase 03 — local-command-runtime-and-disruptor-execution
 
 ## Current Position
 
-Phase: 3
+Phase: 4
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-04-17 -- Phase 03 planning complete
+Last activity: 2026-04-17
 
 Progress: [███░░░░░░░] 29%
 
@@ -36,7 +36,7 @@ Progress: [███░░░░░░░] 29%
 
 **Velocity:**
 
-- Total plans completed: 8
+- Total plans completed: 12
 - Average duration: N/A
 - Total execution time: 0.0 hours
 
@@ -46,6 +46,7 @@ Progress: [███░░░░░░░] 29%
 |-------|-------|-------|----------|
 | 01 | 4 | - | - |
 | 02 | 4 | - | - |
+| 03 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -57,6 +58,7 @@ Progress: [███░░░░░░░] 29%
 | Phase 02-durable-event-store-source-of-truth P02 | 264 | 3 tasks | 5 files |
 | Phase 02-durable-event-store-source-of-truth P03 | 415 | 2 tasks | 6 files |
 | Phase 02-durable-event-store-source-of-truth P04 | 405 | 2 tasks | 8 files |
+| Phase 03-local-command-runtime-and-disruptor-execution P01 | 11 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -81,6 +83,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Represent snapshot records with state_payload and metadata to match the PostgreSQL snapshots table and plan contract.
 - [Phase 02]: Keep rehydration in storage as latest snapshot plus ordered StoredEvent rows; aggregate replay remains kernel/runtime responsibility.
 - [Phase 02]: Validate negative global cursors and read limits before SQL execution instead of casting them into unsigned values.
+- [Phase 03]: Expose runtime errors as typed variants for overload, unavailable, invalid capacity, conflicts, domain, codec, and store failures.
+- [Phase 03]: Keep CommandOutcome tied to CommittedAppend so successful replies carry durable event-store positions instead of disruptor sequence state.
+- [Phase 03]: Use a boxed-future RuntimeEventStore trait to test runtime behavior without PostgreSQL while preserving the Phase 2 PostgresEventStore boundary.
 
 ### Pending Todos
 
@@ -100,6 +105,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-16T23:10:44.711Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-04-17T04:03:18.188Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None

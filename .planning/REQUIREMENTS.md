@@ -24,12 +24,12 @@ Requirements for the initial template release. Each maps to roadmap phases.
 
 ### Command Runtime
 
-- [ ] **RUNTIME-01**: Adapter requests enter the command engine through bounded ingress with explicit overload behavior.
-- [ ] **RUNTIME-02**: Partition routing sends all commands for the same aggregate key to the same local shard owner.
-- [ ] **RUNTIME-03**: Shard runtime owns processor-local aggregate cache and dedupe cache without global mutable business-state locks.
-- [ ] **RUNTIME-04**: Shard runtime integrates the `disruptor` crate as the local command execution/fan-out mechanism.
-- [ ] **RUNTIME-05**: Command replies are sent only after durable event-store append commit succeeds.
-- [ ] **RUNTIME-06**: Optimistic concurrency conflicts are surfaced as typed retryable or conflict errors without corrupting shard-local cache.
+- [x] **RUNTIME-01**: Adapter requests enter the command engine through bounded ingress with explicit overload behavior.
+- [x] **RUNTIME-02**: Partition routing sends all commands for the same aggregate key to the same local shard owner.
+- [x] **RUNTIME-03**: Shard runtime owns processor-local aggregate cache and dedupe cache without global mutable business-state locks.
+- [x] **RUNTIME-04**: Shard runtime integrates the `disruptor` crate as the local command execution/fan-out mechanism.
+- [x] **RUNTIME-05**: Command replies are sent only after durable event-store append commit succeeds.
+- [x] **RUNTIME-06**: Optimistic concurrency conflicts are surfaced as typed retryable or conflict errors without corrupting shard-local cache.
 
 ### Example Domain
 
@@ -121,12 +121,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STORE-03 | Phase 2 | Complete |
 | STORE-04 | Phase 2 | Complete |
 | STORE-05 | Phase 2 | Complete |
-| RUNTIME-01 | Phase 3 | Pending |
-| RUNTIME-02 | Phase 3 | Pending |
-| RUNTIME-03 | Phase 3 | Pending |
-| RUNTIME-04 | Phase 3 | Pending |
-| RUNTIME-05 | Phase 3 | Pending |
-| RUNTIME-06 | Phase 3 | Pending |
+| RUNTIME-01 | Phase 3 | Complete |
+| RUNTIME-02 | Phase 3 | Complete |
+| RUNTIME-03 | Phase 3 | Complete |
+| RUNTIME-04 | Phase 3 | Complete |
+| RUNTIME-05 | Phase 3 | Complete |
+| RUNTIME-06 | Phase 3 | Complete |
 | DOM-01 | Phase 4 | Pending |
 | DOM-02 | Phase 4 | Pending |
 | DOM-03 | Phase 4 | Pending |

@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Workspace and Typed Kernel Contracts** - Developers can build the Rust workspace and define deterministic typed aggregate contracts. Completed 2026-04-16.
 - [x] **Phase 2: Durable Event Store Source of Truth** - Commands can persist committed events, metadata, dedupe records, snapshots, and global reads through the event store boundary. Completed 2026-04-17.
-- [ ] **Phase 3: Local Command Runtime and Disruptor Execution** - Adapter requests flow through bounded local shards that own hot state and reply only after durable append.
+- [x] **Phase 3: Local Command Runtime and Disruptor Execution** - Adapter requests flow through bounded local shards that own hot state and reply only after durable append. Completed 2026-04-17.
 - [ ] **Phase 4: Commerce Fixture Domain** - User, product, and order behavior proves typed decisions, replay, relationships, and invariants.
 - [ ] **Phase 5: CQRS Projection and Query Catch-Up** - Committed events feed checkpointed read models with restart and read-your-own-write support.
 - [ ] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions.
@@ -67,10 +67,10 @@ Plans:
   5. Command replies are sent only after durable event-store append succeeds, and optimistic concurrency failures surface as typed conflict or retryable errors.
 **Plans**: 4 plans
 Plans:
-- [ ] 03-01-PLAN.md — Create runtime dependencies, typed command/error/store contracts, and fake-store test support.
-- [ ] 03-02-PLAN.md — Implement bounded gateway ingress and stable tenant-aware partition routing.
-- [ ] 03-03-PLAN.md — Prove shard-local cache ownership and compile the disruptor non-blocking handoff path.
-- [ ] 03-04-PLAN.md — Wire commit-gated command processing, conflict-safe cache behavior, and runtime flow validation.
+- [x] 03-01-PLAN.md — Create runtime dependencies, typed command/error/store contracts, and fake-store test support.
+- [x] 03-02-PLAN.md — Implement bounded gateway ingress and stable tenant-aware partition routing.
+- [x] 03-03-PLAN.md — Prove shard-local cache ownership and compile the disruptor non-blocking handoff path.
+- [x] 03-04-PLAN.md — Wire commit-gated command processing, conflict-safe cache behavior, and runtime flow validation.
 
 ### Phase 4: Commerce Fixture Domain
 **Goal**: The template includes a compact but realistic typed commerce fixture that proves related aggregates, cross-entity references, replayable events, and invalid-state prevention.
@@ -128,7 +128,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Workspace and Typed Kernel Contracts | 4/4 | Complete | 2026-04-16 |
 | 2. Durable Event Store Source of Truth | 4/4 | Complete | 2026-04-17 |
-| 3. Local Command Runtime and Disruptor Execution | 0/TBD | Not started | - |
+| 3. Local Command Runtime and Disruptor Execution | 4/4 | Complete | 2026-04-17 |
 | 4. Commerce Fixture Domain | 0/TBD | Not started | - |
 | 5. CQRS Projection and Query Catch-Up | 0/TBD | Not started | - |
 | 6. Outbox and Process Manager Workflows | 0/TBD | Not started | - |
