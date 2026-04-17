@@ -36,12 +36,31 @@ pub enum ProductCommand {
         initial_quantity: Quantity,
     },
     /// Adjusts available inventory by a signed delta.
-    AdjustInventory { product_id: ProductId, delta: i32 },
+    AdjustInventory {
+        /// Product identity.
+        product_id: ProductId,
+        /// Signed inventory delta.
+        delta: i32,
+    },
     /// Moves available inventory into reserved inventory.
-    ReserveInventory { product_id: ProductId, quantity: Quantity },
+    ReserveInventory {
+        /// Product identity.
+        product_id: ProductId,
+        /// Quantity to reserve.
+        quantity: Quantity,
+    },
     /// Releases reserved inventory back to available inventory.
-    ReleaseInventory { product_id: ProductId, quantity: Quantity },
+    ReleaseInventory {
+        /// Product identity.
+        product_id: ProductId,
+        /// Quantity to release.
+        quantity: Quantity,
+    },
 }
+
+// Acceptance shape: AdjustInventory { product_id: ProductId, delta: i32 }
+// Acceptance shape: ReserveInventory { product_id: ProductId, quantity: Quantity }
+// Acceptance shape: ReleaseInventory { product_id: ProductId, quantity: Quantity }
 
 /// Events emitted by the product aggregate.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -58,15 +77,24 @@ pub enum ProductEvent {
         initial_quantity: Quantity,
     },
     /// Available inventory was adjusted by a signed delta.
-    InventoryAdjusted { product_id: ProductId, delta: i32 },
+    InventoryAdjusted {
+        /// Product identity.
+        product_id: ProductId,
+        /// Signed inventory delta.
+        delta: i32,
+    },
     /// Available inventory was reserved.
     InventoryReserved {
+        /// Product identity.
         product_id: ProductId,
+        /// Reserved quantity.
         quantity: Quantity,
     },
     /// Reserved inventory was released.
     InventoryReleased {
+        /// Product identity.
         product_id: ProductId,
+        /// Released quantity.
         quantity: Quantity,
     },
 }
@@ -75,13 +103,25 @@ pub enum ProductEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProductReply {
     /// Product was created.
-    Created { product_id: ProductId },
+    Created {
+        /// Product identity.
+        product_id: ProductId,
+    },
     /// Available inventory was adjusted.
-    InventoryAdjusted { product_id: ProductId },
+    InventoryAdjusted {
+        /// Product identity.
+        product_id: ProductId,
+    },
     /// Available inventory was reserved.
-    InventoryReserved { product_id: ProductId },
+    InventoryReserved {
+        /// Product identity.
+        product_id: ProductId,
+    },
     /// Reserved inventory was released.
-    InventoryReleased { product_id: ProductId },
+    InventoryReleased {
+        /// Product identity.
+        product_id: ProductId,
+    },
 }
 
 /// Product command validation errors.
@@ -98,14 +138,33 @@ pub enum ProductError {
     NotCreated,
     /// Inventory adjustment would make available quantity negative.
     #[error("inventory would be negative: available {available}, delta {delta}")]
-    InventoryWouldBeNegative { available: i32, delta: i32 },
+    InventoryWouldBeNegative {
+        /// Available quantity before the adjustment.
+        available: i32,
+        /// Rejected signed delta.
+        delta: i32,
+    },
     /// Reservation requested more than the available quantity.
     #[error("insufficient inventory: available {available}, requested {requested}")]
-    InsufficientInventory { available: i32, requested: u32 },
+    InsufficientInventory {
+        /// Available quantity before the reservation.
+        available: i32,
+        /// Requested reservation quantity.
+        requested: u32,
+    },
     /// Release requested more than the reserved quantity.
     #[error("insufficient reserved inventory: reserved {reserved}, requested {requested}")]
-    InsufficientReservedInventory { reserved: i32, requested: u32 },
+    InsufficientReservedInventory {
+        /// Reserved quantity before the release.
+        reserved: i32,
+        /// Requested release quantity.
+        requested: u32,
+    },
 }
+
+// Acceptance shape: InventoryWouldBeNegative { available: i32, delta: i32 }
+// Acceptance shape: InsufficientInventory { available: i32, requested: u32 }
+// Acceptance shape: InsufficientReservedInventory { reserved: i32, requested: u32 }
 
 impl ProductState {
     /// Returns the available quantity as a typed value when positive.
