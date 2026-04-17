@@ -1,5 +1,9 @@
 //! Minimal commerce aggregate fixture for the typed event-sourcing kernel.
 
+mod ids;
+
+pub use ids::{OrderId, ProductId, Quantity, Sku, UserId};
+
 use es_core::{CommandMetadata, ExpectedRevision, PartitionKey, StreamId};
 use es_kernel::{Aggregate, Decision};
 
