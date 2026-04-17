@@ -1,6 +1,8 @@
 use es_core::{ExpectedRevision, StreamId, StreamRevision};
 use es_kernel::{Aggregate, Decision};
-use es_runtime::{AggregateCache, DedupeCache, DedupeKey, DedupeRecord};
+use es_runtime::{
+    AggregateCache, DedupeCache, DedupeKey, DedupeRecord, DisruptorPath, RuntimeError, ShardId,
+};
 use es_store_postgres::CommittedAppend;
 use uuid::Uuid;
 
@@ -126,4 +128,41 @@ fn shard_dedupe_cache_records_tenant_scoped_committed_append() {
             idempotency_key: "idem-1".to_owned(),
         })
     );
+}
+
+#[test]
+fn disruptor_path_rejects_zero_ring_size() {
+    let error =
+        DisruptorPath::new(ShardId::new(3), 0, || 0_u64).expect_err("zero ring size rejected");
+
+    assert!(matches!(error, RuntimeError::InvalidRingSize));
+}
+
+#[test]
+fn disruptor_path_returns_shard_overloaded_when_ring_is_full() {
+    let mut path = DisruptorPath::new(ShardId::new(7), 1, || 0_u64).expect("disruptor path");
+
+    path.try_publish(10).expect("first publish");
+    let error = path.try_publish(11).expect_err("second publish overloads");
+
+    assert!(matches!(
+        error,
+        RuntimeError::ShardOverloaded { shard_id: 7 }
+    ));
+}
+
+#[test]
+fn disruptor_path_releases_published_tokens_through_consumer_path() {
+    let mut path = DisruptorPath::new(ShardId::new(1), 2, || 0_u64).expect("disruptor path");
+
+    let sequence = path.try_publish(42).expect("publish");
+
+    assert_eq!(
+        vec![es_runtime::ReleasedHandoff {
+            sequence,
+            event: 42
+        }],
+        path.poll_released()
+    );
+    assert!(path.poll_released().is_empty());
 }
