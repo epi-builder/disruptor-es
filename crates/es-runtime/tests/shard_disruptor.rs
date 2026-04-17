@@ -208,8 +208,14 @@ fn shard_state_records_ordered_handoffs() {
 
     assert_eq!(1, state.shard_id().value());
 
-    state.record_released_handoff(2, routed_command(ShardId::new(1), "tenant-a", "counter-2", "b", 2).envelope);
-    state.record_released_handoff(1, routed_command(ShardId::new(1), "tenant-a", "counter-1", "a", 1).envelope);
+    state.record_released_handoff(
+        2,
+        routed_command(ShardId::new(1), "tenant-a", "counter-2", "b", 2).envelope,
+    );
+    state.record_released_handoff(
+        1,
+        routed_command(ShardId::new(1), "tenant-a", "counter-1", "a", 1).envelope,
+    );
 
     assert_eq!(2, state.pending_handoffs());
     assert_eq!(1, state.pop_handoff().expect("first handoff").sequence);
