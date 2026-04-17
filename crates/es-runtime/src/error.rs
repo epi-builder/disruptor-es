@@ -26,7 +26,11 @@ pub enum RuntimeError {
     /// Storage reported an optimistic-concurrency conflict.
     #[error("stream conflict for {stream_id}: expected {expected}, actual {actual:?}")]
     #[allow(missing_docs)]
-    Conflict { stream_id: String, expected: String, actual: Option<u64> },
+    Conflict {
+        stream_id: String,
+        expected: String,
+        actual: Option<u64>,
+    },
     /// Aggregate decision rejected the command.
     #[error("domain error: {message}")]
     Domain {
@@ -70,8 +74,14 @@ mod tests {
 
     #[test]
     fn runtime_error_formats_typed_capacity_errors() {
-        assert_eq!("runtime is overloaded", RuntimeError::Overloaded.to_string());
-        assert_eq!("runtime is unavailable", RuntimeError::Unavailable.to_string());
+        assert_eq!(
+            "runtime is overloaded",
+            RuntimeError::Overloaded.to_string()
+        );
+        assert_eq!(
+            "runtime is unavailable",
+            RuntimeError::Unavailable.to_string()
+        );
         assert_eq!(
             "shard 2 is overloaded",
             RuntimeError::ShardOverloaded { shard_id: 2 }.to_string()

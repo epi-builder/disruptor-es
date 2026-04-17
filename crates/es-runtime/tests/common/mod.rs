@@ -75,14 +75,12 @@ impl RuntimeEventStore for FakeRuntimeEventStore {
 
         let result = match &self.response {
             FakeResponse::Outcome(outcome) => Ok(outcome.clone()),
-            FakeResponse::Error(error) => Err(error
-                .lock()
-                .expect("store error")
-                .take()
-                .unwrap_or(es_store_postgres::StoreError::DedupeConflict {
+            FakeResponse::Error(error) => Err(error.lock().expect("store error").take().unwrap_or(
+                es_store_postgres::StoreError::DedupeConflict {
                     tenant_id: "fake".to_owned(),
                     idempotency_key: "already-consumed".to_owned(),
-                })),
+                },
+            )),
         };
 
         Box::pin(async move { result })
@@ -98,14 +96,12 @@ impl RuntimeEventStore for FakeRuntimeEventStore {
                 snapshot: None,
                 events: Vec::new(),
             }),
-            FakeResponse::Error(error) => Err(error
-                .lock()
-                .expect("store error")
-                .take()
-                .unwrap_or(es_store_postgres::StoreError::DedupeConflict {
+            FakeResponse::Error(error) => Err(error.lock().expect("store error").take().unwrap_or(
+                es_store_postgres::StoreError::DedupeConflict {
                     tenant_id: "fake".to_owned(),
                     idempotency_key: "already-consumed".to_owned(),
-                })),
+                },
+            )),
         };
 
         Box::pin(async move { result })

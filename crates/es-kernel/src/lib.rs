@@ -104,9 +104,10 @@ mod aggregate_kernel_contracts {
             _metadata: &es_core::CommandMetadata,
         ) -> Result<Decision<Self::Event, Self::Reply>, Self::Error> {
             match command {
-                CounterCommand::Add(amount) => {
-                    Ok(Decision::new(vec![CounterEvent::Added(amount)], state.value + amount))
-                }
+                CounterCommand::Add(amount) => Ok(Decision::new(
+                    vec![CounterEvent::Added(amount)],
+                    state.value + amount,
+                )),
             }
         }
 
@@ -124,7 +125,10 @@ mod aggregate_kernel_contracts {
         let command = CounterCommand::Add(3);
 
         assert_eq!("counter-1", CounterAggregate::stream_id(&command).as_str());
-        assert_eq!("counter-1", CounterAggregate::partition_key(&command).as_str());
+        assert_eq!(
+            "counter-1",
+            CounterAggregate::partition_key(&command).as_str()
+        );
         assert_eq!(
             es_core::ExpectedRevision::Any,
             CounterAggregate::expected_revision(&command)
