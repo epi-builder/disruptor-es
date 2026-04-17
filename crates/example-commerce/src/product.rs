@@ -1,4 +1,6 @@
 use crate::{ProductId, Quantity, Sku};
+use es_core::{CommandMetadata, ExpectedRevision, PartitionKey, StreamId};
+use es_kernel::{Aggregate, Decision};
 
 /// Product aggregate marker.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -11,31 +13,276 @@ pub struct ProductState {
     pub product_id: Option<ProductId>,
     /// Product stock-keeping unit, if any.
     pub sku: Option<Sku>,
-    /// Available quantity tracked by later aggregate behavior.
-    pub available_quantity: u32,
+    /// Product display name, if any.
+    pub name: Option<String>,
+    /// Available inventory quantity.
+    pub available_quantity: i32,
+    /// Reserved inventory quantity.
+    pub reserved_quantity: i32,
 }
 
 /// Commands accepted by the product aggregate.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ProductCommand {}
+pub enum ProductCommand {
+    /// Creates a product with initial inventory.
+    CreateProduct {
+        /// Product identity.
+        product_id: ProductId,
+        /// Product stock-keeping unit.
+        sku: Sku,
+        /// Product display name.
+        name: String,
+        /// Initial available inventory.
+        initial_quantity: Quantity,
+    },
+    /// Adjusts available inventory by a signed delta.
+    AdjustInventory { product_id: ProductId, delta: i32 },
+    /// Moves available inventory into reserved inventory.
+    ReserveInventory { product_id: ProductId, quantity: Quantity },
+    /// Releases reserved inventory back to available inventory.
+    ReleaseInventory { product_id: ProductId, quantity: Quantity },
+}
 
 /// Events emitted by the product aggregate.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ProductEvent {}
+pub enum ProductEvent {
+    /// Product was created with initial inventory.
+    ProductCreated {
+        /// Product identity.
+        product_id: ProductId,
+        /// Product stock-keeping unit.
+        sku: Sku,
+        /// Product display name.
+        name: String,
+        /// Initial available inventory.
+        initial_quantity: Quantity,
+    },
+    /// Available inventory was adjusted by a signed delta.
+    InventoryAdjusted { product_id: ProductId, delta: i32 },
+    /// Available inventory was reserved.
+    InventoryReserved {
+        product_id: ProductId,
+        quantity: Quantity,
+    },
+    /// Reserved inventory was released.
+    InventoryReleased {
+        product_id: ProductId,
+        quantity: Quantity,
+    },
+}
 
 /// Replies returned by product commands.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ProductReply {}
+pub enum ProductReply {
+    /// Product was created.
+    Created { product_id: ProductId },
+    /// Available inventory was adjusted.
+    InventoryAdjusted { product_id: ProductId },
+    /// Available inventory was reserved.
+    InventoryReserved { product_id: ProductId },
+    /// Reserved inventory was released.
+    InventoryReleased { product_id: ProductId },
+}
 
 /// Product command validation errors.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ProductError {}
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ProductError {
+    /// Product name must not be empty.
+    #[error("product name cannot be empty")]
+    EmptyName,
+    /// Product has already been created.
+    #[error("product already exists")]
+    AlreadyCreated,
+    /// Product must be created before inventory commands are accepted.
+    #[error("product has not been created")]
+    NotCreated,
+    /// Inventory adjustment would make available quantity negative.
+    #[error("inventory would be negative: available {available}, delta {delta}")]
+    InventoryWouldBeNegative { available: i32, delta: i32 },
+    /// Reservation requested more than the available quantity.
+    #[error("insufficient inventory: available {available}, requested {requested}")]
+    InsufficientInventory { available: i32, requested: u32 },
+    /// Release requested more than the reserved quantity.
+    #[error("insufficient reserved inventory: reserved {reserved}, requested {requested}")]
+    InsufficientReservedInventory { reserved: i32, requested: u32 },
+}
 
 impl ProductState {
     /// Returns the available quantity as a typed value when positive.
     pub fn quantity(&self) -> Option<Quantity> {
-        Quantity::new(self.available_quantity).ok()
+        let quantity = u32::try_from(self.available_quantity).ok()?;
+        Quantity::new(quantity).ok()
     }
+}
+
+impl Aggregate for Product {
+    type State = ProductState;
+    type Command = ProductCommand;
+    type Event = ProductEvent;
+    type Reply = ProductReply;
+    type Error = ProductError;
+
+    fn stream_id(command: &Self::Command) -> StreamId {
+        StreamId::new(format!("product-{}", command.product_id().as_str()))
+            .expect("product id creates a valid stream id")
+    }
+
+    fn partition_key(command: &Self::Command) -> PartitionKey {
+        PartitionKey::new(format!("product-{}", command.product_id().as_str()))
+            .expect("product id creates a valid partition key")
+    }
+
+    fn expected_revision(command: &Self::Command) -> ExpectedRevision {
+        match command {
+            ProductCommand::CreateProduct { .. } => ExpectedRevision::NoStream,
+            ProductCommand::AdjustInventory { .. }
+            | ProductCommand::ReserveInventory { .. }
+            | ProductCommand::ReleaseInventory { .. } => ExpectedRevision::Any,
+        }
+    }
+
+    fn decide(
+        state: &Self::State,
+        command: Self::Command,
+        _metadata: &CommandMetadata,
+    ) -> Result<Decision<Self::Event, Self::Reply>, Self::Error> {
+        match command {
+            ProductCommand::CreateProduct {
+                product_id,
+                sku,
+                name,
+                initial_quantity,
+            } => {
+                if state.product_id.is_some() {
+                    return Err(ProductError::AlreadyCreated);
+                }
+                if name.is_empty() {
+                    return Err(ProductError::EmptyName);
+                }
+
+                Ok(Decision::new(
+                    vec![ProductEvent::ProductCreated {
+                        product_id: product_id.clone(),
+                        sku,
+                        name,
+                        initial_quantity,
+                    }],
+                    ProductReply::Created { product_id },
+                ))
+            }
+            ProductCommand::AdjustInventory { product_id, delta } => {
+                ensure_created(state)?;
+                let adjusted = state.available_quantity.checked_add(delta).ok_or(
+                    ProductError::InventoryWouldBeNegative {
+                        available: state.available_quantity,
+                        delta,
+                    },
+                )?;
+                if adjusted < 0 {
+                    return Err(ProductError::InventoryWouldBeNegative {
+                        available: state.available_quantity,
+                        delta,
+                    });
+                }
+
+                Ok(Decision::new(
+                    vec![ProductEvent::InventoryAdjusted {
+                        product_id: product_id.clone(),
+                        delta,
+                    }],
+                    ProductReply::InventoryAdjusted { product_id },
+                ))
+            }
+            ProductCommand::ReserveInventory {
+                product_id,
+                quantity,
+            } => {
+                ensure_created(state)?;
+                let requested = quantity.value();
+                if i64::from(requested) > i64::from(state.available_quantity) {
+                    return Err(ProductError::InsufficientInventory {
+                        available: state.available_quantity,
+                        requested,
+                    });
+                }
+
+                Ok(Decision::new(
+                    vec![ProductEvent::InventoryReserved {
+                        product_id: product_id.clone(),
+                        quantity,
+                    }],
+                    ProductReply::InventoryReserved { product_id },
+                ))
+            }
+            ProductCommand::ReleaseInventory {
+                product_id,
+                quantity,
+            } => {
+                ensure_created(state)?;
+                let requested = quantity.value();
+                if i64::from(requested) > i64::from(state.reserved_quantity) {
+                    return Err(ProductError::InsufficientReservedInventory {
+                        reserved: state.reserved_quantity,
+                        requested,
+                    });
+                }
+
+                Ok(Decision::new(
+                    vec![ProductEvent::InventoryReleased {
+                        product_id: product_id.clone(),
+                        quantity,
+                    }],
+                    ProductReply::InventoryReleased { product_id },
+                ))
+            }
+        }
+    }
+
+    fn apply(state: &mut Self::State, event: &Self::Event) {
+        match event {
+            ProductEvent::ProductCreated {
+                product_id,
+                sku,
+                name,
+                initial_quantity,
+            } => {
+                state.product_id = Some(product_id.clone());
+                state.sku = Some(sku.clone());
+                state.name = Some(name.clone());
+                state.available_quantity = initial_quantity.value() as i32;
+                state.reserved_quantity = 0;
+            }
+            ProductEvent::InventoryAdjusted { delta, .. } => {
+                state.available_quantity += delta;
+            }
+            ProductEvent::InventoryReserved { quantity, .. } => {
+                state.available_quantity -= quantity.value() as i32;
+                state.reserved_quantity += quantity.value() as i32;
+            }
+            ProductEvent::InventoryReleased { quantity, .. } => {
+                state.available_quantity += quantity.value() as i32;
+                state.reserved_quantity -= quantity.value() as i32;
+            }
+        }
+    }
+}
+
+impl ProductCommand {
+    fn product_id(&self) -> &ProductId {
+        match self {
+            ProductCommand::CreateProduct { product_id, .. }
+            | ProductCommand::AdjustInventory { product_id, .. }
+            | ProductCommand::ReserveInventory { product_id, .. }
+            | ProductCommand::ReleaseInventory { product_id, .. } => product_id,
+        }
+    }
+}
+
+fn ensure_created(state: &ProductState) -> Result<(), ProductError> {
+    if state.product_id.is_none() {
+        return Err(ProductError::NotCreated);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
