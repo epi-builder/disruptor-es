@@ -6,6 +6,21 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+disruptor.workspace = true
+es-core = { path = "../es-core" }
+es-kernel = { path = "../es-kernel" }
+es-store-postgres = { path = "../es-store-postgres" }
+futures.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+twox-hash.workspace = true
+
+[dev-dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+time.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true
