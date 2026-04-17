@@ -1,9 +1,9 @@
 ---
 phase: 03
 slug: local-command-runtime-and-disruptor-execution
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-17
 ---
 
@@ -39,9 +39,9 @@ created: 2026-04-17
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 03-01-01 | 01 | 1 | RUNTIME-01, RUNTIME-02, RUNTIME-03, RUNTIME-04, RUNTIME-05, RUNTIME-06 | T-03-01 / T-03-02 / T-03-03 / T-03-04 / T-03-05 | Runtime contracts now have concrete bounded ingress and tenant-aware routing follow-ons verified with `cargo test -p es-runtime partition_router && cargo test -p es-runtime bounded_ingress`; router/gateway behavior lives in `crates/es-runtime/src/router.rs`, `crates/es-runtime/src/gateway.rs`, and `crates/es-runtime/tests/router_gateway.rs` | unit | `cargo test -p es-runtime partition_router && cargo test -p es-runtime bounded_ingress` | `crates/es-runtime/src/router.rs`, `crates/es-runtime/src/gateway.rs`, `crates/es-runtime/tests/router_gateway.rs` | green |
-| 03-02-01 | 02 | 2 | RUNTIME-01, RUNTIME-02 | T-03-06 / T-03-07 / T-03-08 / T-03-09 | Bounded gateway ingress rejects full capacity explicitly, closed ingress returns unavailable, and tenant-scoped partition keys route deterministically to stable local shard owners | unit | `cargo test -p es-runtime partition_router && cargo test -p es-runtime bounded_ingress` | W0 | pending |
-| 03-03-01 | 03 | 3 | RUNTIME-03, RUNTIME-04 | T-03-10 / T-03-11 / T-03-12 / T-03-13 / T-03-14 | Shard-local aggregate and dedupe caches stay single-owner; accepted routed commands pass through `DisruptorPath::try_publish`; the disruptor bridge compiles without `block_on`; processable handoffs are created only after disruptor-released tenant-scoped unique tokens are drained; disruptor publication returns typed overload instead of hidden backpressure | unit | `cargo test -p es-runtime shard_cache && cargo test -p es-runtime disruptor_path && cargo test -p es-runtime shard_handle` | W0 | pending |
-| 03-04-01 | 04 | 4 | RUNTIME-01, RUNTIME-03, RUNTIME-05, RUNTIME-06 | T-03-14 / T-03-15 / T-03-16 / T-03-17 / T-03-18 | Production `CommandEngine` owns gateway receive, shard handoff, disruptor release drain, store append, codec usage, and reply delivery; cache misses rehydrate before decide; replies are emitted only after durable append; OCC conflicts never mutate shard cache with newly decided events | unit/integration | `cargo test -p es-runtime runtime_engine -- --nocapture && cargo test -p es-runtime runtime_flow -- --nocapture && cargo test --workspace` | W0 | pending |
+| 03-02-01 | 02 | 2 | RUNTIME-01, RUNTIME-02 | T-03-06 / T-03-07 / T-03-08 / T-03-09 | Bounded gateway ingress rejects full capacity explicitly, closed ingress returns unavailable, and tenant-scoped partition keys route deterministically to stable local shard owners | unit | `cargo test -p es-runtime partition_router && cargo test -p es-runtime bounded_ingress` | `crates/es-runtime/src/router.rs`, `crates/es-runtime/src/gateway.rs`, `crates/es-runtime/tests/router_gateway.rs` | green |
+| 03-03-01 | 03 | 3 | RUNTIME-03, RUNTIME-04 | T-03-10 / T-03-11 / T-03-12 / T-03-13 / T-03-14 | Shard-local aggregate and dedupe caches stay single-owner; accepted routed commands pass through `DisruptorPath::try_publish`; the disruptor bridge compiles without `block_on`; processable handoffs are created only after disruptor-released tenant-scoped unique tokens are drained; disruptor publication returns typed overload instead of hidden backpressure | unit | `cargo test -p es-runtime shard_cache && cargo test -p es-runtime disruptor_path && cargo test -p es-runtime shard_handle` | `crates/es-runtime/src/cache.rs`, `crates/es-runtime/src/disruptor_path.rs`, `crates/es-runtime/src/shard.rs`, `crates/es-runtime/tests/shard_disruptor.rs` | green |
+| 03-04-01 | 04 | 4 | RUNTIME-01, RUNTIME-03, RUNTIME-05, RUNTIME-06 | T-03-14 / T-03-15 / T-03-16 / T-03-17 / T-03-18 | Production `CommandEngine` owns gateway receive, shard handoff, disruptor release drain, store append, codec usage, and reply delivery; cache misses rehydrate before decide; replies are emitted only after durable append; OCC conflicts never mutate shard cache with newly decided events | unit/integration | `cargo test -p es-runtime runtime_engine -- --nocapture && cargo test -p es-runtime runtime_flow -- --nocapture && cargo test --workspace` | `crates/es-runtime/src/engine.rs`, `crates/es-runtime/src/shard.rs`, `crates/es-runtime/tests/runtime_flow.rs` | green |
 
 *Status: pending, green, red, flaky*
 
@@ -56,7 +56,7 @@ created: 2026-04-17
 - [x] `crates/es-runtime/src/gateway.rs` — bounded ingress and reply channel behavior tests
 - [x] `crates/es-runtime/src/shard.rs` — shard-local aggregate cache ownership, dedupe cache ownership, disruptor-backed shard handle, and ordered tenant-scoped unique handoff tests
 - [x] `crates/es-runtime/src/disruptor_path.rs` — `try_publish` wrapper, full-ring behavior tests, and release-drain bridge without hidden async blocking
-- [ ] `crates/es-runtime/tests/` or equivalent module tests — reply-after-commit, conflict-without-cache-mutation, and runtime flow coverage
+- [x] `crates/es-runtime/tests/` or equivalent module tests — reply-after-commit, conflict-without-cache-mutation, and runtime flow coverage
 
 ---
 
@@ -70,11 +70,11 @@ created: 2026-04-17
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies.
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify.
-- [ ] Wave 0 covers all MISSING references.
-- [ ] No watch-mode flags.
-- [ ] Feedback latency < 180s for local checks.
-- [ ] `nyquist_compliant: true` set in frontmatter after plan verification confirms coverage.
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies.
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify.
+- [x] Wave 0 covers all MISSING references.
+- [x] No watch-mode flags.
+- [x] Feedback latency < 180s for local checks.
+- [x] `nyquist_compliant: true` set in frontmatter after plan verification confirms coverage.
 
-**Approval:** pending
+**Approval:** green after `cargo test -p es-runtime`, `cargo test -p es-store-postgres`, forbidden-pattern greps, and `cargo test --workspace` passed on 2026-04-17.

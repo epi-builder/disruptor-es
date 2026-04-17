@@ -12,10 +12,18 @@ pub struct RoutedCommand<A: Aggregate> {
 }
 
 /// Bounded adapter-facing command ingress.
-#[derive(Clone)]
 pub struct CommandGateway<A: Aggregate> {
     router: PartitionRouter,
     sender: mpsc::Sender<RoutedCommand<A>>,
+}
+
+impl<A: Aggregate> Clone for CommandGateway<A> {
+    fn clone(&self) -> Self {
+        Self {
+            router: self.router.clone(),
+            sender: self.sender.clone(),
+        }
+    }
 }
 
 impl<A: Aggregate> CommandGateway<A> {

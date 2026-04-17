@@ -9,7 +9,8 @@ use std::{
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
 use es_kernel::{Aggregate, Decision};
 use es_runtime::{
-    CommandEnvelope, RuntimeError, RuntimeEventCodec, RuntimeEventStore, ShardId, ShardState,
+    CommandEngine, CommandEngineConfig, CommandEnvelope, RuntimeError, RuntimeEventCodec,
+    RuntimeEventStore, ShardId, ShardState,
 };
 use es_store_postgres::{
     AppendOutcome, AppendRequest, CommittedAppend, NewEvent, RehydrationBatch, SnapshotRecord,
@@ -645,4 +646,78 @@ async fn reply_drop_after_append_still_advances_cache_and_dedupe() {
             .cache()
             .get(&StreamId::new("counter-1").expect("stream id"))
     );
+}
+
+#[tokio::test]
+async fn runtime_engine_processes_submitted_command_end_to_end_after_durable_commit() {
+    let store = FakeStore::committed();
+    let codec = CounterCodec::default();
+    let mut engine: CommandEngine<CounterAggregate, _, _> = CommandEngine::new(
+        CommandEngineConfig::new(1, 4, 4).expect("config"),
+        store,
+        codec,
+    )
+    .expect("engine");
+    let gateway = engine.gateway();
+    let (envelope, receiver) = envelope(3);
+
+    gateway.try_submit(envelope).expect("submitted");
+    assert!(engine.process_one().await.expect("processed"));
+
+    let outcome = receiver.await.expect("reply").expect("success");
+    assert_eq!(outcome.append.global_positions, vec![1]);
+}
+
+#[tokio::test]
+async fn runtime_flow_covers_overload_disruptor_handoff_conflict_and_commit_paths() {
+    let store = FakeStore::committed();
+    let codec = CounterCodec::default();
+    let mut engine: CommandEngine<CounterAggregate, _, _> = CommandEngine::new(
+        CommandEngineConfig::new(1, 1, 4).expect("config"),
+        store,
+        codec,
+    )
+    .expect("engine");
+    let gateway = engine.gateway();
+    let (accepted, accepted_receiver) = envelope(3);
+    let (overloaded, _overloaded_receiver) = envelope(4);
+
+    gateway.try_submit(accepted).expect("first submit accepted");
+    let error = gateway
+        .try_submit(overloaded)
+        .expect_err("second submit overloads ingress");
+    assert!(matches!(error, RuntimeError::Overloaded));
+
+    assert!(engine.process_one().await.expect("processed"));
+    let outcome = accepted_receiver.await.expect("reply").expect("success");
+    assert_eq!(outcome.append.global_positions, vec![1]);
+
+    let conflict_store = FakeStore::with_append_result(Err(StoreError::StreamConflict {
+        stream_id: "counter-1".to_owned(),
+        expected: "exact 99".to_owned(),
+        actual: Some(1),
+    }));
+    let mut conflict_engine: CommandEngine<CounterAggregate, _, _> = CommandEngine::new(
+        CommandEngineConfig::new(1, 1, 4).expect("config"),
+        conflict_store,
+        CounterCodec::default(),
+    )
+    .expect("conflict engine");
+    let conflict_gateway = conflict_engine.gateway();
+    let (conflicting, conflict_receiver) = envelope(3);
+
+    conflict_gateway
+        .try_submit(conflicting)
+        .expect("conflict submit accepted");
+    assert!(conflict_engine.process_one().await.expect("processed"));
+
+    let error = expect_runtime_error(conflict_receiver.await.expect("reply"));
+    assert!(matches!(
+        error,
+        RuntimeError::Conflict {
+            stream_id,
+            expected,
+            actual: Some(1),
+        } if stream_id == "counter-1" && expected == "exact 99"
+    ));
 }
