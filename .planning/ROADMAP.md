@@ -97,7 +97,11 @@ Plans:
   2. Developer can query order summary and product inventory read models derived only from committed events.
   3. After restart, a projector resumes from its saved global-position checkpoint and catches up without duplicating read-model effects.
   4. Query callers can request a minimum global position to support read-your-own-write behavior without making projection completion part of command success.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 05-01-PLAN.md — Create projection contracts, validated checkpoints, catch-up outcomes, and bounded minimum-position wait policy.
+- [ ] 05-02-PLAN.md — Add serde-backed commerce event payload support for order summary and product inventory projections.
+- [ ] 05-03-PLAN.md — Implement PostgreSQL projection schema, atomic catch-up, read-model queries, restart/idempotence tests, and read-your-own-write support.
 
 ### Phase 6: Outbox and Process Manager Workflows
 **Goal**: Integration events and cross-entity workflows are driven from committed events through durable outbox rows and process managers, keeping broker publication and workflow follow-ups off the hot command path.
