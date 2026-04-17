@@ -35,7 +35,7 @@ Requirements for the initial template release. Each maps to roadmap phases.
 
 - [x] **DOM-01**: Example domain includes `User`, `Product`, and `Order` aggregates or entity models with explicit relationships.
 - [x] **DOM-02**: User commands can register, activate/deactivate, and emit replayable user events.
-- [ ] **DOM-03**: Product commands can create products, adjust inventory, reserve inventory, and release inventory.
+- [x] **DOM-03**: Product commands can create products, adjust inventory, reserve inventory, and release inventory.
 - [x] **DOM-04**: Order commands can place, confirm, reject, and cancel orders referencing user and product identifiers.
 - [x] **DOM-05**: Domain invariants prevent invalid orders, negative inventory, duplicate order placement, and operations against inactive users or unavailable products.
 
@@ -129,7 +129,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RUNTIME-06 | Phase 3 | Complete |
 | DOM-01 | Phase 4 | Complete |
 | DOM-02 | Phase 4 | Complete |
-| DOM-03 | Phase 4 | Pending |
+| DOM-03 | Phase 4 | Complete |
 | DOM-04 | Phase 4 | Complete |
 | DOM-05 | Phase 4 | Complete |
 | PROJ-01 | Phase 5 | Pending |
@@ -159,4 +159,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-16*
-*Last updated: 2026-04-16 after initial definition*
+*Last updated: 2026-04-17 after Phase 04 completion*
