@@ -1,3 +1,5 @@
+//! Runtime store contract tests.
+
 mod common;
 
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};

@@ -38,7 +38,7 @@ created: 2026-04-17
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 03-01-01 | 01 | 1 | RUNTIME-01, RUNTIME-02, RUNTIME-03, RUNTIME-04, RUNTIME-05, RUNTIME-06 | T-03-01 / T-03-02 / T-03-03 / T-03-04 / T-03-05 | Runtime contracts expose typed errors, command envelopes, reply outcomes, codec boundary, runtime store trait, PostgreSQL store adapter, and fake-store support used by later executable waves | unit | `cargo test -p es-runtime runtime_error && cargo test -p es-runtime command_envelope && cargo test -p es-runtime store` | W0 | pending |
+| 03-01-01 | 01 | 1 | RUNTIME-01, RUNTIME-02, RUNTIME-03, RUNTIME-04, RUNTIME-05, RUNTIME-06 | T-03-01 / T-03-02 / T-03-03 / T-03-04 / T-03-05 | Runtime contracts expose typed errors, command envelopes, reply outcomes, codec boundary, runtime store trait, PostgreSQL store adapter, and fake-store support used by later executable waves | unit | `cargo test -p es-runtime runtime_error && cargo test -p es-runtime command_envelope && cargo test -p es-runtime store` | `crates/es-runtime/src/error.rs`, `crates/es-runtime/src/command.rs`, `crates/es-runtime/src/store.rs` | green |
 | 03-02-01 | 02 | 2 | RUNTIME-01, RUNTIME-02 | T-03-06 / T-03-07 / T-03-08 / T-03-09 | Bounded gateway ingress rejects full capacity explicitly, closed ingress returns unavailable, and tenant-scoped partition keys route deterministically to stable local shard owners | unit | `cargo test -p es-runtime partition_router && cargo test -p es-runtime bounded_ingress` | W0 | pending |
 | 03-03-01 | 03 | 3 | RUNTIME-03, RUNTIME-04 | T-03-10 / T-03-11 / T-03-12 / T-03-13 / T-03-14 | Shard-local aggregate and dedupe caches stay single-owner; accepted routed commands pass through `DisruptorPath::try_publish`; processable handoffs are created only after disruptor-released tenant-scoped unique tokens are drained; disruptor publication returns typed overload instead of hidden backpressure | unit | `cargo test -p es-runtime shard_cache && cargo test -p es-runtime disruptor_path && cargo test -p es-runtime shard_state && cargo test -p es-runtime shard_handle` | W0 | pending |
 | 03-04-01 | 04 | 4 | RUNTIME-01, RUNTIME-03, RUNTIME-05, RUNTIME-06 | T-03-14 / T-03-15 / T-03-16 / T-03-17 / T-03-18 | Production `CommandEngine` owns gateway receive, shard handoff, disruptor release drain, store append, codec usage, and reply delivery; cache misses rehydrate before decide; replies are emitted only after durable append; OCC conflicts never mutate shard cache with newly decided events | unit/integration | `cargo test -p es-runtime runtime_engine -- --nocapture && cargo test -p es-runtime runtime_flow -- --nocapture && cargo test --workspace` | W0 | pending |
@@ -49,7 +49,9 @@ created: 2026-04-17
 
 ## Wave 0 Requirements
 
-- [ ] `crates/es-runtime/src/error.rs` — typed runtime errors for overload, unavailable, conflict, and store failures
+- [x] `crates/es-runtime/src/error.rs` — typed runtime errors for overload, unavailable, conflict, and store failures
+- [x] `crates/es-runtime/src/command.rs` — command envelopes, reply outcomes, and event codec boundary
+- [x] `crates/es-runtime/src/store.rs` — runtime store trait, PostgreSQL adapter, and fake-store test seam
 - [ ] `crates/es-runtime/src/router.rs` — stable tenant-aware routing plus golden tests
 - [ ] `crates/es-runtime/src/gateway.rs` — bounded ingress and reply channel behavior tests
 - [ ] `crates/es-runtime/src/shard.rs` — shard-local aggregate cache ownership, dedupe cache ownership, disruptor-backed shard handle, rehydration-before-decide, and command processor tests
