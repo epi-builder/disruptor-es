@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-04-17T08:11:35.441Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-04-17T08:18:13.020Z"
 last_activity: 2026-04-17
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 16
-  completed_plans: 13
-  percent: 81
+  completed_plans: 14
+  percent: 88
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-16)
 ## Current Position
 
 Phase: 04 (commerce-fixture-domain) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-04-17
 
@@ -60,6 +60,7 @@ Progress: [███░░░░░░░] 29%
 | Phase 02-durable-event-store-source-of-truth P04 | 405 | 2 tasks | 8 files |
 | Phase 03-local-command-runtime-and-disruptor-execution P01 | 11 min | 3 tasks | 10 files |
 | Phase 04-commerce-fixture-domain P01 | 3min 27s | 2 tasks | 6 files |
+| Phase 04-commerce-fixture-domain P02 | 4min 4s | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,9 @@ Recent decisions affecting current work:
 - [Phase 04-commerce-fixture-domain]: Keep commerce foundation dependency-light: only existing es-core, es-kernel, and thiserror dependencies are used.
 - [Phase 04-commerce-fixture-domain]: Use validated domain newtypes for commerce IDs and positive u32 quantities before commands are built.
 - [Phase 04-commerce-fixture-domain]: Split user, product, and order into separate compile-visible modules for later aggregate behavior plans.
+- [Phase 04-commerce-fixture-domain]: User registration emits UserRegistered and leaves the lifecycle Inactive until ActivateUser is accepted.
+- [Phase 04-commerce-fixture-domain]: User stream IDs and partition keys use the same user-{UserId} routing key for ordered single-owner execution.
+- [Phase 04-commerce-fixture-domain]: User aggregate remains synchronous and dependency-light, with no storage, async runtime, adapter, or shared mutable state.
 
 ### Pending Todos
 
@@ -109,6 +113,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-17T08:11:35.219Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-04-17T08:18:13.013Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
