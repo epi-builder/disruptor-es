@@ -408,17 +408,17 @@ The pattern extends the existing fixture's replay-vs-manual-application property
 | A3 | If Phase 4 adds a commerce runtime codec fixture, events should expose stable event type/schema helpers now. | Common Pitfalls | Planner may defer codec mapping to Phase 5/6, leaving event type mapping untested until later. |
 | A4 | Saturating arithmetic is a likely implementation mistake for inventory errors. | Common Pitfalls | Planner may not need explicit checks if a `Quantity` newtype makes invalid arithmetic unrepresentable. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should Phase 4 add `proptest-state-machine` now?** [VERIFIED: cargo info proptest-state-machine]
    - What we know: The crate is current at 0.8.0 and its docs describe reference-state-machine tests, transition generation, preconditions, postconditions, and invariant checks. [CITED: https://proptest-rs.github.io/proptest/proptest/state-machine.html]
-   - What's unclear: The fixture may be small enough for plain `proptest` sequences. [ASSUMED]
-   - Recommendation: Start with existing `proptest`; add `proptest-state-machine` only if order/product sequence tests become hard to maintain. [VERIFIED: Cargo.toml] [ASSUMED]
+   - RESOLVED: Phase 4 will use the existing workspace `proptest` dependency only. Do not add `proptest-state-machine` in Phase 4. [VERIFIED: .planning/phases/04-commerce-fixture-domain/04-04-PLAN.md] [VERIFIED: Cargo.toml]
+   - Decision rationale: The current plans satisfy TEST-01 with generated command-sequence tests in `crates/example-commerce/src/tests.rs` and module-local product sequence tests, so the optional state-machine helper would add dependency and scope without being required by the planned implementation. [VERIFIED: .planning/phases/04-commerce-fixture-domain/04-03-PLAN.md] [VERIFIED: .planning/phases/04-commerce-fixture-domain/04-04-PLAN.md]
 
 2. **Should commerce events derive `serde` in Phase 4?** [VERIFIED: Cargo.toml]
    - What we know: Storage DTOs persist JSON payloads and runtime codecs encode/decode typed events. [VERIFIED: crates/es-store-postgres/src/models.rs] [VERIFIED: crates/es-runtime/src/command.rs]
-   - What's unclear: Phase 4 does not require actual persistence integration. [VERIFIED: .planning/ROADMAP.md]
-   - Recommendation: Keep domain events pure Rust and add serde derives only if a commerce codec fixture is explicitly planned in Phase 4. [ASSUMED]
+   - RESOLVED: Do not add `serde` derives to commerce commands/events in Phase 4 unless a commerce runtime codec fixture is explicitly added to a plan. [VERIFIED: .planning/phases/04-commerce-fixture-domain/04-01-PLAN.md] [VERIFIED: .planning/phases/04-commerce-fixture-domain/04-04-PLAN.md]
+   - Decision rationale: The existing Phase 4 plans keep the fixture as synchronous domain logic and generated aggregate tests; persistence codecs remain at the runtime/storage boundary and are not part of this phase's planned artifacts. [VERIFIED: .planning/ROADMAP.md] [VERIFIED: crates/es-runtime/src/command.rs]
 
 ## Environment Availability
 
