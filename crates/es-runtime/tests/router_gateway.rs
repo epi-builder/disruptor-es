@@ -115,6 +115,15 @@ fn tenant_is_part_of_route_input() {
 }
 
 #[test]
+fn command_gateway_rejects_zero_ingress_capacity() {
+    let router = PartitionRouter::new(8).expect("router");
+
+    let result = CommandGateway::<GatewayAggregate>::new(router, 0);
+
+    assert!(matches!(result, Err(RuntimeError::InvalidIngressCapacity)));
+}
+
+#[test]
 fn bounded_ingress_returns_overloaded_when_full() {
     let router = PartitionRouter::new(8).expect("router");
     let (gateway, _receiver) = CommandGateway::<GatewayAggregate>::new(router, 1)
