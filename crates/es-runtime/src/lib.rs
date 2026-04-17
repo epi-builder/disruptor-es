@@ -2,6 +2,7 @@
 
 mod cache;
 mod command;
+mod disruptor_path;
 mod error;
 mod gateway;
 mod router;
@@ -9,6 +10,7 @@ mod store;
 
 pub use cache::{AggregateCache, DedupeCache, DedupeKey, DedupeRecord};
 pub use command::{CommandEnvelope, CommandOutcome, CommandReply, RuntimeEventCodec};
+pub use disruptor_path::{DisruptorPath, ReleasedHandoff};
 pub use error::{RuntimeError, RuntimeResult};
 pub use gateway::{CommandGateway, RoutedCommand};
 pub use router::{PartitionRouter, ROUTING_HASH_SEED, ShardId};
