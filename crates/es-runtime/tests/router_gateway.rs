@@ -126,8 +126,8 @@ fn command_gateway_rejects_zero_ingress_capacity() {
 #[test]
 fn bounded_ingress_returns_overloaded_when_full() {
     let router = PartitionRouter::new(8).expect("router");
-    let (gateway, _receiver) = CommandGateway::<GatewayAggregate>::new(router, 1)
-        .expect("capacity-one gateway");
+    let (gateway, _receiver) =
+        CommandGateway::<GatewayAggregate>::new(router, 1).expect("capacity-one gateway");
 
     gateway
         .try_submit(envelope("tenant-a", "order-123", "order-123"))
@@ -143,8 +143,8 @@ fn bounded_ingress_returns_overloaded_when_full() {
 #[test]
 fn closed_ingress_returns_unavailable() {
     let router = PartitionRouter::new(8).expect("router");
-    let (gateway, receiver) = CommandGateway::<GatewayAggregate>::new(router, 1)
-        .expect("capacity-one gateway");
+    let (gateway, receiver) =
+        CommandGateway::<GatewayAggregate>::new(router, 1).expect("capacity-one gateway");
     drop(receiver);
 
     let error = gateway

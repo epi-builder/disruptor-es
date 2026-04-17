@@ -2,11 +2,13 @@
 
 mod command;
 mod error;
+mod gateway;
 mod router;
 mod store;
 
 pub use command::{CommandEnvelope, CommandOutcome, CommandReply, RuntimeEventCodec};
 pub use error::{RuntimeError, RuntimeResult};
+pub use gateway::{CommandGateway, RoutedCommand};
 pub use router::{PartitionRouter, ROUTING_HASH_SEED, ShardId};
 pub use store::{PostgresRuntimeEventStore, RuntimeEventStore};
 
