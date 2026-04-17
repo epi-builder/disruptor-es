@@ -9,10 +9,10 @@ Requirements for the initial template release. Each maps to roadmap phases.
 
 ### Workspace and Contracts
 
-- [ ] **CORE-01**: Developer can create and build a Rust 2024 workspace with separate crates for core types, domain kernel, runtime, storage, projection, outbox, example domain, adapters, and app composition.
-- [ ] **CORE-02**: Developer can define typed commands, events, aggregate state, replies, and errors through a generic aggregate kernel trait.
-- [ ] **CORE-03**: Developer can derive stream IDs, partition keys, expected revisions, command metadata, and event metadata through reusable core types.
-- [ ] **CORE-04**: Domain decision logic is synchronous, deterministic, typed, and free of adapter, database, broker, and network dependencies.
+- [x] **CORE-01**: Developer can create and build a Rust 2024 workspace with separate crates for core types, domain kernel, runtime, storage, projection, outbox, example domain, adapters, and app composition.
+- [x] **CORE-02**: Developer can define typed commands, events, aggregate state, replies, and errors through a generic aggregate kernel trait.
+- [x] **CORE-03**: Developer can derive stream IDs, partition keys, expected revisions, command metadata, and event metadata through reusable core types.
+- [x] **CORE-04**: Domain decision logic is synchronous, deterministic, typed, and free of adapter, database, broker, and network dependencies.
 
 ### Event Store
 
@@ -112,10 +112,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1 | Pending |
-| CORE-02 | Phase 1 | Pending |
-| CORE-03 | Phase 1 | Pending |
-| CORE-04 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | Complete |
+| CORE-02 | Phase 1 | Complete |
+| CORE-03 | Phase 1 | Complete |
+| CORE-04 | Phase 1 | Complete |
 | STORE-01 | Phase 2 | Complete |
 | STORE-02 | Phase 2 | Complete |
 | STORE-03 | Phase 2 | Complete |
@@ -159,4 +159,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-16*
-*Last updated: 2026-04-17 after Phase 04 completion*
+*Last updated: 2026-04-18 after Phase 1 requirements status reconciliation*
