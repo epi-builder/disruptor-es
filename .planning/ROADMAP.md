@@ -65,7 +65,12 @@ Plans:
   3. Shard-local aggregate and dedupe caches are owned by the shard runtime without global `Arc<Mutex<_>>` business-state maps.
   4. The runtime uses `disruptor-rs` as an in-process execution/fan-out mechanism, not as durability, a broker, or distributed ownership.
   5. Command replies are sent only after durable event-store append succeeds, and optimistic concurrency failures surface as typed conflict or retryable errors.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 03-01-PLAN.md — Create runtime dependencies, typed command/error/store contracts, and fake-store test support.
+- [ ] 03-02-PLAN.md — Implement bounded gateway ingress and stable tenant-aware partition routing.
+- [ ] 03-03-PLAN.md — Prove shard-local cache ownership and compile the disruptor non-blocking handoff path.
+- [ ] 03-04-PLAN.md — Wire commit-gated command processing, conflict-safe cache behavior, and runtime flow validation.
 
 ### Phase 4: Commerce Fixture Domain
 **Goal**: The template includes a compact but realistic typed commerce fixture that proves related aggregates, cross-entity references, replayable events, and invalid-state prevention.
