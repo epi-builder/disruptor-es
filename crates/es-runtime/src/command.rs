@@ -62,6 +62,13 @@ pub struct CommandOutcome<R> {
     pub append: es_store_postgres::CommittedAppend,
 }
 
+impl<R> CommandOutcome<R> {
+    /// Creates a command outcome from aggregate reply data and the durable append summary.
+    pub fn new(reply: R, append: es_store_postgres::CommittedAppend) -> Self {
+        Self { reply, append }
+    }
+}
+
 /// Runtime boundary for encoding typed aggregate events into durable store DTOs.
 pub trait RuntimeEventCodec<A: Aggregate>: Clone + Send + Sync + 'static {
     /// Encodes a typed event for durable storage.
@@ -73,6 +80,12 @@ pub trait RuntimeEventCodec<A: Aggregate>: Clone + Send + Sync + 'static {
 
     /// Decodes a stored event for aggregate replay.
     fn decode(&self, stored: &es_store_postgres::StoredEvent) -> RuntimeResult<A::Event>;
+
+    /// Decodes a stored snapshot for aggregate replay.
+    fn decode_snapshot(
+        &self,
+        snapshot: &es_store_postgres::SnapshotRecord,
+    ) -> RuntimeResult<A::State>;
 }
 
 #[cfg(test)]
@@ -135,8 +148,7 @@ mod tests {
             correlation_id: Uuid::from_u128(2),
             causation_id: None,
             tenant_id: TenantId::new("tenant-a").expect("tenant id"),
-            requested_at: OffsetDateTime::from_unix_timestamp(1_700_000_000)
-                .expect("timestamp"),
+            requested_at: OffsetDateTime::from_unix_timestamp(1_700_000_000).expect("timestamp"),
         }
     }
 

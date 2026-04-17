@@ -18,7 +18,7 @@ use es_store_postgres::{
 use futures::future::BoxFuture;
 use serde_json::json;
 use time::OffsetDateTime;
-use tokio::sync::{oneshot, Notify};
+use tokio::sync::{Notify, oneshot};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -28,7 +28,10 @@ struct CounterState {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum CounterCommand {
-    Add { stream_id: &'static str, amount: i64 },
+    Add {
+        stream_id: &'static str,
+        amount: i64,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -72,9 +75,10 @@ impl Aggregate for CounterAggregate {
         _metadata: &CommandMetadata,
     ) -> Result<Decision<Self::Event, Self::Reply>, Self::Error> {
         match command {
-            CounterCommand::Add { amount, .. } => {
-                Ok(Decision::new(vec![CounterEvent::Added(amount)], state.value + amount))
-            }
+            CounterCommand::Add { amount, .. } => Ok(Decision::new(
+                vec![CounterEvent::Added(amount)],
+                state.value + amount,
+            )),
         }
     }
 
@@ -196,7 +200,10 @@ impl FakeStore {
 }
 
 impl RuntimeEventStore for FakeStore {
-    fn append(&self, request: AppendRequest) -> BoxFuture<'_, es_store_postgres::StoreResult<AppendOutcome>> {
+    fn append(
+        &self,
+        request: AppendRequest,
+    ) -> BoxFuture<'_, es_store_postgres::StoreResult<AppendOutcome>> {
         let receiver = self.inner.append_gate.lock().expect("append gate").take();
         self.inner
             .append_requests
@@ -278,7 +285,10 @@ fn envelope(
     (envelope, receiver)
 }
 
-fn record_handoff(state: &mut ShardState<CounterAggregate>, envelope: CommandEnvelope<CounterAggregate>) {
+fn record_handoff(
+    state: &mut ShardState<CounterAggregate>,
+    envelope: CommandEnvelope<CounterAggregate>,
+) {
     state.record_released_handoff(0, envelope);
 }
 
@@ -330,7 +340,9 @@ async fn reply_is_sent_after_append_commit() {
 
     store.wait_for_append_start().await;
     assert!(
-        tokio::time::timeout(Duration::from_millis(20), receiver).await.is_err(),
+        tokio::time::timeout(Duration::from_millis(20), receiver)
+            .await
+            .is_err(),
         "reply resolved before durable append completed"
     );
 
@@ -357,10 +369,12 @@ async fn cache_miss_rehydrates_before_decide() {
     let (envelope, receiver) = envelope(3);
     record_handoff(&mut state, envelope);
 
-    assert!(state
-        .process_next_handoff(&store, &codec)
-        .await
-        .expect("processed"));
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
 
     let outcome = receiver.await.expect("reply").expect("success");
     assert_eq!(8, outcome.reply);
@@ -380,15 +394,22 @@ async fn duplicate_append_returns_successful_command_outcome() {
     let (envelope, receiver) = envelope(3);
     record_handoff(&mut state, envelope);
 
-    assert!(state
-        .process_next_handoff(&store, &codec)
-        .await
-        .expect("processed"));
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
 
     let outcome = receiver.await.expect("reply").expect("success");
     assert_eq!(3, outcome.reply);
     assert_eq!(vec![1], outcome.append.global_positions);
-    assert_eq!(Some(&CounterState { value: 0 }), state.cache().get(&StreamId::new("counter-1").expect("stream id")));
+    assert_eq!(
+        Some(&CounterState { value: 0 }),
+        state
+            .cache()
+            .get(&StreamId::new("counter-1").expect("stream id"))
+    );
     assert_eq!(1, state.dedupe().len());
 }
 
@@ -404,10 +425,12 @@ async fn duplicate_after_warmed_cache_does_not_apply_newly_decided_events() {
     let (envelope, receiver) = envelope(3);
     record_handoff(&mut state, envelope);
 
-    assert!(state
-        .process_next_handoff(&store, &codec)
-        .await
-        .expect("processed"));
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
 
     let outcome = receiver.await.expect("reply").expect("success");
     assert_eq!(13, outcome.reply);
@@ -428,10 +451,12 @@ async fn reply_drop_after_append_still_advances_cache_and_dedupe() {
     drop(receiver);
     record_handoff(&mut state, envelope);
 
-    assert!(state
-        .process_next_handoff(&store, &codec)
-        .await
-        .expect("processed"));
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
 
     assert_eq!(1, store.appended_len());
     assert_eq!(1, state.dedupe().len());

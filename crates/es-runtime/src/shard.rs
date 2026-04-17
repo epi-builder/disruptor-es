@@ -3,7 +3,8 @@ use std::collections::{HashMap, VecDeque};
 use es_kernel::Aggregate;
 
 use crate::{
-    AggregateCache, CommandEnvelope, DedupeCache, DisruptorPath, RoutedCommand, RuntimeError,
+    AggregateCache, CommandEnvelope, CommandOutcome, DedupeCache, DedupeKey, DedupeRecord,
+    DisruptorPath, RoutedCommand, RuntimeError, RuntimeEventCodec, RuntimeEventStore,
     RuntimeResult, ShardId,
 };
 
@@ -122,6 +123,143 @@ impl<A: Aggregate> ShardState<A> {
     pub fn pending_handoffs(&self) -> usize {
         self.handoffs.len()
     }
+
+    /// Processes one disruptor-released handoff through replay, decide, durable append, and reply.
+    pub async fn process_next_handoff<S, C>(&mut self, store: &S, codec: &C) -> RuntimeResult<bool>
+    where
+        S: RuntimeEventStore,
+        C: RuntimeEventCodec<A>,
+        A::Error: std::fmt::Display,
+    {
+        let Some(handoff) = self.pop_handoff() else {
+            return Ok(false);
+        };
+        let envelope = handoff.envelope;
+
+        let current_state = if let Some(cached) = self.cache.get(&envelope.stream_id) {
+            cached.clone()
+        } else {
+            match rehydrate_state(store, codec, &envelope).await {
+                Ok(rehydrated) => {
+                    self.cache
+                        .commit_state(envelope.stream_id.clone(), rehydrated.clone());
+                    rehydrated
+                }
+                Err(error) => {
+                    let _ = envelope.reply.send(Err(error));
+                    return Ok(true);
+                }
+            }
+        };
+
+        let decision = match A::decide(&current_state, envelope.command, &envelope.metadata) {
+            Ok(decision) => decision,
+            Err(error) => {
+                let _ = envelope.reply.send(Err(RuntimeError::Domain {
+                    message: error.to_string(),
+                }));
+                return Ok(true);
+            }
+        };
+
+        let mut new_events = Vec::with_capacity(decision.events.len());
+        for event in &decision.events {
+            match codec.encode(event, &envelope.metadata) {
+                Ok(encoded) => new_events.push(encoded),
+                Err(error) => {
+                    let _ = envelope.reply.send(Err(error));
+                    return Ok(true);
+                }
+            }
+        }
+
+        let append_request = match es_store_postgres::AppendRequest::new(
+            envelope.stream_id.clone(),
+            envelope.expected_revision,
+            envelope.metadata.clone(),
+            envelope.idempotency_key.clone(),
+            new_events,
+        ) {
+            Ok(request) => request,
+            Err(error) => {
+                let _ = envelope
+                    .reply
+                    .send(Err(RuntimeError::from_store_error(error)));
+                return Ok(true);
+            }
+        };
+
+        match store.append(append_request).await {
+            Ok(es_store_postgres::AppendOutcome::Committed(committed)) => {
+                let mut staged_state = current_state;
+                for event in &decision.events {
+                    A::apply(&mut staged_state, event);
+                }
+                self.cache
+                    .commit_state(envelope.stream_id.clone(), staged_state);
+                self.dedupe.record(
+                    DedupeKey {
+                        tenant_id: envelope.metadata.tenant_id.clone(),
+                        idempotency_key: envelope.idempotency_key.clone(),
+                    },
+                    DedupeRecord {
+                        append: committed.clone(),
+                    },
+                );
+                let _ = envelope
+                    .reply
+                    .send(Ok(CommandOutcome::new(decision.reply, committed)));
+            }
+            Ok(es_store_postgres::AppendOutcome::Duplicate(committed)) => {
+                self.dedupe.record(
+                    DedupeKey {
+                        tenant_id: envelope.metadata.tenant_id.clone(),
+                        idempotency_key: envelope.idempotency_key.clone(),
+                    },
+                    DedupeRecord {
+                        append: committed.clone(),
+                    },
+                );
+                let _ = envelope
+                    .reply
+                    .send(Ok(CommandOutcome::new(decision.reply, committed)));
+            }
+            Err(error) => {
+                let _ = envelope
+                    .reply
+                    .send(Err(RuntimeError::from_store_error(error)));
+            }
+        }
+
+        Ok(true)
+    }
+}
+
+async fn rehydrate_state<A, S, C>(
+    store: &S,
+    codec: &C,
+    envelope: &CommandEnvelope<A>,
+) -> RuntimeResult<A::State>
+where
+    A: Aggregate,
+    S: RuntimeEventStore,
+    C: RuntimeEventCodec<A>,
+{
+    let batch = store
+        .load_rehydration(&envelope.metadata.tenant_id, &envelope.stream_id)
+        .await
+        .map_err(RuntimeError::from_store_error)?;
+    let mut state = match &batch.snapshot {
+        Some(snapshot) => codec.decode_snapshot(snapshot)?,
+        None => A::State::default(),
+    };
+
+    for stored in &batch.events {
+        let event = codec.decode(stored)?;
+        A::apply(&mut state, &event);
+    }
+
+    Ok(state)
 }
 
 /// Disruptor-backed handle for accepting routed commands into one shard.
