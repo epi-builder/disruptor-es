@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-04-17T08:03:16.112Z"
-last_activity: 2026-04-17 -- Phase 04 planning complete
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-04-17T08:11:35.441Z"
+last_activity: 2026-04-17
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 16
-  completed_plans: 12
-  percent: 75
+  completed_plans: 13
+  percent: 81
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-16)
 
 **Core value:** Provide a reusable, production-shaped Rust service template where committed events are the source of truth and `disruptor-rs` is used only as the in-process ordered execution engine.
-**Current focus:** Phase 03 — local-command-runtime-and-disruptor-execution
+**Current focus:** Phase 04 — commerce-fixture-domain
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
+Phase: 04 (commerce-fixture-domain) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-04-17 -- Phase 04 planning complete
+Last activity: 2026-04-17
 
 Progress: [███░░░░░░░] 29%
 
@@ -59,6 +59,7 @@ Progress: [███░░░░░░░] 29%
 | Phase 02-durable-event-store-source-of-truth P03 | 415 | 2 tasks | 6 files |
 | Phase 02-durable-event-store-source-of-truth P04 | 405 | 2 tasks | 8 files |
 | Phase 03-local-command-runtime-and-disruptor-execution P01 | 11 min | 3 tasks | 10 files |
+| Phase 04-commerce-fixture-domain P01 | 3min 27s | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Expose runtime errors as typed variants for overload, unavailable, invalid capacity, conflicts, domain, codec, and store failures.
 - [Phase 03]: Keep CommandOutcome tied to CommittedAppend so successful replies carry durable event-store positions instead of disruptor sequence state.
 - [Phase 03]: Use a boxed-future RuntimeEventStore trait to test runtime behavior without PostgreSQL while preserving the Phase 2 PostgresEventStore boundary.
+- [Phase 04-commerce-fixture-domain]: Keep commerce foundation dependency-light: only existing es-core, es-kernel, and thiserror dependencies are used.
+- [Phase 04-commerce-fixture-domain]: Use validated domain newtypes for commerce IDs and positive u32 quantities before commands are built.
+- [Phase 04-commerce-fixture-domain]: Split user, product, and order into separate compile-visible modules for later aggregate behavior plans.
 
 ### Pending Todos
 
@@ -105,6 +109,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-17T04:03:18.188Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-04-17T08:11:35.219Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
