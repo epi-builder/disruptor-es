@@ -9,12 +9,14 @@ license.workspace = true
 es-core = { path = "../es-core" }
 es-outbox = { path = "../es-outbox" }
 es-runtime = { path = "../es-runtime" }
-es-store-postgres = { path = "../es-store-postgres" }
 example-commerce = { path = "../example-commerce" }
 serde_json.workspace = true
 time.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+es-store-postgres = { path = "../es-store-postgres" }
 
 [lints]
 workspace = true

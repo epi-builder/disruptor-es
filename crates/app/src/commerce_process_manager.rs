@@ -1,20 +1,190 @@
-use es_core::{CommandMetadata, TenantId};
-use es_outbox::{OutboxResult, ProcessEvent, ProcessManager, ProcessManagerName, ProcessOutcome};
-use es_runtime::{
-    CommandGateway, CommandOutcome, PartitionRouter, RoutedCommand, RuntimeError, RuntimeResult,
+use std::future::Future;
+use std::pin::Pin;
+
+use es_core::CommandMetadata;
+use es_outbox::{
+    OutboxError, OutboxResult, ProcessEvent, ProcessManager, ProcessManagerName, ProcessOutcome,
 };
-use example_commerce::{
-    Order, OrderCommand, OrderEvent, OrderId, OrderLine, OrderReply, Product, ProductCommand,
-    ProductId, ProductReply, Quantity, Sku, UserId,
-};
-use tokio::sync::{mpsc, oneshot};
+use es_runtime::{CommandEnvelope, CommandGateway};
+use example_commerce::{Order, OrderCommand, OrderEvent, Product, ProductCommand};
 use uuid::Uuid;
+
+/// Process manager coordinating order placement with product inventory reservation.
+pub struct CommerceOrderProcessManager {
+    name: ProcessManagerName,
+    product_gateway: CommandGateway<Product>,
+    order_gateway: CommandGateway<Order>,
+}
+
+impl CommerceOrderProcessManager {
+    /// Creates a commerce order process manager.
+    pub fn new(
+        name: ProcessManagerName,
+        product_gateway: CommandGateway<Product>,
+        order_gateway: CommandGateway<Order>,
+    ) -> Self {
+        Self {
+            name,
+            product_gateway,
+            order_gateway,
+        }
+    }
+}
+
+impl ProcessManager for CommerceOrderProcessManager {
+    fn name(&self) -> &ProcessManagerName {
+        &self.name
+    }
+
+    fn handles(&self, event_type: &str, schema_version: i32) -> bool {
+        event_type == "OrderPlaced" && schema_version == 1
+    }
+
+    fn process<'a>(
+        &'a self,
+        event: &'a ProcessEvent,
+    ) -> Pin<Box<dyn Future<Output = OutboxResult<ProcessOutcome>> + Send + 'a>> {
+        Box::pin(async move {
+            if !self.handles(&event.event_type, event.schema_version) {
+                return Ok(ProcessOutcome::Skipped {
+                    global_position: event.global_position,
+                });
+            }
+
+            let OrderEvent::OrderPlaced {
+                order_id,
+                user_id: _,
+                lines,
+            } = decode_order_placed(event)?
+            else {
+                return Ok(ProcessOutcome::Skipped {
+                    global_position: event.global_position,
+                });
+            };
+
+            let mut command_count = 0;
+            let mut inventory_reserved = true;
+            for line in lines {
+                let (reply, receiver) = tokio::sync::oneshot::channel();
+                let product_id = line.product_id.clone();
+                let envelope = CommandEnvelope::<Product>::new(
+                    ProductCommand::ReserveInventory {
+                        product_id: product_id.clone(),
+                        quantity: line.quantity,
+                    },
+                    follow_up_metadata(event),
+                    format!(
+                        "pm:{}:{}:reserve:{}",
+                        self.name.as_str(),
+                        event.event_id,
+                        product_id.as_str()
+                    ),
+                    reply,
+                )
+                .map_err(command_submit_error)?;
+                self.product_gateway
+                    .try_submit(envelope)
+                    .map_err(command_submit_error)?;
+                command_count += 1;
+
+                match receiver
+                    .await
+                    .map_err(|_| OutboxError::CommandReplyDropped)?
+                {
+                    Ok(_) => {}
+                    Err(_) => {
+                        inventory_reserved = false;
+                        break;
+                    }
+                }
+            }
+
+            let (reply, receiver) = tokio::sync::oneshot::channel();
+            let (command, idempotency_key) = if inventory_reserved {
+                (
+                    OrderCommand::ConfirmOrder {
+                        order_id: order_id.clone(),
+                    },
+                    format!(
+                        "pm:{}:{}:confirm:{}",
+                        self.name.as_str(),
+                        event.event_id,
+                        order_id.as_str()
+                    ),
+                )
+            } else {
+                (
+                    OrderCommand::RejectOrder {
+                        order_id: order_id.clone(),
+                        reason: "inventory reservation failed".to_owned(),
+                    },
+                    format!(
+                        "pm:{}:{}:reject:{}",
+                        self.name.as_str(),
+                        event.event_id,
+                        order_id.as_str()
+                    ),
+                )
+            };
+            let envelope = CommandEnvelope::<Order>::new(
+                command,
+                follow_up_metadata(event),
+                idempotency_key,
+                reply,
+            )
+            .map_err(command_submit_error)?;
+            self.order_gateway
+                .try_submit(envelope)
+                .map_err(command_submit_error)?;
+            command_count += 1;
+            receiver
+                .await
+                .map_err(|_| OutboxError::CommandReplyDropped)?
+                .map_err(command_submit_error)?;
+
+            Ok(ProcessOutcome::CommandsSubmitted {
+                global_position: event.global_position,
+                command_count,
+            })
+        })
+    }
+}
+
+fn decode_order_placed(event: &ProcessEvent) -> OutboxResult<OrderEvent> {
+    serde_json::from_value(event.payload.clone()).map_err(|_| OutboxError::PayloadDecode {
+        event_type: event.event_type.clone(),
+        schema_version: event.schema_version,
+    })
+}
+
+fn follow_up_metadata(event: &ProcessEvent) -> CommandMetadata {
+    CommandMetadata {
+        command_id: Uuid::now_v7(),
+        correlation_id: event.correlation_id,
+        causation_id: Some(event.event_id),
+        tenant_id: event.tenant_id.clone(),
+        requested_at: time::OffsetDateTime::now_utc(),
+    }
+}
+
+fn command_submit_error(error: impl std::fmt::Display) -> OutboxError {
+    OutboxError::CommandSubmit {
+        message: error.to_string(),
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use es_core::TenantId;
+    use es_runtime::{
+        CommandGateway, CommandOutcome, PartitionRouter, RoutedCommand, RuntimeError,
+    };
+    use example_commerce::{
+        OrderId, OrderLine, OrderReply, ProductId, ProductReply, Quantity, Sku, UserId,
+    };
     use serde_json::json;
-    use time::OffsetDateTime;
+    use tokio::sync::mpsc;
     use tokio::time::{Duration, timeout};
 
     fn tenant() -> TenantId {
@@ -147,8 +317,8 @@ mod tests {
             lines: vec![line(product.clone())],
         });
 
-        let process = manager.process(&event);
-        tokio::pin!(process);
+        let process_event = event.clone();
+        let task = tokio::spawn(async move { manager.process(&process_event).await });
 
         let reserve = receive_product(&mut product_rx).await;
         assert_eq!(
@@ -164,16 +334,18 @@ mod tests {
             reserve.envelope.metadata.correlation_id
         );
         assert_eq!(Some(event.event_id), reserve.envelope.metadata.causation_id);
-        reserve
-            .envelope
-            .reply
-            .send(Ok(CommandOutcome::new(
-                ProductReply::InventoryReserved {
-                    product_id: product,
-                },
-                committed_append(43, Uuid::from_u128(43)),
-            )))
-            .expect("send reserve reply");
+        assert!(
+            reserve
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    ProductReply::InventoryReserved {
+                        product_id: product,
+                    },
+                    committed_append(43, Uuid::from_u128(43)),
+                )))
+                .is_ok()
+        );
 
         let confirm = receive_order(&mut order_rx).await;
         assert_eq!(
@@ -182,23 +354,25 @@ mod tests {
             },
             confirm.envelope.command
         );
-        confirm
-            .envelope
-            .reply
-            .send(Ok(CommandOutcome::new(
-                OrderReply::Confirmed {
-                    order_id: order_id(),
-                },
-                committed_append(44, Uuid::from_u128(44)),
-            )))
-            .expect("send confirm reply");
+        assert!(
+            confirm
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    OrderReply::Confirmed {
+                        order_id: order_id(),
+                    },
+                    committed_append(44, Uuid::from_u128(44)),
+                )))
+                .is_ok()
+        );
 
         assert_eq!(
             ProcessOutcome::CommandsSubmitted {
                 global_position: 42,
                 command_count: 2
             },
-            process.await?
+            task.await.expect("process task")?
         );
 
         Ok(())
@@ -218,17 +392,19 @@ mod tests {
             lines: vec![line(product_id("product-1"))],
         });
 
-        let process = manager.process(&event);
-        tokio::pin!(process);
+        let process_event = event.clone();
+        let task = tokio::spawn(async move { manager.process(&process_event).await });
 
         let reserve = receive_product(&mut product_rx).await;
-        reserve
-            .envelope
-            .reply
-            .send(Err(RuntimeError::Domain {
-                message: "insufficient inventory".to_owned(),
-            }))
-            .expect("send failed reserve reply");
+        assert!(
+            reserve
+                .envelope
+                .reply
+                .send(Err(RuntimeError::Domain {
+                    message: "insufficient inventory".to_owned(),
+                }))
+                .is_ok()
+        );
 
         let reject = receive_order(&mut order_rx).await;
         assert_eq!(
@@ -238,23 +414,25 @@ mod tests {
             },
             reject.envelope.command
         );
-        reject
-            .envelope
-            .reply
-            .send(Ok(CommandOutcome::new(
-                OrderReply::Rejected {
-                    order_id: order_id(),
-                },
-                committed_append(45, Uuid::from_u128(45)),
-            )))
-            .expect("send reject reply");
+        assert!(
+            reject
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    OrderReply::Rejected {
+                        order_id: order_id(),
+                    },
+                    committed_append(45, Uuid::from_u128(45)),
+                )))
+                .is_ok()
+        );
 
         assert_eq!(
             ProcessOutcome::CommandsSubmitted {
                 global_position: 42,
                 command_count: 2
             },
-            process.await?
+            task.await.expect("process task")?
         );
 
         Ok(())
@@ -275,8 +453,8 @@ mod tests {
             lines: vec![line(product.clone())],
         });
 
-        let process = manager.process(&event);
-        tokio::pin!(process);
+        let process_event = event.clone();
+        let task = tokio::spawn(async move { manager.process(&process_event).await });
 
         let reserve = receive_product(&mut product_rx).await;
         assert_eq!(
@@ -288,16 +466,18 @@ mod tests {
             ),
             reserve.envelope.idempotency_key
         );
-        reserve
-            .envelope
-            .reply
-            .send(Ok(CommandOutcome::new(
-                ProductReply::InventoryReserved {
-                    product_id: product,
-                },
-                committed_append(43, Uuid::from_u128(43)),
-            )))
-            .expect("send reserve reply");
+        assert!(
+            reserve
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    ProductReply::InventoryReserved {
+                        product_id: product,
+                    },
+                    committed_append(43, Uuid::from_u128(43)),
+                )))
+                .is_ok()
+        );
 
         let confirm = receive_order(&mut order_rx).await;
         assert_eq!(
@@ -309,25 +489,27 @@ mod tests {
             ),
             confirm.envelope.idempotency_key
         );
-        confirm
-            .envelope
-            .reply
-            .send(Ok(CommandOutcome::new(
-                OrderReply::Confirmed {
-                    order_id: order_id(),
-                },
-                committed_append(44, Uuid::from_u128(44)),
-            )))
-            .expect("send confirm reply");
+        assert!(
+            confirm
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    OrderReply::Confirmed {
+                        order_id: order_id(),
+                    },
+                    committed_append(44, Uuid::from_u128(44)),
+                )))
+                .is_ok()
+        );
 
-        process.await?;
+        task.await.expect("process task")?;
 
         Ok(())
     }
 
     #[tokio::test]
     async fn process_manager_waits_for_replies_before_success() -> OutboxResult<()> {
-        let (product_gateway, mut product_rx, order_gateway, _order_rx) = gateways();
+        let (product_gateway, mut product_rx, order_gateway, mut order_rx) = gateways();
         let manager = CommerceOrderProcessManager::new(
             process_manager_name(),
             product_gateway,
@@ -340,27 +522,52 @@ mod tests {
             lines: vec![line(product.clone())],
         });
 
-        let process = manager.process(&event);
-        tokio::pin!(process);
+        let process_event = event.clone();
+        let mut task = tokio::spawn(async move { manager.process(&process_event).await });
         let reserve = receive_product(&mut product_rx).await;
 
         assert!(
-            timeout(Duration::from_millis(10), &mut process)
-                .await
-                .is_err(),
+            timeout(Duration::from_millis(10), &mut task).await.is_err(),
             "process should wait for reserve reply"
         );
 
-        reserve
-            .envelope
-            .reply
-            .send(Ok(CommandOutcome::new(
-                ProductReply::InventoryReserved {
-                    product_id: product,
-                },
-                committed_append(43, Uuid::from_u128(43)),
-            )))
-            .expect("send reserve reply");
+        assert!(
+            reserve
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    ProductReply::InventoryReserved {
+                        product_id: product,
+                    },
+                    committed_append(43, Uuid::from_u128(43)),
+                )))
+                .is_ok()
+        );
+
+        let confirm = receive_order(&mut order_rx).await;
+        assert!(
+            timeout(Duration::from_millis(10), &mut task).await.is_err(),
+            "process should wait for confirm reply"
+        );
+        assert!(
+            confirm
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    OrderReply::Confirmed {
+                        order_id: order_id(),
+                    },
+                    committed_append(44, Uuid::from_u128(44)),
+                )))
+                .is_ok()
+        );
+        assert_eq!(
+            ProcessOutcome::CommandsSubmitted {
+                global_position: 42,
+                command_count: 2
+            },
+            task.await.expect("process task")?
+        );
 
         Ok(())
     }

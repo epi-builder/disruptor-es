@@ -4,16 +4,16 @@ use std::time::Duration;
 
 use es_core::TenantId;
 use es_outbox::{
-    DispatchBatchLimit, MessageKey, NewOutboxMessage, OutboxError, OutboxMessage, OutboxResult,
-    OutboxStatus, OutboxStore, ProcessManagerName, RetryPolicy, RetryScheduleOutcome,
-    SourceEventRef, Topic, WorkerId,
+    CommittedEventReader, DispatchBatchLimit, MessageKey, NewOutboxMessage, OutboxError,
+    OutboxMessage, OutboxResult, OutboxStatus, OutboxStore, ProcessEvent, ProcessManagerName,
+    ProcessManagerOffsetStore, RetryPolicy, RetryScheduleOutcome, SourceEventRef, Topic, WorkerId,
 };
 use futures::future::BoxFuture;
 use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{StoreError, StoreResult};
+use crate::{PostgresEventStore, StoreError, StoreResult, StoredEvent};
 
 /// PostgreSQL outbox repository.
 #[derive(Clone, Debug)]
@@ -310,6 +310,71 @@ impl OutboxStore for PostgresOutboxStore {
                 .await
                 .map_err(outbox_store_error)
         })
+    }
+}
+
+impl ProcessManagerOffsetStore for PostgresOutboxStore {
+    fn process_manager_offset(
+        &self,
+        tenant_id: TenantId,
+        name: ProcessManagerName,
+    ) -> BoxFuture<'_, OutboxResult<Option<i64>>> {
+        Box::pin(async move {
+            PostgresOutboxStore::process_manager_offset(self, &tenant_id, &name)
+                .await
+                .map_err(outbox_store_error)
+        })
+    }
+
+    fn advance_process_manager_offset(
+        &self,
+        tenant_id: TenantId,
+        name: ProcessManagerName,
+        last_global_position: i64,
+    ) -> BoxFuture<'_, OutboxResult<()>> {
+        Box::pin(async move {
+            PostgresOutboxStore::advance_process_manager_offset(
+                self,
+                &tenant_id,
+                &name,
+                last_global_position,
+            )
+            .await
+            .map_err(outbox_store_error)
+        })
+    }
+}
+
+impl CommittedEventReader for PostgresEventStore {
+    fn read_global(
+        &self,
+        tenant_id: TenantId,
+        after_global_position: i64,
+        limit: DispatchBatchLimit,
+    ) -> BoxFuture<'_, OutboxResult<Vec<ProcessEvent>>> {
+        Box::pin(async move {
+            PostgresEventStore::read_global(self, &tenant_id, after_global_position, limit.value())
+                .await
+                .map_err(outbox_store_error)
+                .map(|events| events.into_iter().map(ProcessEvent::from).collect())
+        })
+    }
+}
+
+impl From<StoredEvent> for ProcessEvent {
+    fn from(event: StoredEvent) -> Self {
+        Self {
+            global_position: event.global_position,
+            event_id: event.event_id,
+            event_type: event.event_type,
+            schema_version: event.schema_version,
+            payload: event.payload,
+            metadata: event.metadata,
+            tenant_id: event.tenant_id,
+            command_id: event.command_id,
+            correlation_id: event.correlation_id,
+            causation_id: event.causation_id,
+        }
     }
 }
 

@@ -1,3 +1,5 @@
+//! Process-manager contract tests.
+
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
@@ -134,7 +136,7 @@ fn process_event(global_position: i64, event_type: &str) -> ProcessEvent {
 }
 
 #[tokio::test]
-async fn process_batch_skips_events_at_or_below_saved_offset() -> OutboxResult<()> {
+async fn process_manager_process_batch_skips_events_at_or_below_saved_offset() -> OutboxResult<()> {
     let manager = RecordingManager::new();
     let offsets = RecordingOffsets::default();
     *offsets.current.lock().expect("current offset") = Some(10);
@@ -167,7 +169,8 @@ async fn process_batch_skips_events_at_or_below_saved_offset() -> OutboxResult<(
 }
 
 #[tokio::test]
-async fn process_batch_advances_skipped_events_after_manager_returns() -> OutboxResult<()> {
+async fn process_manager_process_batch_advances_skipped_events_after_manager_returns()
+-> OutboxResult<()> {
     let manager = RecordingManager::new();
     let offsets = RecordingOffsets::default();
 
@@ -195,7 +198,7 @@ async fn process_batch_advances_skipped_events_after_manager_returns() -> Outbox
 }
 
 #[tokio::test]
-async fn process_committed_batch_reads_from_saved_offset() -> OutboxResult<()> {
+async fn process_manager_process_committed_batch_reads_from_saved_offset() -> OutboxResult<()> {
     let manager = RecordingManager::new();
     let offsets = RecordingOffsets::default();
     *offsets.current.lock().expect("current offset") = Some(20);
