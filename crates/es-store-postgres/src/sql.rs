@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use es_core::{ExpectedRevision, StreamId, StreamRevision, TenantId};
+use es_outbox::NewOutboxMessage;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -30,12 +33,22 @@ pub(crate) async fn append(pool: &PgPool, request: AppendRequest) -> StoreResult
 
     let mut global_positions = Vec::with_capacity(request.events.len());
     let mut event_ids = Vec::with_capacity(request.events.len());
+    let mut inserted_events = HashMap::with_capacity(request.events.len());
 
     for (index, event) in request.events.iter().enumerate() {
         let stream_revision = first_revision + i64::try_from(index).unwrap_or(i64::MAX);
         let inserted = insert_event(&mut tx, &request, event, stream_revision).await?;
         global_positions.push(inserted.global_position);
         event_ids.push(inserted.event_id);
+        inserted_events.insert(inserted.event_id, inserted);
+    }
+
+    for message in &request.outbox_messages {
+        let source_event_id = message.source.event_id();
+        let inserted_event = inserted_events
+            .get(&source_event_id)
+            .ok_or(StoreError::InvalidOutboxSourceEvent { source_event_id })?;
+        insert_outbox_message(&mut tx, &request, message, inserted_event).await?;
     }
 
     let committed = committed_append(
@@ -273,6 +286,45 @@ async fn insert_event(
         event_id,
         global_position,
     })
+}
+
+async fn insert_outbox_message(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &AppendRequest,
+    message: &NewOutboxMessage,
+    inserted_event: &InsertedEvent,
+) -> StoreResult<()> {
+    sqlx::query(
+        r#"
+        WITH status_value(status) AS (VALUES ('pending'::text))
+        INSERT INTO outbox_messages (
+            outbox_id,
+            tenant_id,
+            source_event_id,
+            source_global_position,
+            topic,
+            message_key,
+            payload,
+            metadata,
+            status
+        )
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8, status
+        FROM status_value
+        ON CONFLICT (tenant_id, source_event_id, topic) DO NOTHING
+        "#,
+    )
+    .bind(Uuid::now_v7())
+    .bind(request.command_metadata.tenant_id.as_str())
+    .bind(inserted_event.event_id)
+    .bind(inserted_event.global_position)
+    .bind(message.topic.as_str())
+    .bind(message.message_key.as_str())
+    .bind(&message.payload)
+    .bind(&message.metadata)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
 }
 
 async fn insert_dedupe_result(

@@ -92,6 +92,12 @@ pub enum StoreError {
         #[source]
         source: serde_json::Error,
     },
+    /// Append request referenced an event that is not part of the append.
+    #[error("outbox source event {source_event_id} is not present in appended events")]
+    InvalidOutboxSourceEvent {
+        /// Rejected outbox source event identifier.
+        source_event_id: uuid::Uuid,
+    },
     /// Stored outbox row could not be represented by outbox contract types.
     #[error("outbox error: {message}")]
     Outbox {

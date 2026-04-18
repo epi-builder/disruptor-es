@@ -1,4 +1,7 @@
+use std::collections::HashSet;
+
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
+use es_outbox::NewOutboxMessage;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -73,6 +76,8 @@ pub struct AppendRequest {
     pub idempotency_key: String,
     /// Events to append atomically.
     pub events: Vec<NewEvent>,
+    /// Outbox messages derived from the appended events.
+    pub outbox_messages: Vec<NewOutboxMessage>,
 }
 
 impl AppendRequest {
@@ -84,6 +89,25 @@ impl AppendRequest {
         idempotency_key: impl Into<String>,
         events: Vec<NewEvent>,
     ) -> StoreResult<Self> {
+        Self::new_with_outbox(
+            stream_id,
+            expected_revision,
+            command_metadata,
+            idempotency_key,
+            events,
+            Vec::new(),
+        )
+    }
+
+    /// Creates a validated append request with derived outbox messages.
+    pub fn new_with_outbox(
+        stream_id: StreamId,
+        expected_revision: ExpectedRevision,
+        command_metadata: CommandMetadata,
+        idempotency_key: impl Into<String>,
+        events: Vec<NewEvent>,
+        outbox_messages: Vec<NewOutboxMessage>,
+    ) -> StoreResult<Self> {
         if events.is_empty() {
             return Err(StoreError::EmptyAppend);
         }
@@ -93,12 +117,24 @@ impl AppendRequest {
             return Err(StoreError::InvalidIdempotencyKey);
         }
 
+        let event_ids = events
+            .iter()
+            .map(|event| event.event_id)
+            .collect::<HashSet<_>>();
+        for message in &outbox_messages {
+            let source_event_id = message.source.event_id();
+            if !event_ids.contains(&source_event_id) {
+                return Err(StoreError::InvalidOutboxSourceEvent { source_event_id });
+            }
+        }
+
         Ok(Self {
             stream_id,
             expected_revision,
             command_metadata,
             idempotency_key,
             events,
+            outbox_messages,
         })
     }
 }
@@ -309,5 +345,32 @@ mod models {
         assert_eq!("order-1", request.stream_id.as_str());
         assert_eq!("command-1", request.idempotency_key);
         assert_eq!(1, request.events.len());
+        assert!(request.outbox_messages.is_empty());
+    }
+
+    #[test]
+    fn append_request_rejects_unknown_outbox_source_event() {
+        let source_event_id = Uuid::from_u128(99);
+        let message = es_outbox::NewOutboxMessage::new(
+            es_outbox::PendingSourceEventRef::new(source_event_id),
+            es_outbox::Topic::new("orders.placed").expect("valid topic"),
+            es_outbox::MessageKey::new("order-1").expect("valid message key"),
+            json!({ "order_id": "order-1" }),
+            json!({ "source": "test" }),
+        );
+        let error = AppendRequest::new_with_outbox(
+            StreamId::new("order-1").expect("valid stream id"),
+            ExpectedRevision::NoStream,
+            command_metadata(),
+            "command-1",
+            vec![valid_event()],
+            vec![message],
+        )
+        .expect_err("unknown outbox source event rejected");
+
+        assert!(matches!(
+            error,
+            StoreError::InvalidOutboxSourceEvent { source_event_id: id } if id == source_event_id
+        ));
     }
 }

@@ -120,12 +120,11 @@ async fn append_source_event(
 }
 
 async fn outbox_row_count(pool: &sqlx::PgPool, tenant_id: &str) -> anyhow::Result<i64> {
-    let count = sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM outbox_messages WHERE tenant_id = $1",
-    )
-    .bind(tenant_id)
-    .fetch_one(pool)
-    .await?;
+    let count =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM outbox_messages WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(pool)
+            .await?;
 
     Ok(count)
 }
