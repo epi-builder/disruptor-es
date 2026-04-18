@@ -1,7 +1,7 @@
 use es_core::TenantId;
 use serde::{Deserialize, Serialize};
 
-use crate::ProjectionResult;
+use crate::{ProjectionError, ProjectionResult};
 
 /// Validated projector identity.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -10,7 +10,12 @@ pub struct ProjectorName(String);
 impl ProjectorName {
     /// Creates a projector name.
     pub fn new(value: impl Into<String>) -> ProjectionResult<Self> {
-        Ok(Self(value.into()))
+        let value = value.into();
+        if value.is_empty() {
+            return Err(ProjectionError::InvalidProjectorName);
+        }
+
+        Ok(Self(value))
     }
 
     /// Returns the borrowed projector name.
@@ -26,6 +31,10 @@ pub struct MinimumGlobalPosition(i64);
 impl MinimumGlobalPosition {
     /// Creates a minimum global position.
     pub fn new(value: i64) -> ProjectionResult<Self> {
+        if value < 0 {
+            return Err(ProjectionError::InvalidGlobalPosition { value });
+        }
+
         Ok(Self(value))
     }
 
@@ -42,6 +51,10 @@ pub struct ProjectionBatchLimit(i64);
 impl ProjectionBatchLimit {
     /// Creates a projection batch limit.
     pub fn new(value: i64) -> ProjectionResult<Self> {
+        if !(1..=1000).contains(&value) {
+            return Err(ProjectionError::InvalidBatchLimit { value });
+        }
+
         Ok(Self(value))
     }
 
@@ -69,6 +82,12 @@ impl ProjectorOffset {
         projector_name: ProjectorName,
         last_global_position: i64,
     ) -> ProjectionResult<Self> {
+        if last_global_position < 0 {
+            return Err(ProjectionError::InvalidGlobalPosition {
+                value: last_global_position,
+            });
+        }
+
         Ok(Self {
             tenant_id,
             projector_name,
