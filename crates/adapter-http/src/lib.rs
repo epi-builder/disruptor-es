@@ -1,5 +1,12 @@
-//! Request decoding boundary for the future HTTP adapter.
+//! HTTP request decoding boundary for commerce command ingress.
 
-/// Phase ownership marker for the HTTP adapter crate.
-pub const PHASE_BOUNDARY: &str =
-    "Future phases decode HTTP requests here without owning aggregate state.";
+mod commerce;
+mod error;
+
+pub use commerce::{CommandSuccess, HttpState, PlaceOrderRequest, commerce_routes};
+pub use error::{ApiError, ApiErrorBody};
+
+/// Builds the HTTP command router.
+pub fn router(state: HttpState) -> axum::Router {
+    commerce_routes(state)
+}
