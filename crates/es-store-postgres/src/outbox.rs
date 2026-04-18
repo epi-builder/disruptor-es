@@ -123,8 +123,13 @@ impl PostgresOutboxStore {
     }
 
     /// Marks a publishing message as published.
-    pub async fn mark_published(&self, tenant_id: &TenantId, outbox_id: Uuid) -> StoreResult<()> {
-        sqlx::query(
+    pub async fn mark_published(
+        &self,
+        tenant_id: &TenantId,
+        outbox_id: Uuid,
+        worker_id: &WorkerId,
+    ) -> StoreResult<()> {
+        let result = sqlx::query(
             r#"
             UPDATE outbox_messages
             SET status = 'published',
@@ -135,12 +140,24 @@ impl PostgresOutboxStore {
                 updated_at = now()
             WHERE tenant_id = $1
               AND outbox_id = $2
+              AND status = 'publishing'
+              AND locked_by = $3
             "#,
         )
         .bind(tenant_id.as_str())
         .bind(outbox_id)
+        .bind(worker_id.as_str())
         .execute(&self.pool)
         .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::Outbox {
+                message: format!(
+                    "outbox message {outbox_id} is not publishing for worker {}",
+                    worker_id.as_str()
+                ),
+            });
+        }
 
         Ok(())
     }
@@ -150,6 +167,7 @@ impl PostgresOutboxStore {
         &self,
         tenant_id: &TenantId,
         outbox_id: Uuid,
+        worker_id: &WorkerId,
         error: &str,
         retry_policy: RetryPolicy,
     ) -> StoreResult<RetryScheduleOutcome> {
@@ -157,25 +175,37 @@ impl PostgresOutboxStore {
             r#"
             UPDATE outbox_messages
             SET status = CASE
-                    WHEN attempts >= $3 THEN 'failed'
+                    WHEN attempts >= $4 THEN 'failed'
                     ELSE 'pending'
                 END,
                 available_at = now(),
                 locked_by = NULL,
                 locked_until = NULL,
-                last_error = $4,
+                last_error = $5,
                 updated_at = now()
             WHERE tenant_id = $1
               AND outbox_id = $2
+              AND status = 'publishing'
+              AND locked_by = $3
             RETURNING status
             "#,
         )
         .bind(tenant_id.as_str())
         .bind(outbox_id)
+        .bind(worker_id.as_str())
         .bind(retry_policy.max_attempts())
         .bind(error)
-        .fetch_one(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
+
+        let Some(status) = status else {
+            return Err(StoreError::Outbox {
+                message: format!(
+                    "outbox message {outbox_id} is not publishing for worker {}",
+                    worker_id.as_str()
+                ),
+            });
+        };
 
         match status.as_str() {
             "pending" => Ok(RetryScheduleOutcome::RetryScheduled),
@@ -191,25 +221,38 @@ impl PostgresOutboxStore {
         &self,
         tenant_id: &TenantId,
         outbox_id: Uuid,
+        worker_id: &WorkerId,
         error: &str,
     ) -> StoreResult<()> {
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE outbox_messages
             SET status = 'failed',
                 locked_by = NULL,
                 locked_until = NULL,
-                last_error = $3,
+                last_error = $4,
                 updated_at = now()
             WHERE tenant_id = $1
               AND outbox_id = $2
+              AND status = 'publishing'
+              AND locked_by = $3
             "#,
         )
         .bind(tenant_id.as_str())
         .bind(outbox_id)
+        .bind(worker_id.as_str())
         .bind(error)
         .execute(&self.pool)
         .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::Outbox {
+                message: format!(
+                    "outbox message {outbox_id} is not publishing for worker {}",
+                    worker_id.as_str()
+                ),
+            });
+        }
 
         Ok(())
     }
@@ -292,9 +335,10 @@ impl OutboxStore for PostgresOutboxStore {
         &self,
         tenant_id: TenantId,
         outbox_id: Uuid,
+        worker_id: WorkerId,
     ) -> BoxFuture<'_, OutboxResult<()>> {
         Box::pin(async move {
-            PostgresOutboxStore::mark_published(self, &tenant_id, outbox_id)
+            PostgresOutboxStore::mark_published(self, &tenant_id, outbox_id, &worker_id)
                 .await
                 .map_err(outbox_store_error)
         })
@@ -304,13 +348,21 @@ impl OutboxStore for PostgresOutboxStore {
         &self,
         tenant_id: TenantId,
         outbox_id: Uuid,
+        worker_id: WorkerId,
         error: String,
         retry_policy: RetryPolicy,
     ) -> BoxFuture<'_, OutboxResult<RetryScheduleOutcome>> {
         Box::pin(async move {
-            PostgresOutboxStore::schedule_retry(self, &tenant_id, outbox_id, &error, retry_policy)
-                .await
-                .map_err(outbox_store_error)
+            PostgresOutboxStore::schedule_retry(
+                self,
+                &tenant_id,
+                outbox_id,
+                &worker_id,
+                &error,
+                retry_policy,
+            )
+            .await
+            .map_err(outbox_store_error)
         })
     }
 }

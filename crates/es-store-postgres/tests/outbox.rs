@@ -464,6 +464,7 @@ async fn outbox_retry_and_failed_status_are_bounded() -> anyhow::Result<()> {
         .schedule_retry(
             &tenant,
             inserted.outbox_id,
+            &worker_id("worker-a"),
             "temporary failure",
             retry_policy(2),
         )
@@ -484,6 +485,7 @@ async fn outbox_retry_and_failed_status_are_bounded() -> anyhow::Result<()> {
         .schedule_retry(
             &tenant,
             inserted.outbox_id,
+            &worker_id("worker-b"),
             "permanent failure",
             retry_policy(2),
         )
@@ -499,6 +501,71 @@ async fn outbox_retry_and_failed_status_are_bounded() -> anyhow::Result<()> {
         )
         .await?;
     assert!(remaining.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn outbox_publish_and_retry_require_current_worker_claim() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let events = PostgresEventStore::new(harness.pool.clone());
+    let outbox = PostgresOutboxStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let (source_event_id, source_global_position) =
+        append_source_event(&events, tenant.clone(), "order-ownership", 450).await?;
+    let inserted = outbox
+        .insert_outbox_message(
+            &tenant,
+            &new_outbox_message(source_event_id, "orders.placed"),
+            source_global_position,
+        )
+        .await?;
+
+    let pending_publish = outbox
+        .mark_published(&tenant, inserted.outbox_id, &worker_id("worker-a"))
+        .await;
+    assert!(matches!(pending_publish, Err(StoreError::Outbox { .. })));
+
+    let first_claim = outbox
+        .claim_pending(
+            &tenant,
+            &worker_id("worker-a"),
+            batch_limit(1),
+            Duration::from_secs(0),
+        )
+        .await?;
+    assert_eq!(inserted.outbox_id, first_claim[0].outbox_id);
+
+    let second_claim = outbox
+        .claim_pending(
+            &tenant,
+            &worker_id("worker-b"),
+            batch_limit(1),
+            Duration::from_secs(30),
+        )
+        .await?;
+    assert_eq!(inserted.outbox_id, second_claim[0].outbox_id);
+
+    let stale_publish = outbox
+        .mark_published(&tenant, inserted.outbox_id, &worker_id("worker-a"))
+        .await;
+    assert!(matches!(stale_publish, Err(StoreError::Outbox { .. })));
+
+    let stale_retry = outbox
+        .schedule_retry(
+            &tenant,
+            inserted.outbox_id,
+            &worker_id("worker-a"),
+            "stale failure",
+            retry_policy(3),
+        )
+        .await;
+    assert!(matches!(stale_retry, Err(StoreError::Outbox { .. })));
+
+    outbox
+        .mark_published(&tenant, inserted.outbox_id, &worker_id("worker-b"))
+        .await?;
 
     Ok(())
 }

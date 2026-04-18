@@ -24,6 +24,7 @@ pub trait OutboxStore: Clone + Send + Sync + 'static {
         &self,
         tenant_id: TenantId,
         outbox_id: Uuid,
+        worker_id: WorkerId,
     ) -> BoxFuture<'_, OutboxResult<()>>;
 
     /// Schedules another retry attempt or transitions a row to failed.
@@ -31,6 +32,7 @@ pub trait OutboxStore: Clone + Send + Sync + 'static {
         &self,
         tenant_id: TenantId,
         outbox_id: Uuid,
+        worker_id: WorkerId,
         error: String,
         retry_policy: RetryPolicy,
     ) -> BoxFuture<'_, OutboxResult<RetryScheduleOutcome>>;
@@ -50,7 +52,7 @@ where
     P: Publisher,
 {
     let claimed = store
-        .claim_pending(tenant_id.clone(), worker_id, limit)
+        .claim_pending(tenant_id.clone(), worker_id.clone(), limit)
         .await?;
     if claimed.is_empty() {
         return Ok(DispatchOutcome::Idle);
@@ -64,7 +66,7 @@ where
         match publisher.publish(message.publish_envelope()).await {
             Ok(()) => {
                 store
-                    .mark_published(tenant_id.clone(), message.outbox_id)
+                    .mark_published(tenant_id.clone(), message.outbox_id, worker_id.clone())
                     .await?;
                 published += 1;
             }
@@ -73,6 +75,7 @@ where
                     .schedule_retry(
                         tenant_id.clone(),
                         message.outbox_id,
+                        worker_id.clone(),
                         error.to_string(),
                         retry_policy,
                     )
@@ -166,6 +169,7 @@ mod dispatcher_tests {
             &self,
             _tenant_id: TenantId,
             outbox_id: Uuid,
+            _worker_id: WorkerId,
         ) -> BoxFuture<'_, OutboxResult<()>> {
             Box::pin(async move {
                 self.inner
@@ -181,6 +185,7 @@ mod dispatcher_tests {
             &self,
             _tenant_id: TenantId,
             outbox_id: Uuid,
+            _worker_id: WorkerId,
             error: String,
             retry_policy: RetryPolicy,
         ) -> BoxFuture<'_, OutboxResult<RetryScheduleOutcome>> {
