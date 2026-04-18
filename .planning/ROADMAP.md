@@ -99,8 +99,8 @@ Plans:
   4. Query callers can request a minimum global position to support read-your-own-write behavior without making projection completion part of command success.
 **Plans**: 3 plans
 Plans:
-- [ ] 05-01-PLAN.md — Create projection contracts, validated checkpoints, catch-up outcomes, and bounded minimum-position wait policy.
-- [ ] 05-02-PLAN.md — Add serde-backed commerce event payload support for order summary and product inventory projections.
+- [x] 05-01-PLAN.md — Create projection contracts, validated checkpoints, catch-up outcomes, and bounded minimum-position wait policy.
+- [x] 05-02-PLAN.md — Add serde-backed commerce event payload support for order summary and product inventory projections.
 - [ ] 05-03-PLAN.md — Implement PostgreSQL projection schema, atomic catch-up, read-model queries, restart/idempotence tests, and read-your-own-write support.
 
 ### Phase 6: Outbox and Process Manager Workflows

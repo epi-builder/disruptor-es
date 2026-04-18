@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-04-17T16:08:05.063Z"
-last_activity: 2026-04-17 -- Phase 05 planning complete
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-04-18T00:31:12.132Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 19
-  completed_plans: 16
-  percent: 84
+  completed_plans: 18
+  percent: 95
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
+Phase: 05 (cqrs-projection-and-query-catch-up) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-04-17 -- Phase 05 planning complete
+Last activity: 2026-04-18
 
 Progress: [██████░░░░] 57%
 
@@ -64,6 +64,7 @@ Progress: [██████░░░░] 57%
 | Phase 04-commerce-fixture-domain P02 | 4min 4s | 2 tasks | 2 files |
 | Phase 04-commerce-fixture-domain P03 | 5min 5s | 2 tasks | 2 files |
 | Phase 04-commerce-fixture-domain P04 | 4min 9s | 2 tasks | 3 files |
+| Phase 05-cqrs-projection-and-query-catch-up P01 | 5min 30s | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,9 @@ Recent decisions affecting current work:
 - [Phase 04-commerce-fixture-domain]: Order stores UserId, ProductId, SKU, quantity, and product availability assumptions, not UserState or ProductState objects.
 - [Phase 04-commerce-fixture-domain]: PlaceOrder uses ExpectedRevision::NoStream; confirm, reject, and cancel use ExpectedRevision::Any.
 - [Phase 04-commerce-fixture-domain]: Generated Phase 04 tests use plain proptest command sequences rather than adding proptest-state-machine.
+- [Phase 05-cqrs-projection-and-query-catch-up]: Keep es-projection storage-neutral; PostgreSQL StoredEvent conversion remains in es-store-postgres.
+- [Phase 05-cqrs-projection-and-query-catch-up]: Use typed constructors to reject invalid projector names, positions, batch limits, and wait policies before storage calls.
+- [Phase 05-cqrs-projection-and-query-catch-up]: Minimum-position query waits are bounded by timeout and return ProjectionLag instead of blocking indefinitely.
 
 ### Pending Todos
 
@@ -125,6 +129,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-17T08:26:26.860Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-04-18T00:31:12.128Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
