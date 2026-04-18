@@ -76,18 +76,20 @@ overrides_applied: 0
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
 | PROJ-01 | 05-01, 05-03 | Projector runtime applies committed events to read models and updates projector offsets in the same transaction. | SATISFIED | `catch_up` reads global committed events, applies read-model writes and offset upsert inside one transaction, and tests `projections_offset_commits_with_read_models`. |
-| PROJ-02 | 05-02, 05-03 | Example read models expose order summary and product inventory views derived from events. | SATISFIED | Public DTO/query methods exist; `projections_build_commerce_read_models` verifies order summary and product inventory values derived from serialized commerce events. Note: `.planning/REQUIREMENTS.md` still marks PROJ-02 Pending, which is metadata drift rather than an implementation gap. |
+| PROJ-02 | 05-02, 05-03 | Example read models expose order summary and product inventory views derived from events. | SATISFIED | Public DTO/query methods exist; `projections_build_commerce_read_models` verifies order summary and product inventory values derived from serialized commerce events. `.planning/REQUIREMENTS.md` now marks PROJ-02 complete. |
 | PROJ-03 | 05-01, 05-03 | Projection runtime can catch up from a saved global-position checkpoint after restart. | SATISFIED | `projector_offset` is tenant/projector scoped; restarted store resumes after saved offset; idempotence test verifies no duplicate read-model effects. |
 | PROJ-04 | 05-01, 05-03 | Query path can optionally wait for a minimum global position to support read-your-own-write behavior. | SATISFIED | `MinimumGlobalPosition`, `WaitPolicy`, and query methods implement bounded waits; unit and integration tests verify fresh and lagging paths. |
 
 No orphaned Phase 5 requirements were found. The plan frontmatter accounts for all Phase 5 requirement IDs listed in `.planning/REQUIREMENTS.md`.
 
-### Anti-Patterns Found
+### Metadata Reconciliation
 
-| File | Line | Pattern | Severity | Impact |
-|------|------|---------|----------|--------|
-| `.planning/REQUIREMENTS.md` | PROJ-02 status | Requirement metadata still says Pending even though implementation evidence satisfies it. | Info | Does not block the phase goal; update requirement status during orchestration/state reconciliation. |
-| `.planning/ROADMAP.md` / roadmap data | 05-03 plan checkbox | Roadmap data still reports 05-03 unchecked while summaries and code exist. | Info | Does not block goal achievement; likely orchestration metadata pending after verification. |
+The metadata drift observed during initial verification has been reconciled:
+
+| File | Item | Current State |
+|------|------|---------------|
+| `.planning/REQUIREMENTS.md` | PROJ-02 status | Complete |
+| `.planning/ROADMAP.md` | Phase 05 / 05-03 plan status | Complete |
 
 ### Human Verification Required
 
