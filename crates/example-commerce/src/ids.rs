@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Errors returned by commerce domain identity constructors.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -6,8 +6,8 @@ pub enum CommerceIdError {
     /// A required string-backed value was empty.
     #[error("{type_name} cannot be empty")]
     EmptyValue { type_name: &'static str },
-    /// Quantity values must be greater than zero.
-    #[error("quantity must be greater than zero")]
+    /// Quantity values must fit the signed inventory storage range.
+    #[error("quantity must be between 1 and 2147483647")]
     InvalidQuantity,
 }
 
@@ -96,13 +96,13 @@ impl Sku {
 }
 
 /// Positive item quantity.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct Quantity(u32);
 
 impl Quantity {
-    /// Creates a positive quantity.
+    /// Creates a positive quantity that fits the signed inventory storage range.
     pub fn new(value: u32) -> Result<Self, CommerceIdError> {
-        if value == 0 {
+        if value == 0 || value > i32::MAX as u32 {
             return Err(CommerceIdError::InvalidQuantity);
         }
         Ok(Self(value))
@@ -111,6 +111,16 @@ impl Quantity {
     /// Returns the numeric quantity value.
     pub fn value(self) -> u32 {
         self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for Quantity {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = u32::deserialize(deserializer)?;
+        Self::new(value).map_err(serde::de::Error::custom)
     }
 }
 
@@ -163,5 +173,13 @@ mod tests {
         );
 
         assert_eq!(1, Quantity::new(1).expect("quantity").value());
+    }
+
+    #[test]
+    fn quantity_rejects_values_above_signed_inventory_range() {
+        assert_eq!(
+            CommerceIdError::InvalidQuantity,
+            Quantity::new(i32::MAX as u32 + 1).expect_err("quantity above i32 range")
+        );
     }
 }

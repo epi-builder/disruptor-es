@@ -309,19 +309,21 @@ impl Aggregate for Product {
                 state.product_id = Some(product_id.clone());
                 state.sku = Some(sku.clone());
                 state.name = Some(name.clone());
-                state.available_quantity = initial_quantity.value() as i32;
+                state.available_quantity = quantity_to_i32(*initial_quantity);
                 state.reserved_quantity = 0;
             }
             ProductEvent::InventoryAdjusted { delta, .. } => {
                 state.available_quantity += delta;
             }
             ProductEvent::InventoryReserved { quantity, .. } => {
-                state.available_quantity -= quantity.value() as i32;
-                state.reserved_quantity += quantity.value() as i32;
+                let quantity = quantity_to_i32(*quantity);
+                state.available_quantity -= quantity;
+                state.reserved_quantity += quantity;
             }
             ProductEvent::InventoryReleased { quantity, .. } => {
-                state.available_quantity += quantity.value() as i32;
-                state.reserved_quantity -= quantity.value() as i32;
+                let quantity = quantity_to_i32(*quantity);
+                state.available_quantity += quantity;
+                state.reserved_quantity -= quantity;
             }
         }
     }
@@ -343,6 +345,10 @@ fn ensure_created(state: &ProductState) -> Result<(), ProductError> {
         return Err(ProductError::NotCreated);
     }
     Ok(())
+}
+
+fn quantity_to_i32(quantity: Quantity) -> i32 {
+    i32::try_from(quantity.value()).expect("Quantity invariant keeps value within i32")
 }
 
 #[cfg(test)]
