@@ -1,9 +1,11 @@
 //! Outbox dispatch and process-manager integration boundary.
 
+mod dispatcher;
 mod error;
 mod models;
 mod publisher;
 
+pub use dispatcher::{OutboxStore, dispatch_once};
 pub use error::{OutboxError, OutboxResult};
 pub use models::{
     DispatchBatchLimit, DispatchOutcome, MessageKey, NewOutboxMessage, OutboxMessage, OutboxStatus,

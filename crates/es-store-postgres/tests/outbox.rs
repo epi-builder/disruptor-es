@@ -6,8 +6,9 @@ use std::time::Duration;
 
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
 use es_outbox::{
-    DispatchBatchLimit, MessageKey, NewOutboxMessage, PendingSourceEventRef, ProcessManagerName,
-    RetryPolicy, RetryScheduleOutcome, Topic, WorkerId,
+    DispatchBatchLimit, DispatchOutcome, InMemoryPublisher, MessageKey, NewOutboxMessage,
+    PendingSourceEventRef, ProcessManagerName, RetryPolicy, RetryScheduleOutcome, Topic, WorkerId,
+    dispatch_once,
 };
 use es_store_postgres::{
     AppendOutcome, AppendRequest, NewEvent, PostgresEventStore, PostgresOutboxStore, StoreError,
@@ -506,6 +507,151 @@ async fn outbox_process_manager_offsets_are_monotonic() -> anyhow::Result<()> {
             .process_manager_offset(&tenant, &process_manager)
             .await?
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn dispatcher_marks_successful_rows_published() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let events = PostgresEventStore::new(harness.pool.clone());
+    let outbox = PostgresOutboxStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let (source_event_id, source_global_position) =
+        append_source_event(&events, tenant.clone(), "order-dispatch-success", 1_000).await?;
+    let inserted = outbox
+        .insert_outbox_message(
+            &tenant,
+            &new_outbox_message(source_event_id, "orders.placed"),
+            source_global_position,
+        )
+        .await?;
+    let publisher = InMemoryPublisher::default();
+
+    let outcome = dispatch_once(
+        &outbox,
+        &publisher,
+        tenant.clone(),
+        worker_id("worker-a"),
+        batch_limit(10),
+        retry_policy(2),
+    )
+    .await?;
+
+    assert_eq!(DispatchOutcome::Published { published: 1 }, outcome);
+    let status = sqlx::query_as::<_, (String, Option<String>, Option<OffsetDateTime>)>(
+        "SELECT status, locked_by, published_at FROM outbox_messages WHERE outbox_id = $1",
+    )
+    .bind(inserted.outbox_id)
+    .fetch_one(&harness.pool)
+    .await?;
+    assert_eq!("published", status.0);
+    assert_eq!(None, status.1);
+    assert!(status.2.is_some());
+    assert_eq!(1, publisher.published().len());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn dispatcher_schedules_failed_publish_for_retry() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let events = PostgresEventStore::new(harness.pool.clone());
+    let outbox = PostgresOutboxStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let (source_event_id, source_global_position) =
+        append_source_event(&events, tenant.clone(), "order-dispatch-retry", 1_100).await?;
+    let inserted = outbox
+        .insert_outbox_message(
+            &tenant,
+            &new_outbox_message(source_event_id, "orders.placed"),
+            source_global_position,
+        )
+        .await?;
+    let publisher = InMemoryPublisher::default();
+    publisher.push_failure("broker down");
+
+    let outcome = dispatch_once(
+        &outbox,
+        &publisher,
+        tenant.clone(),
+        worker_id("worker-a"),
+        batch_limit(10),
+        retry_policy(2),
+    )
+    .await?;
+
+    assert_eq!(
+        DispatchOutcome::Partial {
+            published: 0,
+            retried: 1,
+            failed: 0
+        },
+        outcome
+    );
+    let row = sqlx::query_as::<_, (String, i32, Option<String>, Option<String>)>(
+        "SELECT status, attempts, locked_by, last_error FROM outbox_messages WHERE outbox_id = $1",
+    )
+    .bind(inserted.outbox_id)
+    .fetch_one(&harness.pool)
+    .await?;
+    assert_eq!("pending", row.0);
+    assert_eq!(1, row.1);
+    assert_eq!(None, row.2);
+    assert_eq!(Some("publisher error: broker down".to_owned()), row.3);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn dispatcher_reports_failed_rows_at_max_attempts() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let events = PostgresEventStore::new(harness.pool.clone());
+    let outbox = PostgresOutboxStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let (source_event_id, source_global_position) =
+        append_source_event(&events, tenant.clone(), "order-dispatch-failed", 1_200).await?;
+    let inserted = outbox
+        .insert_outbox_message(
+            &tenant,
+            &new_outbox_message(source_event_id, "orders.placed"),
+            source_global_position,
+        )
+        .await?;
+    let publisher = InMemoryPublisher::default();
+    publisher.push_failure("broker down");
+
+    let outcome = dispatch_once(
+        &outbox,
+        &publisher,
+        tenant.clone(),
+        worker_id("worker-a"),
+        batch_limit(10),
+        retry_policy(1),
+    )
+    .await?;
+
+    assert_eq!(
+        DispatchOutcome::Partial {
+            published: 0,
+            retried: 0,
+            failed: 1
+        },
+        outcome
+    );
+    let row = sqlx::query_as::<_, (String, i32, Option<String>, Option<String>)>(
+        "SELECT status, attempts, locked_by, last_error FROM outbox_messages WHERE outbox_id = $1",
+    )
+    .bind(inserted.outbox_id)
+    .fetch_one(&harness.pool)
+    .await?;
+    assert_eq!("failed", row.0);
+    assert_eq!(1, row.1);
+    assert_eq!(None, row.2);
+    assert_eq!(Some("publisher error: broker down".to_owned()), row.3);
 
     Ok(())
 }
