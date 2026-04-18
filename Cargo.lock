@@ -570,6 +570,15 @@ dependencies = [
 [[package]]
 name = "es-outbox"
 version = "0.1.0"
+dependencies = [
+ "es-core",
+ "futures",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "time",
+ "uuid",
+]
 
 [[package]]
 name = "es-projection"

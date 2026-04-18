@@ -1,3 +1,5 @@
+//! Contract tests for storage-neutral outbox models and publisher behavior.
+
 use es_core::TenantId;
 use es_outbox::{
     DispatchBatchLimit, InMemoryPublisher, MessageKey, OutboxError, OutboxMessage, OutboxStatus,
