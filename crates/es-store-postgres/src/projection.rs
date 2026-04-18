@@ -420,7 +420,7 @@ async fn update_order_status(
             updated_at = now()
         WHERE tenant_id = $1
           AND order_id = $2
-          AND last_applied_global_position <= $5
+          AND last_applied_global_position < $5
         "#,
     )
     .bind(event.tenant_id.as_str())
@@ -499,7 +499,7 @@ async fn update_product_inventory(
             updated_at = now()
         WHERE tenant_id = $1
           AND product_id = $2
-          AND last_applied_global_position <= $5
+          AND last_applied_global_position < $5
         "#,
     )
     .bind(event.tenant_id.as_str())
