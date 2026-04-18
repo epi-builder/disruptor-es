@@ -453,16 +453,16 @@ let outcome = receiver.await.map_err(|_| OutboxError::CommandReplyDropped)??;
 | A3 | The first commerce process-manager flow should use command replies, not `InventoryReserved` event correlation alone. | Summary / Common Pitfalls | If product events are expanded with order correlation in the same phase, event-only correlation becomes viable. |
 | A4 | Dispatcher retries should update `available_at` with a simple bounded backoff. | Code Examples | If users require a specific retry policy, planner needs more product input. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should Phase 6 add a product reservation event correlation field such as `order_id`?**
    - What we know: Current product events do not contain order IDs. [VERIFIED: crates/example-commerce/src/product.rs]
-   - What's unclear: Whether the commerce fixture should stay minimal or add correlation to product events for clearer workflow event reactions. [ASSUMED]
+   - RESOLVED: Keep the commerce fixture event shape unchanged in Phase 6. The process-manager example must correlate from the committed `OrderPlaced` source event, command metadata causation/correlation fields, deterministic idempotency keys, and command gateway replies rather than adding `order_id` to product events. [VERIFIED: crates/es-runtime/src/command.rs] [VERIFIED: crates/es-runtime/src/gateway.rs]
    - Recommendation: Do not mutate domain event shape unless necessary; use command metadata causation/correlation and command replies for the Phase 6 example. [VERIFIED: crates/es-store-postgres/src/models.rs] [ASSUMED]
 
 2. **Should outbox derivation be request-attached or trait-driven inside storage?**
    - What we know: `AppendRequest` currently carries stream, expected revision, command metadata, idempotency key, and events. [VERIFIED: crates/es-store-postgres/src/models.rs]
-   - What's unclear: Whether the planner will prefer adding outbox messages to `AppendRequest` or adding a derivation trait passed to append. [ASSUMED]
+   - RESOLVED: Use request-attached outbox messages, either by extending `AppendRequest` with `outbox_messages: Vec<NewOutboxMessage>` or by adding an explicit `append_with_outbox` API that accepts messages referencing known source event IDs. Do not add a domain-specific derivation trait inside private SQL/storage code. [VERIFIED: crates/es-store-postgres/src/models.rs] [VERIFIED: crates/es-store-postgres/src/sql.rs]
    - Recommendation: Add an `outbox_messages: Vec<NewOutboxMessage>` field or an `append_with_outbox` API where each message references a known `source_event_id`; avoid calling domain-specific derivation from private SQL. [VERIFIED: crates/es-store-postgres/src/models.rs] [ASSUMED]
 
 ## Environment Availability
