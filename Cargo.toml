@@ -82,5 +82,13 @@ harness = false
 name = "adapter_only"
 harness = false
 
+[[bench]]
+name = "storage_only"
+harness = false
+
+[[bench]]
+name = "projector_outbox"
+harness = false
+
 [lints]
 workspace = true
