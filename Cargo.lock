@@ -574,6 +574,15 @@ version = "0.1.0"
 [[package]]
 name = "es-projection"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "es-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+]
 
 [[package]]
 name = "es-runtime"
@@ -651,6 +660,8 @@ dependencies = [
  "es-core",
  "es-kernel",
  "proptest",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "time",
  "uuid",
