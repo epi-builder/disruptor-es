@@ -44,3 +44,41 @@ pub struct ProductInventoryReadModel {
     pub reserved_quantity: i32,
     pub last_applied_global_position: i64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use es_projection::{ProjectionError, ProjectionEvent};
+    use serde_json::json;
+
+    fn event(event_type: &str, payload: serde_json::Value) -> ProjectionEvent {
+        ProjectionEvent {
+            global_position: 1,
+            event_type: event_type.to_owned(),
+            schema_version: 1,
+            payload,
+            metadata: json!({}),
+            tenant_id: TenantId::new("tenant-a").expect("tenant id"),
+        }
+    }
+
+    #[test]
+    fn handled_projection_decode_rejects_malformed_payload() {
+        let error = decode_order_event(&event("OrderPlaced", json!({ "not": "an order" })))
+            .expect_err("malformed order payload rejected");
+
+        assert_eq!(
+            ProjectionError::PayloadDecode {
+                event_type: "OrderPlaced".to_owned(),
+                schema_version: 1,
+            },
+            error
+        );
+    }
+
+    #[test]
+    fn unknown_projection_events_are_ignored() {
+        assert!(decode_order_event(&event("OtherEvent", json!({}))).is_ok());
+        assert!(decode_product_event(&event("OtherEvent", json!({}))).is_ok());
+    }
+}
