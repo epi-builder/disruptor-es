@@ -4,3 +4,5 @@
 pub mod commerce_process_manager;
 /// Application-level tracing and metrics bootstrap.
 pub mod observability;
+/// Single-service integrated stress runner.
+pub mod stress;
