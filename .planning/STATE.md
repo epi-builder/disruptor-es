@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 07 execution complete; verification gates pending
+stopped_at: Phase 07 verification found gaps; gap closure needed
 last_updated: "2026-04-18T14:19:30.058Z"
-last_activity: 2026-04-18 -- Phase 07 execution complete
+last_activity: 2026-04-18 -- Phase 07 verification found gaps
 progress:
   total_phases: 7
   completed_phases: 6
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 Phase: 07 (adapters-observability-stress-and-template-guidance) — EXECUTING
 Plan: 6 of 6
-Status: Phase execution complete; verification pending
-Last activity: 2026-04-18 -- Phase 07 execution complete
+Status: Verification gaps found
+Last activity: 2026-04-18 -- Phase 07 verification found gaps
 
 Progress: [██████████] 100%
 
@@ -134,7 +134,9 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- Phase 07 verification gaps:
+  - Projection lag metric underreports backlog; compute against tenant durable max global position and test backlog behavior.
+  - Single-service stress report has synthetic append latency, shard depth, and projection lag fields; replace with measured values or change the report contract.
 
 ### Blockers/Concerns
 
