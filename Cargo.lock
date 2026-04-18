@@ -618,6 +618,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "es-core",
+ "es-outbox",
  "es-projection",
  "example-commerce",
  "serde",
