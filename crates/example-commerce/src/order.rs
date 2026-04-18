@@ -333,8 +333,7 @@ mod tests {
         };
 
         let value = serde_json::to_value(&event).expect("serialize order event");
-        let decoded =
-            serde_json::from_value::<OrderEvent>(value).expect("deserialize order event");
+        let decoded = serde_json::from_value::<OrderEvent>(value).expect("deserialize order event");
 
         assert_eq!(event, decoded);
         let OrderEvent::OrderPlaced {
@@ -360,8 +359,7 @@ mod tests {
         };
 
         let value = serde_json::to_value(&event).expect("serialize order event");
-        let decoded =
-            serde_json::from_value::<OrderEvent>(value).expect("deserialize order event");
+        let decoded = serde_json::from_value::<OrderEvent>(value).expect("deserialize order event");
 
         assert_eq!(event, decoded);
         let OrderEvent::OrderRejected { reason, .. } = decoded else {

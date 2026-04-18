@@ -161,11 +161,24 @@ pub enum ProductError {
         /// Requested release quantity.
         requested: u32,
     },
+    /// Inventory movement would overflow the destination counter.
+    #[error(
+        "inventory would overflow: available {available}, reserved {reserved}, requested {requested}"
+    )]
+    InventoryWouldOverflow {
+        /// Available quantity before the movement.
+        available: i32,
+        /// Reserved quantity before the movement.
+        reserved: i32,
+        /// Requested movement quantity.
+        requested: u32,
+    },
 }
 
 // Acceptance shape: InventoryWouldBeNegative { available: i32, delta: i32 }
 // Acceptance shape: InsufficientInventory { available: i32, requested: u32 }
 // Acceptance shape: InsufficientReservedInventory { reserved: i32, requested: u32 }
+// Acceptance shape: InventoryWouldOverflow { available: i32, reserved: i32, requested: u32 }
 
 impl ProductState {
     /// Returns the available quantity as a typed value when positive.
@@ -259,12 +272,20 @@ impl Aggregate for Product {
             } => {
                 ensure_created(state)?;
                 let requested = quantity.value();
-                if i64::from(requested) > i64::from(state.available_quantity) {
+                let requested_i32 = quantity_to_i32(quantity);
+                if requested_i32 > state.available_quantity {
                     return Err(ProductError::InsufficientInventory {
                         available: state.available_quantity,
                         requested,
                     });
                 }
+                state.reserved_quantity.checked_add(requested_i32).ok_or(
+                    ProductError::InventoryWouldOverflow {
+                        available: state.available_quantity,
+                        reserved: state.reserved_quantity,
+                        requested,
+                    },
+                )?;
 
                 Ok(Decision::new(
                     vec![ProductEvent::InventoryReserved {
@@ -280,12 +301,20 @@ impl Aggregate for Product {
             } => {
                 ensure_created(state)?;
                 let requested = quantity.value();
-                if i64::from(requested) > i64::from(state.reserved_quantity) {
+                let requested_i32 = quantity_to_i32(quantity);
+                if requested_i32 > state.reserved_quantity {
                     return Err(ProductError::InsufficientReservedInventory {
                         reserved: state.reserved_quantity,
                         requested,
                     });
                 }
+                state.available_quantity.checked_add(requested_i32).ok_or(
+                    ProductError::InventoryWouldOverflow {
+                        available: state.available_quantity,
+                        reserved: state.reserved_quantity,
+                        requested,
+                    },
+                )?;
 
                 Ok(Decision::new(
                     vec![ProductEvent::InventoryReleased {
@@ -584,6 +613,77 @@ mod tests {
                 &metadata()
             )
             .expect_err("negative available")
+        );
+    }
+
+    #[test]
+    fn product_rejects_inventory_movements_that_overflow_destination_counter() {
+        let mut state = created_state(i32::MAX as u32);
+        let reserve_all = Product::decide(
+            &state,
+            ProductCommand::ReserveInventory {
+                product_id: product_id(),
+                quantity: Quantity::new(i32::MAX as u32).expect("quantity"),
+            },
+            &metadata(),
+        )
+        .expect("reserve all");
+        for event in &reserve_all.events {
+            Product::apply(&mut state, event);
+        }
+
+        let replenish = Product::decide(
+            &state,
+            ProductCommand::AdjustInventory {
+                product_id: product_id(),
+                delta: i32::MAX,
+            },
+            &metadata(),
+        )
+        .expect("replenish available");
+        for event in &replenish.events {
+            Product::apply(&mut state, event);
+        }
+
+        assert_eq!(
+            ProductError::InventoryWouldOverflow {
+                available: i32::MAX,
+                reserved: i32::MAX,
+                requested: 1,
+            },
+            Product::decide(
+                &state,
+                ProductCommand::ReserveInventory {
+                    product_id: product_id(),
+                    quantity: Quantity::new(1).expect("quantity"),
+                },
+                &metadata()
+            )
+            .expect_err("reserved destination overflow")
+        );
+
+        let release_overflow_state = ProductState {
+            product_id: Some(product_id()),
+            sku: Some(sku()),
+            name: Some("product".to_owned()),
+            available_quantity: i32::MAX,
+            reserved_quantity: 1,
+        };
+        assert_eq!(
+            ProductError::InventoryWouldOverflow {
+                available: i32::MAX,
+                reserved: 1,
+                requested: 1,
+            },
+            Product::decide(
+                &release_overflow_state,
+                ProductCommand::ReleaseInventory {
+                    product_id: product_id(),
+                    quantity: Quantity::new(1).expect("quantity"),
+                },
+                &metadata()
+            )
+            .expect_err("available destination overflow")
         );
     }
 
