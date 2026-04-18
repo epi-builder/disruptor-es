@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Durable Event Store Source of Truth** - Commands can persist committed events, metadata, dedupe records, snapshots, and global reads through the event store boundary. Completed 2026-04-17.
 - [x] **Phase 3: Local Command Runtime and Disruptor Execution** - Adapter requests flow through bounded local shards that own hot state and reply only after durable append. Completed 2026-04-17.
 - [x] **Phase 4: Commerce Fixture Domain** - User, product, and order behavior proves typed decisions, replay, relationships, and invariants. Completed 2026-04-17.
-- [ ] **Phase 5: CQRS Projection and Query Catch-Up** - Committed events feed checkpointed read models with restart and read-your-own-write support.
+- [x] **Phase 5: CQRS Projection and Query Catch-Up** - Committed events feed checkpointed read models with restart and read-your-own-write support. Completed 2026-04-18.
 - [ ] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions.
 - [ ] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible.
 
@@ -101,7 +101,7 @@ Plans:
 Plans:
 - [x] 05-01-PLAN.md — Create projection contracts, validated checkpoints, catch-up outcomes, and bounded minimum-position wait policy.
 - [x] 05-02-PLAN.md — Add serde-backed commerce event payload support for order summary and product inventory projections.
-- [ ] 05-03-PLAN.md — Implement PostgreSQL projection schema, atomic catch-up, read-model queries, restart/idempotence tests, and read-your-own-write support.
+- [x] 05-03-PLAN.md — Implement PostgreSQL projection schema, atomic catch-up, read-model queries, restart/idempotence tests, and read-your-own-write support.
 
 ### Phase 6: Outbox and Process Manager Workflows
 **Goal**: Integration events and cross-entity workflows are driven from committed events through durable outbox rows and process managers, keeping broker publication and workflow follow-ups off the hot command path.
@@ -139,6 +139,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Durable Event Store Source of Truth | 4/4 | Complete | 2026-04-17 |
 | 3. Local Command Runtime and Disruptor Execution | 4/4 | Complete | 2026-04-17 |
 | 4. Commerce Fixture Domain | 4/4 | Complete | 2026-04-17 |
-| 5. CQRS Projection and Query Catch-Up | 0/TBD | Not started | - |
+| 5. CQRS Projection and Query Catch-Up | 3/3 | Complete | 2026-04-18 |
 | 6. Outbox and Process Manager Workflows | 0/TBD | Not started | - |
 | 7. Adapters, Observability, Stress, and Template Guidance | 0/TBD | Not started | - |

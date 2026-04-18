@@ -18,11 +18,11 @@ Provide a reusable, production-shaped Rust service template where committed even
 - [x] Phase 02 validated PostgreSQL as the durable event-store source of truth with stream optimistic concurrency, full event metadata, tenant-scoped command dedupe, snapshot rehydration inputs, and global-position reads.
 - [x] Phase 03 validated a bounded local command runtime with tenant-aware partition routing, shard-local aggregate and dedupe caches, nonblocking disruptor handoff, and commit-gated replies wired through `CommandEngine`.
 - [x] Phase 04 validated the commerce fixture domain with typed user, product, and order aggregates, replayable lifecycle/inventory/order events, explicit cross-entity IDs, typed invalid-state errors, and generated replay/invariant tests.
+- [x] Phase 05 validated CQRS projection contracts, tenant-scoped PostgreSQL projector offsets, order summary and product inventory read models, restart-safe catch-up, malformed payload rollback, and bounded read-your-own-write query waits.
 
 ### Active
 
 - [ ] Implement a generic command-processing kernel that supports typed aggregates, commands, events, replies, and domain errors.
-- [ ] Provide CQRS projection primitives with checkpointed projector offsets and rebuild/catch-up support.
 - [ ] Provide outbox-based integration events so external publication is decoupled from the hot command path.
 - [ ] Demonstrate domain workflows that cross entity boundaries without distributed transactions.
 - [ ] Expose a thin adapter boundary suitable for HTTP/gRPC/WebSocket frontends without putting shared mutable business state behind `Arc<Mutex<_>>`.
@@ -83,6 +83,7 @@ This gives enough relationships to test uniqueness, entity references, projectio
 | Use commerce/order as the initial example domain | It provides multiple related entities and realistic workflows without the complexity of a matching engine. | Validated in Phase 04 with user, product, and order aggregates plus generated replay/invariant tests. |
 | Keep `disruptor-rs` inside the command service process | The library is for in-process sequencing and fan-out, not cross-service communication. | Validated in Phase 03 with shard-local disruptor handoff and no durability coupling. |
 | Treat event store append commit as command success | Durability must not depend on ring publication or projection completion. | Validated in Phase 02 with PostgreSQL append/OCC/dedupe transactions. |
+| Keep projection freshness as a bounded query concern | Read-your-own-write support should not make projection completion part of command success. | Validated in Phase 05 with `MinimumGlobalPosition`, `WaitPolicy`, and `ProjectionLag` behavior. |
 | Use typed domain kernels instead of JSON/reflection in the hot path | Preserves Rust type safety and avoids erasing the performance benefits of preallocated ring entries. | - Pending |
 | Split generic infrastructure from domain rules | Enables reuse across future services while keeping domain logic strongly typed. | - Pending |
 | Model adapters as thin ingress layers with bounded queues and reply channels | Prevents HTTP/gRPC/WebSocket concerns from forcing mutex-heavy business state. | Validated in Phase 03 with bounded `CommandGateway` ingress and `CommandEngine` wiring. |
@@ -105,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-17 after Phase 04 completion*
+*Last updated: 2026-04-18 after Phase 05 completion*

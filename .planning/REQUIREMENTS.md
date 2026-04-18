@@ -42,7 +42,7 @@ Requirements for the initial template release. Each maps to roadmap phases.
 ### Projection and Query
 
 - [x] **PROJ-01**: Projector runtime applies committed events to read models and updates projector offsets in the same transaction.
-- [ ] **PROJ-02**: Example read models expose order summary and product inventory views derived from events.
+- [x] **PROJ-02**: Example read models expose order summary and product inventory views derived from events.
 - [x] **PROJ-03**: Projection runtime can catch up from a saved global-position checkpoint after restart.
 - [x] **PROJ-04**: Query path can optionally wait for a minimum global position to support read-your-own-write behavior.
 
@@ -133,7 +133,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOM-04 | Phase 4 | Complete |
 | DOM-05 | Phase 4 | Complete |
 | PROJ-01 | Phase 5 | Complete |
-| PROJ-02 | Phase 5 | Pending |
+| PROJ-02 | Phase 5 | Complete |
 | PROJ-03 | Phase 5 | Complete |
 | PROJ-04 | Phase 5 | Complete |
 | INT-01 | Phase 6 | Pending |
@@ -159,4 +159,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-16*
-*Last updated: 2026-04-18 after Phase 1 requirements status reconciliation*
+*Last updated: 2026-04-18 after Phase 05 completion*

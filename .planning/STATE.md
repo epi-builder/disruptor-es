@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-04-18T00:31:12.132Z"
+last_updated: "2026-04-18T01:15:09.109Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 19
-  completed_plans: 18
-  percent: 95
+  completed_plans: 19
+  percent: 100
 ---
 
 # Project State
@@ -21,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Provide a reusable, production-shaped Rust service template where committed events are the source of truth and `disruptor-rs` is used only as the in-process ordered execution engine.
-**Current focus:** Phase 05 — cqrs-projection-and-query-catch-up
+**Current focus:** Phase 06 — outbox-and-process-manager-workflows
 
 ## Current Position
 
-Phase: 05 (cqrs-projection-and-query-catch-up) — EXECUTING
-Plan: 2 of 3
+Phase: 6
+Plan: Not started
 Status: Ready to execute
 Last activity: 2026-04-18
 
-Progress: [██████░░░░] 57%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 16
+- Total plans completed: 19
 - Average duration: N/A
 - Total execution time: 0.0 hours
 
@@ -48,6 +48,7 @@ Progress: [██████░░░░] 57%
 | 02 | 4 | - | - |
 | 03 | 4 | - | - |
 | 04 | 4 | - | - |
+| 05 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -65,6 +66,8 @@ Progress: [██████░░░░] 57%
 | Phase 04-commerce-fixture-domain P03 | 5min 5s | 2 tasks | 2 files |
 | Phase 04-commerce-fixture-domain P04 | 4min 9s | 2 tasks | 3 files |
 | Phase 05-cqrs-projection-and-query-catch-up P01 | 5min 30s | 3 tasks | 8 files |
+| Phase 05-cqrs-projection-and-query-catch-up P02 | 3min | 2 tasks | 5 files |
+| Phase 05-cqrs-projection-and-query-catch-up P03 | - | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -104,6 +107,7 @@ Recent decisions affecting current work:
 - [Phase 05-cqrs-projection-and-query-catch-up]: Keep es-projection storage-neutral; PostgreSQL StoredEvent conversion remains in es-store-postgres.
 - [Phase 05-cqrs-projection-and-query-catch-up]: Use typed constructors to reject invalid projector names, positions, batch limits, and wait policies before storage calls.
 - [Phase 05-cqrs-projection-and-query-catch-up]: Minimum-position query waits are bounded by timeout and return ProjectionLag instead of blocking indefinitely.
+- [Phase 05-cqrs-projection-and-query-catch-up]: PostgreSQL projection catch-up updates read models and tenant-scoped offsets in the same transaction, with explicit rollback on malformed payload failures.
 
 ### Pending Todos
 
