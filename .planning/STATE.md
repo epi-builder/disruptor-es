@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-04-18T08:23:54.631Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-04-18T08:31:00.581Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 24
-  completed_plans: 22
-  percent: 92
+  completed_plans: 23
+  percent: 96
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 ## Current Position
 
 Phase: 06 (outbox-and-process-manager-workflows) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-04-18
 
@@ -71,6 +71,7 @@ Progress: [████████░░] 83%
 | Phase 06-outbox-and-process-manager-workflows P01 | 4min 41s | 1 tasks | 7 files |
 | Phase 06-outbox-and-process-manager-workflows P02 | 5min 43s | 1 tasks | 7 files |
 | Phase 06-outbox-and-process-manager-workflows P03 | 4min 5s | 1 tasks | 4 files |
+| Phase 06-outbox-and-process-manager-workflows P04 | 4min 31s | 1 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,9 @@ Recent decisions affecting current work:
 - [Phase 06-outbox-and-process-manager-workflows]: Validate pre-append outbox source event IDs against the events in the same append request before storage.
 - [Phase 06-outbox-and-process-manager-workflows]: Insert outbox rows after event rows have committed transaction-local global positions and before command dedupe is recorded.
 - [Phase 06-outbox-and-process-manager-workflows]: Use tenant_id from CommandMetadata for append-created outbox rows and ON CONFLICT (tenant_id, source_event_id, topic) DO NOTHING for late duplicate idempotency.
+- [Phase 06-outbox-and-process-manager-workflows]: Keep dispatch orchestration in es-outbox storage-neutral; PostgreSQL implements the OutboxStore port instead of leaking SQLx into dispatcher code.
+- [Phase 06-outbox-and-process-manager-workflows]: Count publisher failures from the storage retry outcome so rows exhausted at max attempts are reported as failed, not retried.
+- [Phase 06-outbox-and-process-manager-workflows]: Use a fixed 30-second PostgreSQL claim lock in the OutboxStore adapter while preserving the repository's explicit lock-duration API.
 
 ### Pending Todos
 
@@ -147,6 +151,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-18T08:23:54.626Z
-Stopped at: Completed 06-03-PLAN.md
+Last session: 2026-04-18T08:31:00.576Z
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None
