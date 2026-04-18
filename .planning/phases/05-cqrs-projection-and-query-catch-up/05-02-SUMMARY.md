@@ -81,7 +81,7 @@ Each task was committed atomically:
 - `cargo test -p example-commerce projection_payload -- --nocapture` - PASS, 4 projection payload tests passed
 - `cargo test -p example-commerce dependency_boundaries -- --nocapture` - PASS, command exited 0
 - `cargo test -p example-commerce --test dependency_boundaries -- --nocapture` - PASS, 3 dependency boundary tests passed
-- `cargo test --workspace` - FAIL outside this plan's ownership; `crates/es-projection/tests/minimum_position.rs` has 3 failing Plan 05-01 tests (`minimum_position_rejects_empty_projector_name`, `minimum_position_rejects_negative_required_position`, `minimum_position_rejects_invalid_batch_limits`)
+- `cargo test --workspace` - PASS after concurrent Plan 05-01 fixes landed; full workspace tests and doc-tests completed successfully
 
 ## Decisions Made
 
@@ -95,7 +95,7 @@ None - plan executed as written for files owned by 05-02.
 ## Issues Encountered
 
 - Task 2 was marked `tdd="true"`, but its tests were already expected to pass after Task 1 added serde support. The coverage was committed as a test-only task commit.
-- The workspace wave gate failed in Plan 05-01-owned `es-projection` tests. This executor did not modify those files.
+- The first workspace wave-gate attempt failed in Plan 05-01-owned `es-projection` tests. After the owning executor's follow-up commits landed, rerunning `cargo test --workspace` passed.
 - `Cargo.lock` was modified by Cargo while Plan 05-01 changes were present in the workspace; it was left unstaged because it is outside this executor's ownership list.
 
 ## Known Stubs
@@ -112,7 +112,7 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 
-05-02 targeted outputs are ready for Plan 05-03 projection decoding work. Wave 2 should wait for Plan 05-01's `es-projection` constructor validation failures and shared `Cargo.lock` state to be resolved by the owning executor/orchestrator.
+05-02 targeted outputs are ready for Plan 05-03 projection decoding work. The workspace wave gate is green; shared `Cargo.lock` state remains outside this executor's ownership and should be handled by the owning executor/orchestrator.
 
 ## Self-Check: PASSED
 
