@@ -251,6 +251,37 @@ async fn offset_position(
         .map(|offset| offset.last_global_position))
 }
 
+async fn upsert_offset_for_regression(
+    pool: &sqlx::PgPool,
+    tenant: &TenantId,
+    projector: &ProjectorName,
+    last_global_position: i64,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO projector_offsets (
+            tenant_id,
+            projector_name,
+            last_global_position
+        )
+        VALUES ($1, $2, $3)
+        ON CONFLICT (tenant_id, projector_name) DO UPDATE
+        SET last_global_position = GREATEST(
+                projector_offsets.last_global_position,
+                EXCLUDED.last_global_position
+            ),
+            updated_at = now()
+        "#,
+    )
+    .bind(tenant.as_str())
+    .bind(projector.as_str())
+    .bind(last_global_position)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn projections_offset_commits_with_read_models() -> anyhow::Result<()> {
     let _guard = POSTGRES_TEST_LOCK.lock().await;
@@ -280,6 +311,25 @@ async fn projections_offset_commits_with_read_models() -> anyhow::Result<()> {
     assert_eq!(last_position, order.last_applied_global_position);
     assert_eq!(
         Some(last_position),
+        offset_position(&projections, &tenant, &projector).await?
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn projector_offset_does_not_move_backward_on_stale_upsert() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let projections = PostgresProjectionStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let projector = projector_name();
+
+    upsert_offset_for_regression(&harness.pool, &tenant, &projector, 20).await?;
+    upsert_offset_for_regression(&harness.pool, &tenant, &projector, 10).await?;
+
+    assert_eq!(
+        Some(20),
         offset_position(&projections, &tenant, &projector).await?
     );
 

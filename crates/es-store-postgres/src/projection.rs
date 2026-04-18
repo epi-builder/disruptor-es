@@ -529,7 +529,10 @@ async fn upsert_projector_offset(
         )
         VALUES ($1, $2, $3)
         ON CONFLICT (tenant_id, projector_name) DO UPDATE
-        SET last_global_position = EXCLUDED.last_global_position,
+        SET last_global_position = GREATEST(
+                projector_offsets.last_global_position,
+                EXCLUDED.last_global_position
+            ),
             updated_at = now()
         "#,
     )
