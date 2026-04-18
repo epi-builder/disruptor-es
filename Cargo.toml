@@ -10,16 +10,29 @@ version = "0.1.0"
 
 [workspace.dependencies]
 anyhow = "1.0.102"
+axum = "0.8.9"
+criterion = "0.7.0"
 disruptor = "4.0.0"
 futures = "0.3.32"
+hdrhistogram = "7.5.4"
+metrics = "0.24.3"
+metrics-exporter-prometheus = "0.18.1"
+opentelemetry = "0.31.0"
+opentelemetry-otlp = "0.31.1"
+opentelemetry_sdk = "0.31.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "json", "migrate"] }
+sysinfo = "0.36.1"
 testcontainers = "0.25.0"
 testcontainers-modules = { version = "0.13.0", features = ["postgres"] }
 thiserror = "2.0.18"
 tokio = { version = "1.52.0", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tower = "0.5.3"
+tower-http = { version = "0.6.8", features = ["trace", "cors", "compression-full"] }
 tracing = "0.1.44"
+tracing-opentelemetry = "0.32.1"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 twox-hash = "2.1.2"
 uuid = { version = "1.23.0", features = ["serde", "v7"] }
 time = { version = "=0.3.44", features = ["serde", "formatting", "parsing"] }
