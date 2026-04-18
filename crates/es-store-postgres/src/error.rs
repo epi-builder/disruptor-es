@@ -92,6 +92,12 @@ pub enum StoreError {
         #[source]
         source: serde_json::Error,
     },
+    /// Stored outbox row could not be represented by outbox contract types.
+    #[error("outbox error: {message}")]
+    Outbox {
+        /// Validation or mapping error message.
+        message: String,
+    },
     /// SQLx returned a database error.
     #[error("database error")]
     Database(#[from] sqlx::Error),

@@ -10,6 +10,7 @@ mod event_store;
 /// Identifier generation helpers.
 pub mod ids;
 mod models;
+mod outbox;
 mod projection;
 mod rehydrate;
 mod sql;
@@ -21,4 +22,5 @@ pub use models::{
     AppendOutcome, AppendRequest, CommittedAppend, MAX_JSON_PAYLOAD_BYTES, NewEvent,
     RehydrationBatch, SaveSnapshotRequest, SnapshotRecord, StoredEvent,
 };
+pub use outbox::PostgresOutboxStore;
 pub use projection::{OrderSummaryReadModel, PostgresProjectionStore, ProductInventoryReadModel};
