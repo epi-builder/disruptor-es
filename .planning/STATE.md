@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-04-18T08:31:00.581Z"
+status: verifying
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-04-18T08:42:19.875Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 24
-  completed_plans: 23
-  percent: 96
+  completed_plans: 24
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 06 (outbox-and-process-manager-workflows) — EXECUTING
+Phase: 06 (outbox-and-process-manager-workflows) — VERIFYING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-18
 
-Progress: [████████░░] 83%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [████████░░] 83%
 | Phase 06-outbox-and-process-manager-workflows P02 | 5min 43s | 1 tasks | 7 files |
 | Phase 06-outbox-and-process-manager-workflows P03 | 4min 5s | 1 tasks | 4 files |
 | Phase 06-outbox-and-process-manager-workflows P04 | 4min 31s | 1 tasks | 6 files |
+| Phase 06-outbox-and-process-manager-workflows P05 | 8min 48s | 1 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,10 @@ Recent decisions affecting current work:
 - [Phase 06-outbox-and-process-manager-workflows]: Keep dispatch orchestration in es-outbox storage-neutral; PostgreSQL implements the OutboxStore port instead of leaking SQLx into dispatcher code.
 - [Phase 06-outbox-and-process-manager-workflows]: Count publisher failures from the storage retry outcome so rows exhausted at max attempts are reported as failed, not retried.
 - [Phase 06-outbox-and-process-manager-workflows]: Use a fixed 30-second PostgreSQL claim lock in the OutboxStore adapter while preserving the repository's explicit lock-duration API.
+- [Phase 06-outbox-and-process-manager-workflows]: Keep process-manager contracts in es-outbox storage-neutral; app composes es-outbox, es-runtime, and example-commerce to avoid crate dependency cycles.
+- [Phase 06-outbox-and-process-manager-workflows]: Read process-manager batches from PostgresEventStore::read_global using the saved tenant-scoped offset before delegating to process_batch.
+- [Phase 06-outbox-and-process-manager-workflows]: Use deterministic follow-up idempotency keys in the form pm:{process_manager}:{source_event_id}:{action}:{target_id}.
+- [Phase 06-outbox-and-process-manager-workflows]: Advance durable process-manager offsets only after follow-up command replies complete or an event is intentionally skipped.
 
 ### Pending Todos
 
@@ -151,6 +156,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-18T08:31:00.576Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-04-18T08:42:08.649Z
+Stopped at: Completed 06-05-PLAN.md
 Resume file: None

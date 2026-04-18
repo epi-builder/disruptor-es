@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Local Command Runtime and Disruptor Execution** - Adapter requests flow through bounded local shards that own hot state and reply only after durable append. Completed 2026-04-17.
 - [x] **Phase 4: Commerce Fixture Domain** - User, product, and order behavior proves typed decisions, replay, relationships, and invariants. Completed 2026-04-17.
 - [x] **Phase 5: CQRS Projection and Query Catch-Up** - Committed events feed checkpointed read models with restart and read-your-own-write support. Completed 2026-04-18.
-- [ ] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions.
+- [x] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions. Completed 2026-04-18.
 - [ ] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible.
 
 ## Phase Details
@@ -118,7 +118,7 @@ Plans:
 - [x] 06-02-PLAN.md — Add PostgreSQL outbox schema, repository, and process-manager offsets.
 - [x] 06-03-PLAN.md — Insert derived outbox rows inside append transactions.
 - [x] 06-04-PLAN.md — Dispatch pending outbox rows with idempotent retry.
-- [ ] 06-05-PLAN.md — Implement the commerce process-manager workflow through command gateways.
+- [x] 06-05-PLAN.md — Implement the commerce process-manager workflow through command gateways.
 
 ### Phase 7: Adapters, Observability, Stress, and Template Guidance
 **Goal**: The template is usable from thin HTTP boundaries, observable under load, verified against real storage paths, benchmarked by layer, and documented with the rules that keep the architecture correct.
@@ -146,5 +146,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Local Command Runtime and Disruptor Execution | 4/4 | Complete | 2026-04-17 |
 | 4. Commerce Fixture Domain | 4/4 | Complete | 2026-04-17 |
 | 5. CQRS Projection and Query Catch-Up | 3/3 | Complete | 2026-04-18 |
-| 6. Outbox and Process Manager Workflows | 0/TBD | Not started | - |
+| 6. Outbox and Process Manager Workflows | 5/5 | Complete | 2026-04-18 |
 | 7. Adapters, Observability, Stress, and Template Guidance | 0/TBD | Not started | - |
