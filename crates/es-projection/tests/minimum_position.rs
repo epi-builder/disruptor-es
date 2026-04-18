@@ -3,8 +3,8 @@
 use std::{future::Future, pin::Pin, time::Duration};
 
 use es_projection::{
-    wait_for_minimum_position, CatchUpOutcome, FreshnessCheck, MinimumGlobalPosition,
-    ProjectionBatchLimit, ProjectionError, ProjectionResult, ProjectorName, WaitPolicy,
+    CatchUpOutcome, FreshnessCheck, MinimumGlobalPosition, ProjectionBatchLimit, ProjectionError,
+    ProjectionResult, ProjectorName, WaitPolicy, wait_for_minimum_position,
 };
 
 #[test]
@@ -16,8 +16,7 @@ fn minimum_position_rejects_empty_projector_name() {
 
 #[test]
 fn minimum_position_rejects_negative_required_position() {
-    let error =
-        MinimumGlobalPosition::new(-1).expect_err("negative minimum position must fail");
+    let error = MinimumGlobalPosition::new(-1).expect_err("negative minimum position must fail");
 
     assert_eq!(ProjectionError::InvalidGlobalPosition { value: -1 }, error);
 }
@@ -25,8 +24,7 @@ fn minimum_position_rejects_negative_required_position() {
 #[test]
 fn minimum_position_rejects_invalid_batch_limits() {
     let zero = ProjectionBatchLimit::new(0).expect_err("zero batch limit must fail");
-    let too_large =
-        ProjectionBatchLimit::new(1001).expect_err("oversized batch limit must fail");
+    let too_large = ProjectionBatchLimit::new(1001).expect_err("oversized batch limit must fail");
 
     assert_eq!(ProjectionError::InvalidBatchLimit { value: 0 }, zero);
     assert_eq!(
@@ -80,8 +78,7 @@ fn minimum_position_freshness_compare_reports_lagging_position() {
 #[tokio::test]
 async fn minimum_position_zero_timeout_returns_projection_lag() {
     let required = MinimumGlobalPosition::new(7).expect("minimum position");
-    let policy =
-        WaitPolicy::new(Duration::ZERO, Duration::from_millis(1)).expect("wait policy");
+    let policy = WaitPolicy::new(Duration::ZERO, Duration::from_millis(1)).expect("wait policy");
     let result = wait_for_minimum_position(required, policy, position_loader(3)).await;
 
     assert_eq!(

@@ -65,7 +65,7 @@ Each task was committed atomically:
 1. **Task 1: Add serde derives to commerce projection payload types** - `88d5ac4` (feat)
 2. **Task 2: Add commerce event JSON round-trip tests** - `265096c` (test)
 
-**Plan metadata:** `8dfd8d9` (docs)
+**Plan metadata:** this summary commit (docs)
 
 ## Files Created/Modified
 

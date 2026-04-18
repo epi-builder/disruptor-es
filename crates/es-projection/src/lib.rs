@@ -5,9 +5,7 @@ mod error;
 mod projector;
 mod query;
 
-pub use checkpoint::{
-    MinimumGlobalPosition, ProjectionBatchLimit, ProjectorName, ProjectorOffset,
-};
+pub use checkpoint::{MinimumGlobalPosition, ProjectionBatchLimit, ProjectorName, ProjectorOffset};
 pub use error::{ProjectionError, ProjectionResult};
 pub use projector::{CatchUpOutcome, ProjectionEvent, Projector};
 pub use query::{FreshnessCheck, WaitPolicy, wait_for_minimum_position};
