@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 es-core = { path = "../es-core" }
 es-kernel = { path = "../es-kernel" }
+serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

@@ -1,13 +1,14 @@
 use crate::{OrderId, ProductId, Quantity, Sku, UserId};
 use es_core::{CommandMetadata, ExpectedRevision, PartitionKey, StreamId};
 use es_kernel::{Aggregate, Decision};
+use serde::{Deserialize, Serialize};
 
 /// Order aggregate marker.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Order;
 
 /// Order lifecycle status.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum OrderStatus {
     /// Order has not been placed.
     #[default]
@@ -23,7 +24,7 @@ pub enum OrderStatus {
 }
 
 /// Product line captured by an order.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct OrderLine {
     /// Product identity referenced by the order.
     pub product_id: ProductId,
@@ -66,7 +67,7 @@ pub enum OrderCommand {
 }
 
 /// Events emitted by the order aggregate.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(missing_docs)]
 #[rustfmt::skip]
 pub enum OrderEvent {

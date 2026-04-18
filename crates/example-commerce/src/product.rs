@@ -1,6 +1,7 @@
 use crate::{ProductId, Quantity, Sku};
 use es_core::{CommandMetadata, ExpectedRevision, PartitionKey, StreamId};
 use es_kernel::{Aggregate, Decision};
+use serde::{Deserialize, Serialize};
 
 /// Product aggregate marker.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -63,7 +64,7 @@ pub enum ProductCommand {
 // Acceptance shape: ReleaseInventory { product_id: ProductId, quantity: Quantity }
 
 /// Events emitted by the product aggregate.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ProductEvent {
     /// Product was created with initial inventory.
     ProductCreated {

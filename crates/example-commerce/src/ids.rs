@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 /// Errors returned by commerce domain identity constructors.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum CommerceIdError {
@@ -10,7 +12,7 @@ pub enum CommerceIdError {
 }
 
 /// User aggregate identity.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct UserId(String);
 
 impl UserId {
@@ -31,7 +33,7 @@ impl UserId {
 }
 
 /// Product aggregate identity.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct ProductId(String);
 
 impl ProductId {
@@ -52,7 +54,7 @@ impl ProductId {
 }
 
 /// Order aggregate identity.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct OrderId(String);
 
 impl OrderId {
@@ -73,7 +75,7 @@ impl OrderId {
 }
 
 /// Product stock-keeping unit.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Sku(String);
 
 impl Sku {
@@ -94,7 +96,7 @@ impl Sku {
 }
 
 /// Positive item quantity.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct Quantity(u32);
 
 impl Quantity {
