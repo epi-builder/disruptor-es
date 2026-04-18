@@ -138,7 +138,7 @@ Plans:
 - [x] 07-02-PLAN.md — Add app observability bootstrap plus runtime, storage, projection, and outbox trace/metric instrumentation.
 - [x] 07-03-PLAN.md — Add real PostgreSQL Phase 7 integration coverage for append, conflicts, dedupe, snapshots, projections, and outbox dispatch.
 - [x] 07-04-PLAN.md — Create layer-separated benchmark artifacts for ring, domain, adapter, storage, projector/outbox, and required scenario smoke coverage.
-- [ ] 07-05-PLAN.md — Implement the single-service integrated stress runner and stress-smoke app bootstrap.
+- [x] 07-05-PLAN.md — Implement the single-service integrated stress runner and stress-smoke app bootstrap.
 - [ ] 07-06-PLAN.md — Document hot-path rules, gateway boundaries, template extension steps, and stress-result interpretation.
 
 ## Progress
