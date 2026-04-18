@@ -572,22 +572,25 @@ pub async fn start_postgres() -> anyhow::Result<(ContainerAsync<Postgres>, PgPoo
 | A2 | Testcontainers should remain default and manual `DATABASE_URL` fallback is optional unless implemented. | Common Pitfalls | If CI cannot run Docker, planner must add a fallback or CI service container task. |
 | A3 | It is tempting for adapters to access all app components for convenience. | Common Pitfalls | If planner ignores this human-factor risk, dependency-boundary checks may be weaker. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should Phase 7 upgrade Rust above 1.85?**
    - What we know: Workspace pins `rust-version = "1.85"` and `rustc 1.85.1` is installed locally. [VERIFIED: Cargo.toml; VERIFIED: `rustc --version`]
    - What's unclear: Whether the project wants to unlock Criterion 0.8.2 or sysinfo 0.38.4 in this phase. [VERIFIED: cargo info criterion@0.8.2; VERIFIED: cargo info sysinfo@0.38.4]
    - Recommendation: Do not upgrade Rust in Phase 7; use Criterion 0.7.0 and sysinfo 0.36.1 to keep scope focused. [VERIFIED: cargo info criterion; VERIFIED: cargo info sysinfo]
+   - RESOLVED: Keep Rust 1.85 for Phase 7 and pin Criterion 0.7.0 plus sysinfo 0.36.1; do not use this phase to upgrade the workspace MSRV.
 
 2. **Should observability export use Prometheus, OTLP, or both?**
    - What we know: `metrics-exporter-prometheus` and OpenTelemetry OTLP crates are current and compatible with Rust 1.85. [VERIFIED: cargo info metrics-exporter-prometheus; VERIFIED: cargo info opentelemetry-otlp]
    - What's unclear: The target deployment backend is not specified. [VERIFIED: .planning/PROJECT.md]
    - Recommendation: Provide Prometheus exporter for local stress/demo and optional OTLP initialization at app boundary. [VERIFIED: cargo info metrics-exporter-prometheus; VERIFIED: cargo info opentelemetry-otlp]
+   - RESOLVED: Provide Prometheus exporter support for local stress/demo and optional OTLP initialization at the app boundary; lower crates emit through `tracing` and `metrics` without depending on exporter SDKs.
 
 3. **How should the app server/stress runner be invoked?**
    - What we know: `crates/app/src/main.rs` is currently a shell. [VERIFIED: crates/app/src/main.rs]
    - What's unclear: No CLI shape is locked for `serve` vs `stress`. [VERIFIED: .planning/ROADMAP.md]
    - Recommendation: Add minimal app APIs first; add CLI commands only if needed for stress artifact generation. [ASSUMED]
+   - RESOLVED: Use `cargo run -p app -- stress-smoke` as the minimal app invocation for Phase 7 stress artifact generation; broader `serve` CLI design remains outside this phase.
 
 ## Environment Availability
 
