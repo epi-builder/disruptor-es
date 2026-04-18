@@ -2,17 +2,19 @@
 
 mod common;
 
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
 use es_outbox::{
     DispatchBatchLimit, DispatchOutcome, InMemoryPublisher, MessageKey, NewOutboxMessage,
-    PendingSourceEventRef, ProcessManagerName, RetryPolicy, RetryScheduleOutcome, Topic, WorkerId,
-    dispatch_once,
+    PendingSourceEventRef, ProcessEvent, ProcessManager, ProcessManagerName, RetryPolicy,
+    RetryScheduleOutcome, Topic, WorkerId, dispatch_once, process_committed_batch,
 };
 use es_store_postgres::{
     AppendOutcome, AppendRequest, NewEvent, PostgresEventStore, PostgresOutboxStore, StoreError,
 };
+use futures::future::BoxFuture;
 use serde_json::json;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
@@ -128,6 +130,46 @@ async fn outbox_row_count(pool: &sqlx::PgPool, tenant_id: &str) -> anyhow::Resul
             .await?;
 
     Ok(count)
+}
+
+struct ReplyingProcessManager {
+    name: ProcessManagerName,
+    seen: Arc<StdMutex<Vec<ProcessEvent>>>,
+}
+
+impl ReplyingProcessManager {
+    fn new(name: ProcessManagerName) -> Self {
+        Self {
+            name,
+            seen: Arc::new(StdMutex::new(Vec::new())),
+        }
+    }
+}
+
+impl ProcessManager for ReplyingProcessManager {
+    fn name(&self) -> &ProcessManagerName {
+        &self.name
+    }
+
+    fn handles(&self, event_type: &str, schema_version: i32) -> bool {
+        event_type == "OrderPlaced" && schema_version == 1
+    }
+
+    fn process<'a>(
+        &'a self,
+        event: &'a ProcessEvent,
+    ) -> BoxFuture<'a, es_outbox::OutboxResult<es_outbox::ProcessOutcome>> {
+        self.seen
+            .lock()
+            .expect("seen process events")
+            .push(event.clone());
+        Box::pin(async move {
+            Ok(es_outbox::ProcessOutcome::CommandsSubmitted {
+                global_position: event.global_position,
+                command_count: 2,
+            })
+        })
+    }
 }
 
 #[tokio::test]
@@ -507,6 +549,79 @@ async fn outbox_process_manager_offsets_are_monotonic() -> anyhow::Result<()> {
             .process_manager_offset(&tenant, &process_manager)
             .await?
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn process_manager_advances_postgres_offset_after_gateway_replies() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let event_store = PostgresEventStore::new(harness.pool.clone());
+    let outbox = PostgresOutboxStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let name = process_manager_name("commerce-order");
+    let event_id = Uuid::from_u128(9010);
+    let metadata = command_metadata(tenant.clone(), 9010);
+    let payload = json!({
+        "OrderPlaced": {
+            "order_id": "order-1",
+            "user_id": "user-1",
+            "lines": [{
+                "product_id": "product-1",
+                "sku": "SKU-1",
+                "quantity": 2,
+                "product_available": true
+            }]
+        }
+    });
+    let event_metadata = json!({ "source": "process-manager-integration" });
+
+    let outcome = event_store
+        .append(AppendRequest::new(
+            stream_id("order-process-manager"),
+            ExpectedRevision::NoStream,
+            metadata.clone(),
+            "process-manager-source-command",
+            vec![NewEvent::new(
+                event_id,
+                "OrderPlaced",
+                1,
+                payload.clone(),
+                event_metadata.clone(),
+            )?],
+        )?)
+        .await?;
+
+    let AppendOutcome::Committed(committed) = outcome else {
+        panic!("append should commit");
+    };
+    let source_global_position = committed.global_positions[0];
+    let manager = ReplyingProcessManager::new(name.clone());
+
+    process_committed_batch(
+        &manager,
+        &event_store,
+        &outbox,
+        tenant.clone(),
+        DispatchBatchLimit::new(10)?,
+    )
+    .await?;
+
+    assert_eq!(
+        Some(source_global_position),
+        outbox.process_manager_offset(&tenant, &name).await?
+    );
+    let seen = manager.seen.lock().expect("seen process events");
+    assert_eq!(1, seen.len());
+    assert_eq!(source_global_position, seen[0].global_position);
+    assert_eq!(tenant, seen[0].tenant_id);
+    assert_eq!(event_id, seen[0].event_id);
+    assert_eq!(metadata.command_id, seen[0].command_id);
+    assert_eq!(metadata.correlation_id, seen[0].correlation_id);
+    assert_eq!(metadata.causation_id, seen[0].causation_id);
+    assert_eq!(payload, seen[0].payload);
+    assert_eq!(event_metadata, seen[0].metadata);
 
     Ok(())
 }
