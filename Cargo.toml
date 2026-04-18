@@ -1,3 +1,11 @@
+[package]
+name = "disruptor-es-benchmarks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
 [workspace]
 members = ["crates/*"]
 resolver = "3"
@@ -42,3 +50,37 @@ insta = "1.47.2"
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+
+[dev-dependencies]
+anyhow.workspace = true
+criterion.workspace = true
+es-core = { path = "crates/es-core" }
+es-kernel = { path = "crates/es-kernel" }
+es-outbox = { path = "crates/es-outbox" }
+es-projection = { path = "crates/es-projection" }
+es-runtime = { path = "crates/es-runtime" }
+es-store-postgres = { path = "crates/es-store-postgres" }
+example-commerce = { path = "crates/example-commerce" }
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+testcontainers.workspace = true
+testcontainers-modules.workspace = true
+time.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[[bench]]
+name = "ring_only"
+harness = false
+
+[[bench]]
+name = "domain_only"
+harness = false
+
+[[bench]]
+name = "adapter_only"
+harness = false
+
+[lints]
+workspace = true
