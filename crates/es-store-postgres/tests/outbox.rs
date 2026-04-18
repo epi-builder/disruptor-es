@@ -4,13 +4,13 @@ mod common;
 
 use std::time::Duration;
 
-use es_core::{CommandMetadata, ExpectedRevision, StreamId, TenantId};
+use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
 use es_outbox::{
     DispatchBatchLimit, MessageKey, NewOutboxMessage, PendingSourceEventRef, ProcessManagerName,
     RetryPolicy, RetryScheduleOutcome, Topic, WorkerId,
 };
 use es_store_postgres::{
-    AppendOutcome, AppendRequest, NewEvent, PostgresEventStore, PostgresOutboxStore,
+    AppendOutcome, AppendRequest, NewEvent, PostgresEventStore, PostgresOutboxStore, StoreError,
 };
 use serde_json::json;
 use time::OffsetDateTime;
@@ -72,6 +72,17 @@ fn new_outbox_message(source_event_id: Uuid, topic_value: &str) -> NewOutboxMess
     )
 }
 
+fn new_event(seed: u128, event_type: &str) -> NewEvent {
+    NewEvent::new(
+        Uuid::from_u128(seed),
+        event_type,
+        1,
+        json!({ "seed": seed }),
+        json!({ "source": "append-outbox-test" }),
+    )
+    .expect("valid event")
+}
+
 async fn append_source_event(
     store: &PostgresEventStore,
     tenant: TenantId,
@@ -106,6 +117,142 @@ async fn append_source_event(
             .first()
             .expect("source event global position"),
     ))
+}
+
+async fn outbox_row_count(pool: &sqlx::PgPool, tenant_id: &str) -> anyhow::Result<i64> {
+    let count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM outbox_messages WHERE tenant_id = $1",
+    )
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(count)
+}
+
+#[tokio::test]
+async fn append_creates_outbox_rows_atomically() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let store = PostgresEventStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let event = new_event(700, "OrderPlaced");
+    let message = new_outbox_message(event.event_id, "orders.placed");
+
+    let outcome = store
+        .append(AppendRequest::new_with_outbox(
+            stream_id("order-append-outbox"),
+            ExpectedRevision::NoStream,
+            command_metadata(tenant.clone(), 700),
+            "append-outbox-command",
+            vec![event],
+            vec![message],
+        )?)
+        .await?;
+
+    let AppendOutcome::Committed(committed) = outcome else {
+        panic!("append with outbox should commit");
+    };
+    let source_global_position = *committed
+        .global_positions
+        .first()
+        .expect("committed global position");
+
+    let row = sqlx::query_as::<_, (String, Uuid, i64, String, String, String)>(
+        r#"
+        SELECT tenant_id, source_event_id, source_global_position, topic, message_key, status
+        FROM outbox_messages
+        WHERE tenant_id = $1
+        "#,
+    )
+    .bind("tenant-a")
+    .fetch_one(&harness.pool)
+    .await?;
+
+    assert_eq!("tenant-a", row.0);
+    assert_eq!(Uuid::from_u128(700), row.1);
+    assert_eq!(source_global_position, row.2);
+    assert_eq!("orders.placed", row.3);
+    assert_eq!(format!("key-{}", Uuid::from_u128(700)), row.4);
+    assert_eq!("pending", row.5);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn append_duplicate_replay_does_not_duplicate_outbox_rows() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let store = PostgresEventStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let event = new_event(800, "OrderPlaced");
+    let message = new_outbox_message(event.event_id, "orders.placed");
+
+    let first = store
+        .append(AppendRequest::new_with_outbox(
+            stream_id("order-duplicate-outbox"),
+            ExpectedRevision::NoStream,
+            command_metadata(tenant.clone(), 800),
+            "duplicate-outbox-command",
+            vec![event.clone()],
+            vec![message.clone()],
+        )?)
+        .await?;
+    let duplicate = store
+        .append(AppendRequest::new_with_outbox(
+            stream_id("order-duplicate-outbox"),
+            ExpectedRevision::NoStream,
+            command_metadata(tenant.clone(), 801),
+            "duplicate-outbox-command",
+            vec![new_event(801, "OrderPlaced")],
+            vec![new_outbox_message(Uuid::from_u128(801), "orders.placed")],
+        )?)
+        .await?;
+
+    assert!(matches!(first, AppendOutcome::Committed(_)));
+    assert!(matches!(duplicate, AppendOutcome::Duplicate(_)));
+    assert_eq!(1, outbox_row_count(&harness.pool, "tenant-a").await?);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn append_conflict_rolls_back_outbox_rows() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let store = PostgresEventStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+
+    store
+        .append(AppendRequest::new(
+            stream_id("order-conflict-outbox"),
+            ExpectedRevision::NoStream,
+            command_metadata(tenant.clone(), 900),
+            "seed-conflict-stream",
+            vec![new_event(900, "OrderPlaced")],
+        )?)
+        .await?;
+
+    let conflicting_event = new_event(901, "OrderConfirmed");
+    let error = store
+        .append(AppendRequest::new_with_outbox(
+            stream_id("order-conflict-outbox"),
+            ExpectedRevision::Exact(StreamRevision::new(99)),
+            command_metadata(tenant, 901),
+            "conflicting-outbox-command",
+            vec![conflicting_event.clone()],
+            vec![new_outbox_message(
+                conflicting_event.event_id,
+                "orders.confirmed",
+            )],
+        )?)
+        .await
+        .expect_err("wrong expected revision should conflict");
+
+    assert!(matches!(error, StoreError::StreamConflict { .. }));
+    assert_eq!(0, outbox_row_count(&harness.pool, "tenant-a").await?);
+
+    Ok(())
 }
 
 #[tokio::test]
