@@ -64,13 +64,15 @@ impl ProcessManager for CommerceOrderProcessManager {
 
             let mut command_count = 0;
             let mut inventory_reserved = true;
+            let mut reserved_lines = Vec::new();
             for line in lines {
                 let (reply, receiver) = tokio::sync::oneshot::channel();
                 let product_id = line.product_id.clone();
+                let quantity = line.quantity;
                 let envelope = CommandEnvelope::<Product>::new(
                     ProductCommand::ReserveInventory {
                         product_id: product_id.clone(),
-                        quantity: line.quantity,
+                        quantity,
                     },
                     follow_up_metadata(event),
                     format!(
@@ -91,11 +93,42 @@ impl ProcessManager for CommerceOrderProcessManager {
                     .await
                     .map_err(|_| OutboxError::CommandReplyDropped)?
                 {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        reserved_lines.push((product_id, quantity));
+                    }
                     Err(_) => {
                         inventory_reserved = false;
                         break;
                     }
+                }
+            }
+
+            if !inventory_reserved {
+                for (product_id, quantity) in reserved_lines {
+                    let (reply, receiver) = tokio::sync::oneshot::channel();
+                    let envelope = CommandEnvelope::<Product>::new(
+                        ProductCommand::ReleaseInventory {
+                            product_id: product_id.clone(),
+                            quantity,
+                        },
+                        follow_up_metadata(event),
+                        format!(
+                            "pm:{}:{}:release:{}",
+                            self.name.as_str(),
+                            event.event_id,
+                            product_id.as_str()
+                        ),
+                        reply,
+                    )
+                    .map_err(command_submit_error)?;
+                    self.product_gateway
+                        .try_submit(envelope)
+                        .map_err(command_submit_error)?;
+                    command_count += 1;
+                    receiver
+                        .await
+                        .map_err(|_| OutboxError::CommandReplyDropped)?
+                        .map_err(command_submit_error)?;
                 }
             }
 
@@ -431,6 +464,127 @@ mod tests {
             ProcessOutcome::CommandsSubmitted {
                 global_position: 42,
                 command_count: 2
+            },
+            task.await.expect("process task")?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn multi_line_reserve_failure_releases_prior_reservations_before_rejecting()
+    -> OutboxResult<()> {
+        let (product_gateway, mut product_rx, order_gateway, mut order_rx) = gateways();
+        let manager = CommerceOrderProcessManager::new(
+            process_manager_name(),
+            product_gateway,
+            order_gateway,
+        );
+        let first_product = product_id("product-1");
+        let second_product = product_id("product-2");
+        let event = process_event(OrderEvent::OrderPlaced {
+            order_id: order_id(),
+            user_id: UserId::new("user-1").expect("user id"),
+            lines: vec![line(first_product.clone()), line(second_product.clone())],
+        });
+
+        let process_event = event.clone();
+        let task = tokio::spawn(async move { manager.process(&process_event).await });
+
+        let first_reserve = receive_product(&mut product_rx).await;
+        assert_eq!(
+            ProductCommand::ReserveInventory {
+                product_id: first_product.clone(),
+                quantity: Quantity::new(2).expect("quantity")
+            },
+            first_reserve.envelope.command
+        );
+        assert!(
+            first_reserve
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    ProductReply::InventoryReserved {
+                        product_id: first_product.clone(),
+                    },
+                    committed_append(43, Uuid::from_u128(43)),
+                )))
+                .is_ok()
+        );
+
+        let second_reserve = receive_product(&mut product_rx).await;
+        assert_eq!(
+            ProductCommand::ReserveInventory {
+                product_id: second_product,
+                quantity: Quantity::new(2).expect("quantity")
+            },
+            second_reserve.envelope.command
+        );
+        assert!(
+            second_reserve
+                .envelope
+                .reply
+                .send(Err(RuntimeError::Domain {
+                    message: "insufficient inventory".to_owned(),
+                }))
+                .is_ok()
+        );
+
+        let release = receive_product(&mut product_rx).await;
+        assert_eq!(
+            ProductCommand::ReleaseInventory {
+                product_id: first_product.clone(),
+                quantity: Quantity::new(2).expect("quantity")
+            },
+            release.envelope.command
+        );
+        assert_eq!(
+            format!(
+                "pm:{}:{}:release:{}",
+                process_manager_name().as_str(),
+                event.event_id,
+                first_product.as_str()
+            ),
+            release.envelope.idempotency_key
+        );
+        assert!(
+            release
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    ProductReply::InventoryReleased {
+                        product_id: first_product,
+                    },
+                    committed_append(44, Uuid::from_u128(44)),
+                )))
+                .is_ok()
+        );
+
+        let reject = receive_order(&mut order_rx).await;
+        assert_eq!(
+            OrderCommand::RejectOrder {
+                order_id: order_id(),
+                reason: "inventory reservation failed".to_owned()
+            },
+            reject.envelope.command
+        );
+        assert!(
+            reject
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    OrderReply::Rejected {
+                        order_id: order_id(),
+                    },
+                    committed_append(45, Uuid::from_u128(45)),
+                )))
+                .is_ok()
+        );
+
+        assert_eq!(
+            ProcessOutcome::CommandsSubmitted {
+                global_position: 42,
+                command_count: 4
             },
             task.await.expect("process task")?
         );
