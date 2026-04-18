@@ -112,7 +112,13 @@ Plans:
   2. A dispatcher can publish pending outbox rows through a publisher trait and mark successful rows as published.
   3. Dispatcher retries are idempotent by source event and topic, so repeated attempts do not create duplicate external effects.
   4. A process manager reacts to order/product events and issues follow-up commands through the same command gateway without distributed transactions.
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 06-01-PLAN.md — Define storage-neutral outbox contracts and publisher idempotency.
+- [ ] 06-02-PLAN.md — Add PostgreSQL outbox schema, repository, and process-manager offsets.
+- [ ] 06-03-PLAN.md — Insert derived outbox rows inside append transactions.
+- [ ] 06-04-PLAN.md — Dispatch pending outbox rows with idempotent retry.
+- [ ] 06-05-PLAN.md — Implement the commerce process-manager workflow through command gateways.
 
 ### Phase 7: Adapters, Observability, Stress, and Template Guidance
 **Goal**: The template is usable from thin HTTP boundaries, observable under load, verified against real storage paths, benchmarked by layer, and documented with the rules that keep the architecture correct.
