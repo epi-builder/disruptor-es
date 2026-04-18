@@ -19,12 +19,11 @@ Provide a reusable, production-shaped Rust service template where committed even
 - [x] Phase 03 validated a bounded local command runtime with tenant-aware partition routing, shard-local aggregate and dedupe caches, nonblocking disruptor handoff, and commit-gated replies wired through `CommandEngine`.
 - [x] Phase 04 validated the commerce fixture domain with typed user, product, and order aggregates, replayable lifecycle/inventory/order events, explicit cross-entity IDs, typed invalid-state errors, and generated replay/invariant tests.
 - [x] Phase 05 validated CQRS projection contracts, tenant-scoped PostgreSQL projector offsets, order summary and product inventory read models, restart-safe catch-up, malformed payload rollback, and bounded read-your-own-write query waits.
+- [x] Phase 06 validated durable outbox integration rows, append-transaction outbox creation, idempotent dispatcher publication/retry semantics, and an app-composed commerce process manager that issues follow-up commands through runtime gateways.
 
 ### Active
 
 - [ ] Implement a generic command-processing kernel that supports typed aggregates, commands, events, replies, and domain errors.
-- [ ] Provide outbox-based integration events so external publication is decoupled from the hot command path.
-- [ ] Demonstrate domain workflows that cross entity boundaries without distributed transactions.
 - [ ] Expose a thin adapter boundary suitable for HTTP/gRPC/WebSocket frontends without putting shared mutable business state behind `Arc<Mutex<_>>`.
 - [ ] Include stress-test and observability hooks that measure ring wait, routing latency, decision time, append latency, projection lag, outbox lag, and p95/p99 latency.
 - [ ] Include a single-service integrated stress test that runs the actual production-shaped process composition: adapter, bounded ingress, partition router, shard runtime, disruptor command path, event store append, projection, outbox dispatcher, and query path.
@@ -84,6 +83,7 @@ This gives enough relationships to test uniqueness, entity references, projectio
 | Keep `disruptor-rs` inside the command service process | The library is for in-process sequencing and fan-out, not cross-service communication. | Validated in Phase 03 with shard-local disruptor handoff and no durability coupling. |
 | Treat event store append commit as command success | Durability must not depend on ring publication or projection completion. | Validated in Phase 02 with PostgreSQL append/OCC/dedupe transactions. |
 | Keep projection freshness as a bounded query concern | Read-your-own-write support should not make projection completion part of command success. | Validated in Phase 05 with `MinimumGlobalPosition`, `WaitPolicy`, and `ProjectionLag` behavior. |
+| Use durable outbox rows and process-manager offsets for integration workflows | External effects and cross-entity follow-ups must be recoverable, idempotent, and outside the hot command path. | Validated in Phase 06 with append-created outbox rows, dispatcher retries, worker ownership checks, and a commerce process manager composed in `app`. |
 | Use typed domain kernels instead of JSON/reflection in the hot path | Preserves Rust type safety and avoids erasing the performance benefits of preallocated ring entries. | - Pending |
 | Split generic infrastructure from domain rules | Enables reuse across future services while keeping domain logic strongly typed. | - Pending |
 | Model adapters as thin ingress layers with bounded queues and reply channels | Prevents HTTP/gRPC/WebSocket concerns from forcing mutex-heavy business state. | Validated in Phase 03 with bounded `CommandGateway` ingress and `CommandEngine` wiring. |
@@ -106,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-18 after Phase 05 completion*
+*Last updated: 2026-04-18 after Phase 06 completion*
