@@ -7,9 +7,12 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+hdrhistogram.workspace = true
 es-core = { path = "../es-core" }
 es-outbox = { path = "../es-outbox" }
+es-projection = { path = "../es-projection" }
 es-runtime = { path = "../es-runtime" }
+es-store-postgres = { path = "../es-store-postgres" }
 example-commerce = { path = "../example-commerce" }
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
@@ -17,6 +20,10 @@ opentelemetry.workspace = true
 opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
+sysinfo.workspace = true
+testcontainers.workspace = true
+testcontainers-modules.workspace = true
 time.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -25,7 +32,7 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-es-store-postgres = { path = "../es-store-postgres" }
+adapter-http = { path = "../adapter-http" }
 
 [lints]
 workspace = true
