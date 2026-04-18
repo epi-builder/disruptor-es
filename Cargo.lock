@@ -609,6 +609,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "es-core",
+ "es-projection",
+ "example-commerce",
  "serde",
  "serde_json",
  "sqlx",

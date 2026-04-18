@@ -7,6 +7,8 @@ license.workspace = true
 
 [dependencies]
 es-core = { path = "../es-core" }
+es-projection = { path = "../es-projection" }
+example-commerce = { path = "../example-commerce" }
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
