@@ -114,7 +114,7 @@ Plans:
   4. A process manager reacts to order/product events and issues follow-up commands through the same command gateway without distributed transactions.
 **Plans**: 5 plans
 Plans:
-- [ ] 06-01-PLAN.md — Define storage-neutral outbox contracts and publisher idempotency.
+- [x] 06-01-PLAN.md — Define storage-neutral outbox contracts and publisher idempotency.
 - [ ] 06-02-PLAN.md — Add PostgreSQL outbox schema, repository, and process-manager offsets.
 - [ ] 06-03-PLAN.md — Insert derived outbox rows inside append transactions.
 - [ ] 06-04-PLAN.md — Dispatch pending outbox rows with idempotent retry.

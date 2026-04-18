@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 06 planned; ready to execute
-last_updated: "2026-04-18T07:24:14.809Z"
-last_activity: 2026-04-18 -- Phase 06 planning complete
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-04-18T08:08:35.759Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 24
-  completed_plans: 19
-  percent: 79
+  completed_plans: 20
+  percent: 83
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 6
-Plan: Not started
+Phase: 06 (outbox-and-process-manager-workflows) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-04-18 -- Phase 06 planning complete
+Last activity: 2026-04-18
 
-Progress: [████████░░] 79%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Progress: [████████░░] 79%
 | Phase 05-cqrs-projection-and-query-catch-up P01 | 5min 30s | 3 tasks | 8 files |
 | Phase 05-cqrs-projection-and-query-catch-up P02 | 3min | 2 tasks | 5 files |
 | Phase 05-cqrs-projection-and-query-catch-up P03 | - | 3 tasks | 7 files |
+| Phase 06-outbox-and-process-manager-workflows P01 | 4min 41s | 1 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,9 @@ Recent decisions affecting current work:
 - [Phase 05-cqrs-projection-and-query-catch-up]: Use typed constructors to reject invalid projector names, positions, batch limits, and wait policies before storage calls.
 - [Phase 05-cqrs-projection-and-query-catch-up]: Minimum-position query waits are bounded by timeout and return ProjectionLag instead of blocking indefinitely.
 - [Phase 05-cqrs-projection-and-query-catch-up]: PostgreSQL projection catch-up updates read models and tenant-scoped offsets in the same transaction, with explicit rollback on malformed payload failures.
+- [Phase 06-outbox-and-process-manager-workflows]: Keep es-outbox storage-neutral with typed contracts, futures::BoxFuture, and no SQLx, broker, adapter, or disruptor runtime APIs.
+- [Phase 06-outbox-and-process-manager-workflows]: Use deterministic outbox publisher idempotency keys in the form tenant_id:topic:source_event_id.
+- [Phase 06-outbox-and-process-manager-workflows]: Separate pre-append PendingSourceEventRef from persisted SourceEventRef so global positions are only required after storage commit.
 
 ### Pending Todos
 
@@ -134,6 +138,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-18T06:29:35Z
-Stopped at: Completed Phase 05; Phase 06 not started
+Last session: 2026-04-18T08:08:26.872Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None

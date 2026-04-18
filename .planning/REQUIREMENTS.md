@@ -48,9 +48,9 @@ Requirements for the initial template release. Each maps to roadmap phases.
 
 ### Outbox and Process Managers
 
-- [ ] **INT-01**: Append transaction can create outbox rows derived from committed domain events.
-- [ ] **INT-02**: Outbox dispatcher publishes pending rows through a publisher trait and marks successful rows as published.
-- [ ] **INT-03**: Outbox dispatch is retryable and idempotent by source event and topic.
+- [x] **INT-01**: Append transaction can create outbox rows derived from committed domain events.
+- [x] **INT-02**: Outbox dispatcher publishes pending rows through a publisher trait and marks successful rows as published.
+- [x] **INT-03**: Outbox dispatch is retryable and idempotent by source event and topic.
 - [ ] **INT-04**: A process-manager example reacts to order/product events and issues follow-up commands through the same command gateway.
 
 ### Adapter and API
@@ -136,9 +136,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROJ-02 | Phase 5 | Complete |
 | PROJ-03 | Phase 5 | Complete |
 | PROJ-04 | Phase 5 | Complete |
-| INT-01 | Phase 6 | Pending |
-| INT-02 | Phase 6 | Pending |
-| INT-03 | Phase 6 | Pending |
+| INT-01 | Phase 6 | Complete |
+| INT-02 | Phase 6 | Complete |
+| INT-03 | Phase 6 | Complete |
 | INT-04 | Phase 6 | Pending |
 | API-01 | Phase 7 | Pending |
 | API-02 | Phase 7 | Pending |
