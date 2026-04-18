@@ -10,6 +10,7 @@ es-core = { path = "../es-core" }
 es-outbox = { version = "0.1.0", path = "../es-outbox" }
 es-projection = { path = "../es-projection" }
 example-commerce = { path = "../example-commerce" }
+futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

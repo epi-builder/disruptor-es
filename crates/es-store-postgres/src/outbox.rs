@@ -4,9 +4,11 @@ use std::time::Duration;
 
 use es_core::TenantId;
 use es_outbox::{
-    DispatchBatchLimit, MessageKey, NewOutboxMessage, OutboxMessage, OutboxStatus,
-    ProcessManagerName, RetryPolicy, RetryScheduleOutcome, SourceEventRef, Topic, WorkerId,
+    DispatchBatchLimit, MessageKey, NewOutboxMessage, OutboxError, OutboxMessage, OutboxResult,
+    OutboxStatus, OutboxStore, ProcessManagerName, RetryPolicy, RetryScheduleOutcome,
+    SourceEventRef, Topic, WorkerId,
 };
+use futures::future::BoxFuture;
 use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -264,6 +266,53 @@ impl PostgresOutboxStore {
     }
 }
 
+impl OutboxStore for PostgresOutboxStore {
+    fn claim_pending(
+        &self,
+        tenant_id: TenantId,
+        worker_id: WorkerId,
+        limit: DispatchBatchLimit,
+    ) -> BoxFuture<'_, OutboxResult<Vec<OutboxMessage>>> {
+        Box::pin(async move {
+            PostgresOutboxStore::claim_pending(
+                self,
+                &tenant_id,
+                &worker_id,
+                limit,
+                Duration::from_secs(30),
+            )
+            .await
+            .map_err(outbox_store_error)
+        })
+    }
+
+    fn mark_published(
+        &self,
+        tenant_id: TenantId,
+        outbox_id: Uuid,
+    ) -> BoxFuture<'_, OutboxResult<()>> {
+        Box::pin(async move {
+            PostgresOutboxStore::mark_published(self, &tenant_id, outbox_id)
+                .await
+                .map_err(outbox_store_error)
+        })
+    }
+
+    fn schedule_retry(
+        &self,
+        tenant_id: TenantId,
+        outbox_id: Uuid,
+        error: String,
+        retry_policy: RetryPolicy,
+    ) -> BoxFuture<'_, OutboxResult<RetryScheduleOutcome>> {
+        Box::pin(async move {
+            PostgresOutboxStore::schedule_retry(self, &tenant_id, outbox_id, &error, retry_policy)
+                .await
+                .map_err(outbox_store_error)
+        })
+    }
+}
+
 #[derive(sqlx::FromRow)]
 struct OutboxRow {
     outbox_id: Uuid,
@@ -313,6 +362,12 @@ fn outbox_message_from_row(row: OutboxRow) -> StoreResult<OutboxMessage> {
 
 fn outbox_mapping_error(error: impl std::fmt::Display) -> StoreError {
     StoreError::Outbox {
+        message: error.to_string(),
+    }
+}
+
+fn outbox_store_error(error: StoreError) -> OutboxError {
+    OutboxError::Store {
         message: error.to_string(),
     }
 }

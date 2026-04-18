@@ -49,8 +49,51 @@ where
     S: OutboxStore,
     P: Publisher,
 {
-    let _ = (store, publisher, tenant_id, worker_id, limit, retry_policy);
-    Ok(DispatchOutcome::Idle)
+    let claimed = store
+        .claim_pending(tenant_id.clone(), worker_id, limit)
+        .await?;
+    if claimed.is_empty() {
+        return Ok(DispatchOutcome::Idle);
+    }
+
+    let mut published = 0;
+    let mut retried = 0;
+    let mut failed = 0;
+
+    for message in claimed {
+        match publisher.publish(message.publish_envelope()).await {
+            Ok(()) => {
+                store
+                    .mark_published(tenant_id.clone(), message.outbox_id)
+                    .await?;
+                published += 1;
+            }
+            Err(error) => {
+                match store
+                    .schedule_retry(
+                        tenant_id.clone(),
+                        message.outbox_id,
+                        error.to_string(),
+                        retry_policy,
+                    )
+                    .await?
+                {
+                    RetryScheduleOutcome::RetryScheduled => retried += 1,
+                    RetryScheduleOutcome::Failed => failed += 1,
+                }
+            }
+        }
+    }
+
+    if retried == 0 && failed == 0 {
+        Ok(DispatchOutcome::Published { published })
+    } else {
+        Ok(DispatchOutcome::Partial {
+            published,
+            retried,
+            failed,
+        })
+    }
 }
 
 #[cfg(test)]

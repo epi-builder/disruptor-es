@@ -621,6 +621,7 @@ dependencies = [
  "es-outbox",
  "es-projection",
  "example-commerce",
+ "futures",
  "serde",
  "serde_json",
  "sqlx",
