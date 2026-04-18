@@ -134,9 +134,9 @@ Plans:
   7. Documentation states hot-path rules plus service-boundary guidance and explains how to interpret single-service stress results separately from ring-only microbenchmarks.
 **Plans**: 6 plans
 Plans:
-- [ ] 07-01-PLAN.md — Implement the thin Axum HTTP command adapter, response/error contract, dependency catalog, and adapter boundary tests.
+- [x] 07-01-PLAN.md — Implement the thin Axum HTTP command adapter, response/error contract, dependency catalog, and adapter boundary tests.
 - [ ] 07-02-PLAN.md — Add app observability bootstrap plus runtime, storage, projection, and outbox trace/metric instrumentation.
-- [ ] 07-03-PLAN.md — Add real PostgreSQL Phase 7 integration coverage for append, conflicts, dedupe, snapshots, projections, and outbox dispatch.
+- [x] 07-03-PLAN.md — Add real PostgreSQL Phase 7 integration coverage for append, conflicts, dedupe, snapshots, projections, and outbox dispatch.
 - [ ] 07-04-PLAN.md — Create layer-separated benchmark artifacts for ring, domain, adapter, storage, projector/outbox, and required scenario smoke coverage.
 - [ ] 07-05-PLAN.md — Implement the single-service integrated stress runner and stress-smoke app bootstrap.
 - [ ] 07-06-PLAN.md — Document hot-path rules, gateway boundaries, template extension steps, and stress-result interpretation.
