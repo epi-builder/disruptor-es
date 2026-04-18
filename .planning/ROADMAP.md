@@ -115,7 +115,7 @@ Plans:
 **Plans**: 5 plans
 Plans:
 - [x] 06-01-PLAN.md — Define storage-neutral outbox contracts and publisher idempotency.
-- [ ] 06-02-PLAN.md — Add PostgreSQL outbox schema, repository, and process-manager offsets.
+- [x] 06-02-PLAN.md — Add PostgreSQL outbox schema, repository, and process-manager offsets.
 - [ ] 06-03-PLAN.md — Insert derived outbox rows inside append transactions.
 - [ ] 06-04-PLAN.md — Dispatch pending outbox rows with idempotent retry.
 - [ ] 06-05-PLAN.md — Implement the commerce process-manager workflow through command gateways.

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-04-18T08:08:35.759Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-04-18T08:17:16.744Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 24
-  completed_plans: 20
-  percent: 83
+  completed_plans: 21
+  percent: 88
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 ## Current Position
 
 Phase: 06 (outbox-and-process-manager-workflows) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-04-18
 
@@ -69,6 +69,7 @@ Progress: [████████░░] 83%
 | Phase 05-cqrs-projection-and-query-catch-up P02 | 3min | 2 tasks | 5 files |
 | Phase 05-cqrs-projection-and-query-catch-up P03 | - | 3 tasks | 7 files |
 | Phase 06-outbox-and-process-manager-workflows P01 | 4min 41s | 1 tasks | 7 files |
+| Phase 06-outbox-and-process-manager-workflows P02 | 5min 43s | 1 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,9 @@ Recent decisions affecting current work:
 - [Phase 06-outbox-and-process-manager-workflows]: Keep es-outbox storage-neutral with typed contracts, futures::BoxFuture, and no SQLx, broker, adapter, or disruptor runtime APIs.
 - [Phase 06-outbox-and-process-manager-workflows]: Use deterministic outbox publisher idempotency keys in the form tenant_id:topic:source_event_id.
 - [Phase 06-outbox-and-process-manager-workflows]: Separate pre-append PendingSourceEventRef from persisted SourceEventRef so global positions are only required after storage commit.
+- [Phase 06-outbox-and-process-manager-workflows]: Use PostgreSQL row locking with FOR UPDATE SKIP LOCKED for concurrent dispatcher claims instead of in-memory locks.
+- [Phase 06-outbox-and-process-manager-workflows]: Keep process-manager progress as tenant-scoped monotonic offsets using GREATEST on upsert.
+- [Phase 06-outbox-and-process-manager-workflows]: Validate inserted outbox rows against the source event's tenant and global position before storing them.
 
 ### Pending Todos
 
@@ -138,6 +142,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-18T08:08:26.872Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-04-18T08:17:16.739Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
