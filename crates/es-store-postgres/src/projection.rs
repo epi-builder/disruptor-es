@@ -95,10 +95,17 @@ impl PostgresProjectionStore {
             .global_position;
 
         let mut tx = self.pool.begin().await.map_err(projection_store_error)?;
-        for event in &events {
-            apply_projection_event(&mut tx, event).await?;
+        let apply_result = async {
+            for event in &events {
+                apply_projection_event(&mut tx, event).await?;
+            }
+            upsert_projector_offset(&mut tx, tenant_id, projector_name, last_global_position).await
         }
-        upsert_projector_offset(&mut tx, tenant_id, projector_name, last_global_position).await?;
+        .await;
+        if let Err(error) = apply_result {
+            tx.rollback().await.map_err(projection_store_error)?;
+            return Err(error);
+        }
         tx.commit().await.map_err(projection_store_error)?;
 
         Ok(CatchUpOutcome::Applied {
