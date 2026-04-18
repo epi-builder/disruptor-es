@@ -92,8 +92,10 @@ impl PostgresOutboxStore {
                 SELECT outbox_id
                 FROM outbox_messages
                 WHERE tenant_id = $1
-                  AND status = 'pending'
-                  AND available_at <= now()
+                  AND (
+                      (status = 'pending' AND available_at <= now())
+                      OR (status = 'publishing' AND locked_until <= now())
+                  )
                 ORDER BY source_global_position, outbox_id
                 LIMIT $2
                 FOR UPDATE SKIP LOCKED

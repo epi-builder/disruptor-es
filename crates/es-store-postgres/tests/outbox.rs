@@ -386,6 +386,53 @@ async fn outbox_claims_pending_rows_with_skip_locked() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn outbox_reclaims_expired_publishing_rows() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let events = PostgresEventStore::new(harness.pool.clone());
+    let outbox = PostgresOutboxStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let (source_event_id, source_global_position) =
+        append_source_event(&events, tenant.clone(), "order-1", 350).await?;
+    let inserted = outbox
+        .insert_outbox_message(
+            &tenant,
+            &new_outbox_message(source_event_id, "orders.placed"),
+            source_global_position,
+        )
+        .await?;
+
+    let first_claim = outbox
+        .claim_pending(
+            &tenant,
+            &worker_id("worker-a"),
+            batch_limit(1),
+            Duration::from_secs(0),
+        )
+        .await?;
+    assert_eq!(vec![inserted.outbox_id], vec![first_claim[0].outbox_id]);
+    assert_eq!(1, first_claim[0].attempts);
+
+    let second_claim = outbox
+        .claim_pending(
+            &tenant,
+            &worker_id("worker-b"),
+            batch_limit(1),
+            Duration::from_secs(30),
+        )
+        .await?;
+
+    assert_eq!(vec![inserted.outbox_id], vec![second_claim[0].outbox_id]);
+    assert_eq!(2, second_claim[0].attempts);
+    assert_eq!(
+        Some("worker-b"),
+        second_claim[0].locked_by.as_ref().map(WorkerId::as_str)
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn outbox_retry_and_failed_status_are_bounded() -> anyhow::Result<()> {
     let _guard = POSTGRES_TEST_LOCK.lock().await;
     let harness = common::start_postgres().await?;
