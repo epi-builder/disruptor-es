@@ -324,6 +324,52 @@ mod tests {
         }
     }
 
+    #[test]
+    fn order_projection_payload_roundtrips_order_placed() {
+        let event = OrderEvent::OrderPlaced {
+            order_id: order_id(),
+            user_id: user_id(),
+            lines: vec![available_line()],
+        };
+
+        let value = serde_json::to_value(&event).expect("serialize order event");
+        let decoded =
+            serde_json::from_value::<OrderEvent>(value).expect("deserialize order event");
+
+        assert_eq!(event, decoded);
+        let OrderEvent::OrderPlaced {
+            order_id,
+            user_id,
+            lines,
+        } = decoded
+        else {
+            panic!("expected OrderPlaced");
+        };
+        assert_eq!(order_id, self::order_id());
+        assert_eq!(user_id, self::user_id());
+        assert_eq!(1, lines.len());
+        assert_eq!(sku(), lines[0].sku);
+        assert_eq!(Quantity::new(2).expect("quantity"), lines[0].quantity);
+    }
+
+    #[test]
+    fn order_projection_payload_roundtrips_order_rejected() {
+        let event = OrderEvent::OrderRejected {
+            order_id: order_id(),
+            reason: "out of stock".to_owned(),
+        };
+
+        let value = serde_json::to_value(&event).expect("serialize order event");
+        let decoded =
+            serde_json::from_value::<OrderEvent>(value).expect("deserialize order event");
+
+        assert_eq!(event, decoded);
+        let OrderEvent::OrderRejected { reason, .. } = decoded else {
+            panic!("expected OrderRejected");
+        };
+        assert_eq!("out of stock", reason);
+    }
+
     fn place_command(lines: Vec<OrderLine>) -> OrderCommand {
         OrderCommand::PlaceOrder {
             order_id: order_id(),

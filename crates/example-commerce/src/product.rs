@@ -399,6 +399,53 @@ mod tests {
         state
     }
 
+    #[test]
+    fn product_projection_payload_roundtrips_product_created() {
+        let event = ProductEvent::ProductCreated {
+            product_id: product_id(),
+            sku: sku(),
+            name: "Keyboard".to_owned(),
+            initial_quantity: Quantity::new(5).expect("quantity"),
+        };
+
+        let value = serde_json::to_value(&event).expect("serialize product event");
+        let decoded =
+            serde_json::from_value::<ProductEvent>(value).expect("deserialize product event");
+
+        assert_eq!(event, decoded);
+        let ProductEvent::ProductCreated {
+            product_id,
+            sku,
+            name,
+            initial_quantity,
+        } = decoded
+        else {
+            panic!("expected ProductCreated");
+        };
+        assert_eq!(product_id, self::product_id());
+        assert_eq!(sku, self::sku());
+        assert_eq!("Keyboard", name);
+        assert_eq!(Quantity::new(5).expect("quantity"), initial_quantity);
+    }
+
+    #[test]
+    fn product_projection_payload_roundtrips_inventory_reserved() {
+        let event = ProductEvent::InventoryReserved {
+            product_id: product_id(),
+            quantity: Quantity::new(2).expect("quantity"),
+        };
+
+        let value = serde_json::to_value(&event).expect("serialize product event");
+        let decoded =
+            serde_json::from_value::<ProductEvent>(value).expect("deserialize product event");
+
+        assert_eq!(event, decoded);
+        let ProductEvent::InventoryReserved { quantity, .. } = decoded else {
+            panic!("expected InventoryReserved");
+        };
+        assert_eq!(Quantity::new(2).expect("quantity"), quantity);
+    }
+
     fn inventory_step_strategy() -> impl Strategy<Value = InventoryStep> {
         prop_oneof![
             (-8i32..=8).prop_map(InventoryStep::Adjust),
