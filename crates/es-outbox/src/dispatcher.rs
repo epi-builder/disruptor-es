@@ -2,6 +2,9 @@
 
 use es_core::TenantId;
 use futures::future::BoxFuture;
+use metrics::{counter, gauge};
+use time::OffsetDateTime;
+use tracing::{Instrument, info_span};
 use uuid::Uuid;
 
 use crate::{
@@ -55,6 +58,7 @@ where
         .claim_pending(tenant_id.clone(), worker_id.clone(), limit)
         .await?;
     if claimed.is_empty() {
+        counter!("es_outbox_dispatch_total", "outcome" => "idle").increment(1);
         return Ok(DispatchOutcome::Idle);
     }
 
@@ -63,11 +67,27 @@ where
     let mut failed = 0;
 
     for message in claimed {
-        match publisher.publish(message.publish_envelope()).await {
+        let topic = message.topic.as_str().to_owned();
+        let lag_seconds = (OffsetDateTime::now_utc() - message.created_at)
+            .as_seconds_f64()
+            .max(0.0);
+        gauge!("es_outbox_lag", "topic" => topic.clone()).set(lag_seconds);
+        let span = info_span!(
+            "outbox.dispatch",
+            tenant_id = %tenant_id.as_str(),
+            topic = %topic,
+            global_position = message.source.global_position(),
+        );
+        let publish_result = publisher
+            .publish(message.publish_envelope())
+            .instrument(span)
+            .await;
+        match publish_result {
             Ok(()) => {
                 store
                     .mark_published(tenant_id.clone(), message.outbox_id, worker_id.clone())
                     .await?;
+                counter!("es_outbox_dispatch_total", "outcome" => "published").increment(1);
                 published += 1;
             }
             Err(error) => {
@@ -81,8 +101,14 @@ where
                     )
                     .await?
                 {
-                    RetryScheduleOutcome::RetryScheduled => retried += 1,
-                    RetryScheduleOutcome::Failed => failed += 1,
+                    RetryScheduleOutcome::RetryScheduled => {
+                        counter!("es_outbox_dispatch_total", "outcome" => "retried").increment(1);
+                        retried += 1;
+                    }
+                    RetryScheduleOutcome::Failed => {
+                        counter!("es_outbox_dispatch_total", "outcome" => "failed").increment(1);
+                        failed += 1;
+                    }
                 }
             }
         }

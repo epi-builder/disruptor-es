@@ -1,6 +1,11 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    time::Instant,
+};
 
 use es_kernel::Aggregate;
+use metrics::{gauge, histogram};
+use tracing::info_span;
 
 use crate::{
     AggregateCache, CommandEnvelope, CommandOutcome, DedupeCache, DedupeKey, DedupeRecord,
@@ -12,6 +17,8 @@ use crate::{
 pub struct ShardHandoff<A: Aggregate> {
     /// Local disruptor sequence used only for ordered processing diagnostics.
     pub sequence: u64,
+    /// Time the disruptor release was observed by the shard owner.
+    pub released_at: Instant,
     /// Command envelope ready for the async processing stage.
     pub envelope: CommandEnvelope<A>,
 }
@@ -104,7 +111,11 @@ impl<A: Aggregate> ShardState<A> {
 
     /// Records a disruptor-released handoff in ascending sequence order.
     pub fn record_released_handoff(&mut self, sequence: u64, envelope: CommandEnvelope<A>) {
-        let handoff = ShardHandoff { sequence, envelope };
+        let handoff = ShardHandoff {
+            sequence,
+            released_at: Instant::now(),
+            envelope,
+        };
         let index = self
             .handoffs
             .iter()
@@ -134,7 +145,28 @@ impl<A: Aggregate> ShardState<A> {
         let Some(handoff) = self.pop_handoff() else {
             return Ok(false);
         };
+        let command_started_at = Instant::now();
+        let ring_wait_seconds = command_started_at
+            .duration_since(handoff.released_at)
+            .as_secs_f64();
+        let shard_label = self.shard_id.value().to_string();
+        gauge!("es_shard_queue_depth", "shard" => shard_label.clone())
+            .set(self.pending_handoffs() as f64);
+        histogram!("es_ring_wait_seconds", "shard" => shard_label.clone())
+            .record(ring_wait_seconds);
         let envelope = handoff.envelope;
+        let aggregate = aggregate_label::<A>();
+        let span = info_span!(
+            "shard.process_handoff",
+            command_id = %envelope.metadata.command_id,
+            correlation_id = %envelope.metadata.correlation_id,
+            causation_id = ?envelope.metadata.causation_id,
+            tenant_id = %envelope.metadata.tenant_id.as_str(),
+            stream_id = %envelope.stream_id.as_str(),
+            shard_id = self.shard_id.value(),
+            global_position = tracing::field::Empty,
+        );
+        let _entered = span.enter();
 
         let current_state = if let Some(cached) = self.cache.get(&envelope.stream_id) {
             cached.clone()
@@ -152,9 +184,30 @@ impl<A: Aggregate> ShardState<A> {
             }
         };
 
+        let decision_started_at = Instant::now();
         let decision = match A::decide(&current_state, envelope.command, &envelope.metadata) {
-            Ok(decision) => decision,
+            Ok(decision) => {
+                histogram!(
+                    "es_decision_latency_seconds",
+                    "aggregate" => aggregate,
+                    "outcome" => "success",
+                )
+                .record(decision_started_at.elapsed().as_secs_f64());
+                decision
+            }
             Err(error) => {
+                histogram!(
+                    "es_decision_latency_seconds",
+                    "aggregate" => aggregate,
+                    "outcome" => "domain_error",
+                )
+                .record(decision_started_at.elapsed().as_secs_f64());
+                histogram!(
+                    "es_command_latency_seconds",
+                    "aggregate" => aggregate,
+                    "outcome" => "domain_error",
+                )
+                .record(command_started_at.elapsed().as_secs_f64());
                 let _ = envelope.reply.send(Err(RuntimeError::Domain {
                     message: error.to_string(),
                 }));
@@ -191,6 +244,9 @@ impl<A: Aggregate> ShardState<A> {
 
         match store.append(append_request).await {
             Ok(es_store_postgres::AppendOutcome::Committed(committed)) => {
+                if let Some(global_position) = committed.global_positions.last() {
+                    span.record("global_position", global_position);
+                }
                 let mut staged_state = current_state;
                 for event in &decision.events {
                     A::apply(&mut staged_state, event);
@@ -209,8 +265,17 @@ impl<A: Aggregate> ShardState<A> {
                 let _ = envelope
                     .reply
                     .send(Ok(CommandOutcome::new(decision.reply, committed)));
+                histogram!(
+                    "es_command_latency_seconds",
+                    "aggregate" => aggregate,
+                    "outcome" => "committed",
+                )
+                .record(command_started_at.elapsed().as_secs_f64());
             }
             Ok(es_store_postgres::AppendOutcome::Duplicate(committed)) => {
+                if let Some(global_position) = committed.global_positions.last() {
+                    span.record("global_position", global_position);
+                }
                 self.dedupe.record(
                     DedupeKey {
                         tenant_id: envelope.metadata.tenant_id.clone(),
@@ -223,8 +288,20 @@ impl<A: Aggregate> ShardState<A> {
                 let _ = envelope
                     .reply
                     .send(Ok(CommandOutcome::new(decision.reply, committed)));
+                histogram!(
+                    "es_command_latency_seconds",
+                    "aggregate" => aggregate,
+                    "outcome" => "duplicate",
+                )
+                .record(command_started_at.elapsed().as_secs_f64());
             }
             Err(error) => {
+                histogram!(
+                    "es_command_latency_seconds",
+                    "aggregate" => aggregate,
+                    "outcome" => "store_error",
+                )
+                .record(command_started_at.elapsed().as_secs_f64());
                 let _ = envelope
                     .reply
                     .send(Err(RuntimeError::from_store_error(error)));
@@ -232,6 +309,19 @@ impl<A: Aggregate> ShardState<A> {
         }
 
         Ok(true)
+    }
+}
+
+fn aggregate_label<A>() -> &'static str {
+    let type_name = std::any::type_name::<A>();
+    if type_name.ends_with("::Order") {
+        "order"
+    } else if type_name.ends_with("::Product") {
+        "product"
+    } else if type_name.ends_with("::User") {
+        "user"
+    } else {
+        "aggregate"
     }
 }
 

@@ -11,11 +11,13 @@ es-outbox = { version = "0.1.0", path = "../es-outbox" }
 es-projection = { path = "../es-projection" }
 example-commerce = { path = "../example-commerce" }
 futures.workspace = true
+metrics.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

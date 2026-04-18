@@ -8,7 +8,9 @@ use es_projection::{
     ProjectionResult, ProjectorName, ProjectorOffset, WaitPolicy, wait_for_minimum_position,
 };
 use example_commerce::{OrderEvent, ProductEvent};
+use metrics::{gauge, histogram};
 use sqlx::{Postgres, Transaction};
+use tracing::info_span;
 
 use crate::{PostgresEventStore, StoreError, StoredEvent};
 
@@ -70,6 +72,14 @@ impl PostgresProjectionStore {
         projector_name: &ProjectorName,
         limit: ProjectionBatchLimit,
     ) -> ProjectionResult<CatchUpOutcome> {
+        let started_at = std::time::Instant::now();
+        let span = info_span!(
+            "projection.catch_up",
+            tenant_id = %tenant_id.as_str(),
+            projector = %projector_name.as_str(),
+            global_position = tracing::field::Empty,
+        );
+        let _entered = span.enter();
         let current_offset = self
             .projector_offset(tenant_id, projector_name)
             .await?
@@ -82,6 +92,7 @@ impl PostgresProjectionStore {
             .await
             .map_err(store_error)?;
         if stored_events.is_empty() {
+            gauge!("es_projection_lag", "projector" => projector_name.as_str().to_owned()).set(0.0);
             return Ok(CatchUpOutcome::Idle);
         }
 
@@ -93,6 +104,9 @@ impl PostgresProjectionStore {
             .last()
             .expect("non-empty projection batch")
             .global_position;
+        span.record("global_position", last_global_position);
+        gauge!("es_projection_lag", "projector" => projector_name.as_str().to_owned())
+            .set((last_global_position - current_offset).max(0) as f64);
 
         let mut tx = self.pool.begin().await.map_err(projection_store_error)?;
         let apply_result = async {
@@ -107,6 +121,8 @@ impl PostgresProjectionStore {
             return Err(error);
         }
         tx.commit().await.map_err(projection_store_error)?;
+        histogram!("es_projection_catch_up_seconds", "projector" => projector_name.as_str().to_owned())
+            .record(started_at.elapsed().as_secs_f64());
 
         Ok(CatchUpOutcome::Applied {
             event_count: events.len(),

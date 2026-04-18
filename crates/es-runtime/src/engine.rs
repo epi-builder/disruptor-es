@@ -1,4 +1,5 @@
 use es_kernel::Aggregate;
+use tracing::info_span;
 
 use crate::{
     CommandGateway, PartitionRouter, RoutedCommand, RuntimeError, RuntimeEventCodec,
@@ -95,6 +96,16 @@ where
         };
 
         let shard_index = routed.shard_id.value();
+        let span = info_span!(
+            "command_engine.process_one",
+            command_id = %routed.envelope.metadata.command_id,
+            correlation_id = %routed.envelope.metadata.correlation_id,
+            causation_id = ?routed.envelope.metadata.causation_id,
+            tenant_id = %routed.envelope.metadata.tenant_id.as_str(),
+            stream_id = %routed.envelope.stream_id.as_str(),
+            shard_id = shard_index,
+        );
+        let _entered = span.enter();
         let Some(shard) = self.shards.get_mut(shard_index) else {
             let _ = routed.envelope.reply.send(Err(RuntimeError::Unavailable));
             return Ok(true);

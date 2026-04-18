@@ -5,9 +5,11 @@ use example_commerce::{
     Order, OrderCommand, OrderId, OrderLine, OrderReply, Product, ProductCommand, ProductId,
     ProductReply, Quantity, Sku, User, UserCommand, UserId, UserReply,
 };
+use metrics::histogram;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tokio::sync::oneshot;
+use tracing::{Instrument, info_span};
 use uuid::Uuid;
 
 use crate::ApiError;
@@ -470,12 +472,38 @@ where
     A: es_runtime::Aggregate,
     F: FnOnce(A::Reply) -> R,
 {
+    let started_at = std::time::Instant::now();
     let (reply, receiver) = oneshot::channel();
     let envelope = CommandEnvelope::<A>::new(command, metadata, idempotency_key, reply)?;
     let stream_id = envelope.stream_id.as_str().to_owned();
-    gateway.try_submit(envelope)?;
-    let outcome = receiver.await.map_err(|_| ApiError::ReplyDropped)??;
-    Ok(CommandSuccess::from_outcome(stream_id, outcome, map_reply))
+    let aggregate = aggregate_label::<A>();
+    let span = info_span!(
+        "http.command",
+        command_id = %envelope.metadata.command_id,
+        correlation_id = %envelope.metadata.correlation_id,
+        causation_id = ?envelope.metadata.causation_id,
+        tenant_id = %envelope.metadata.tenant_id.as_str(),
+        stream_id = %envelope.stream_id.as_str(),
+        global_position = tracing::field::Empty,
+    );
+
+    let instrument_span = span.clone();
+    async move {
+        gateway.try_submit(envelope)?;
+        let outcome = receiver.await.map_err(|_| ApiError::ReplyDropped)??;
+        if let Some(global_position) = outcome.append.global_positions.last() {
+            span.record("global_position", global_position);
+        }
+        histogram!(
+            "es_command_latency_seconds",
+            "aggregate" => aggregate,
+            "outcome" => "success",
+        )
+        .record(started_at.elapsed().as_secs_f64());
+        Ok(CommandSuccess::from_outcome(stream_id, outcome, map_reply))
+    }
+    .instrument(instrument_span)
+    .await
 }
 
 impl CommandRequestMetadata {
@@ -577,5 +605,18 @@ impl From<UserReply> for UserReplyDto {
                 user_id: user_id.into_inner(),
             },
         }
+    }
+}
+
+fn aggregate_label<A>() -> &'static str {
+    let type_name = std::any::type_name::<A>();
+    if type_name.ends_with("::Order") {
+        "order"
+    } else if type_name.ends_with("::Product") {
+        "product"
+    } else if type_name.ends_with("::User") {
+        "user"
+    } else {
+        "aggregate"
     }
 }

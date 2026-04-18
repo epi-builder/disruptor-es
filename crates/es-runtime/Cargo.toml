@@ -11,6 +11,7 @@ es-core = { path = "../es-core" }
 es-kernel = { path = "../es-kernel" }
 es-store-postgres = { path = "../es-store-postgres" }
 futures.workspace = true
+metrics.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true

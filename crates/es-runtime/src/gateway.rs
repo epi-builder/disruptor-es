@@ -1,5 +1,7 @@
 use es_kernel::Aggregate;
+use metrics::{counter, gauge};
 use tokio::sync::mpsc;
+use tracing::debug_span;
 
 use crate::{CommandEnvelope, PartitionRouter, RuntimeError, RuntimeResult, ShardId};
 
@@ -42,14 +44,68 @@ impl<A: Aggregate> CommandGateway<A> {
 
     /// Attempts to submit a command without waiting for ingress capacity.
     pub fn try_submit(&self, envelope: CommandEnvelope<A>) -> RuntimeResult<()> {
+        let span = debug_span!(
+            "command_gateway.try_submit",
+            command_id = %envelope.metadata.command_id,
+            correlation_id = %envelope.metadata.correlation_id,
+            causation_id = ?envelope.metadata.causation_id,
+            tenant_id = %envelope.metadata.tenant_id.as_str(),
+            stream_id = %envelope.stream_id.as_str(),
+        );
+        let _entered = span.enter();
         let shard_id = self
             .router
             .route(&envelope.metadata.tenant_id, &envelope.partition_key);
         let routed = RoutedCommand { shard_id, envelope };
+        let aggregate = aggregate_label::<A>();
+        let depth = self.sender.max_capacity() - self.sender.capacity();
+        gauge!("es_ingress_depth", "aggregate" => aggregate).set(depth as f64);
 
-        self.sender.try_send(routed).map_err(|error| match error {
-            mpsc::error::TrySendError::Full(_) => RuntimeError::Overloaded,
-            mpsc::error::TrySendError::Closed(_) => RuntimeError::Unavailable,
-        })
+        match self.sender.try_send(routed) {
+            Ok(()) => {
+                let depth = self.sender.max_capacity() - self.sender.capacity();
+                gauge!("es_ingress_depth", "aggregate" => aggregate).set(depth as f64);
+                counter!(
+                    "es_command_total",
+                    "aggregate" => aggregate,
+                    "outcome" => "accepted",
+                )
+                .increment(1);
+                Ok(())
+            }
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                counter!(
+                    "es_command_total",
+                    "aggregate" => aggregate,
+                    "outcome" => "rejected",
+                )
+                .increment(1);
+                counter!("es_command_rejected_total", "reason" => "overloaded").increment(1);
+                Err(RuntimeError::Overloaded)
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                counter!(
+                    "es_command_total",
+                    "aggregate" => aggregate,
+                    "outcome" => "rejected",
+                )
+                .increment(1);
+                counter!("es_command_rejected_total", "reason" => "unavailable").increment(1);
+                Err(RuntimeError::Unavailable)
+            }
+        }
+    }
+}
+
+fn aggregate_label<A>() -> &'static str {
+    let type_name = std::any::type_name::<A>();
+    if type_name.ends_with("::Order") {
+        "order"
+    } else if type_name.ends_with("::Product") {
+        "product"
+    } else if type_name.ends_with("::User") {
+        "user"
+    } else {
+        "aggregate"
     }
 }

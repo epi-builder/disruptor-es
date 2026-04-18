@@ -2,6 +2,8 @@ use crate::{
     AppendOutcome, AppendRequest, RehydrationBatch, SaveSnapshotRequest, SnapshotRecord,
     StoreError, StoreResult, StoredEvent, rehydrate, sql,
 };
+use metrics::{counter, histogram};
+use tracing::info_span;
 
 /// PostgreSQL-backed durable event store.
 #[derive(Clone, Debug)]
@@ -26,7 +28,46 @@ impl PostgresEventStore {
             return Err(StoreError::EmptyAppend);
         }
 
-        sql::append(&self.pool, request).await
+        let started_at = std::time::Instant::now();
+        let span = info_span!(
+            "event_store.append",
+            command_id = %request.command_metadata.command_id,
+            correlation_id = %request.command_metadata.correlation_id,
+            causation_id = ?request.command_metadata.causation_id,
+            tenant_id = %request.command_metadata.tenant_id.as_str(),
+            stream_id = %request.stream_id.as_str(),
+            global_position = tracing::field::Empty,
+        );
+        let _entered = span.enter();
+
+        let outcome = sql::append(&self.pool, request).await;
+        match &outcome {
+            Ok(AppendOutcome::Committed(committed)) => {
+                if let Some(global_position) = committed.global_positions.last() {
+                    span.record("global_position", global_position);
+                }
+                histogram!("es_append_latency_seconds", "outcome" => "committed")
+                    .record(started_at.elapsed().as_secs_f64());
+            }
+            Ok(AppendOutcome::Duplicate(committed)) => {
+                if let Some(global_position) = committed.global_positions.last() {
+                    span.record("global_position", global_position);
+                }
+                counter!("es_dedupe_hits_total").increment(1);
+                histogram!("es_append_latency_seconds", "outcome" => "duplicate")
+                    .record(started_at.elapsed().as_secs_f64());
+            }
+            Err(StoreError::StreamConflict { .. }) => {
+                counter!("es_occ_conflicts_total").increment(1);
+                histogram!("es_append_latency_seconds", "outcome" => "conflict")
+                    .record(started_at.elapsed().as_secs_f64());
+            }
+            Err(_) => {
+                histogram!("es_append_latency_seconds", "outcome" => "error")
+                    .record(started_at.elapsed().as_secs_f64());
+            }
+        }
+        outcome
     }
 
     /// Reads stream events after an optional stream revision.
