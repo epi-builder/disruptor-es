@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-04-18T08:17:16.744Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-04-18T08:23:54.631Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 24
-  completed_plans: 21
-  percent: 88
+  completed_plans: 22
+  percent: 92
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 ## Current Position
 
 Phase: 06 (outbox-and-process-manager-workflows) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-04-18
 
@@ -70,6 +70,7 @@ Progress: [████████░░] 83%
 | Phase 05-cqrs-projection-and-query-catch-up P03 | - | 3 tasks | 7 files |
 | Phase 06-outbox-and-process-manager-workflows P01 | 4min 41s | 1 tasks | 7 files |
 | Phase 06-outbox-and-process-manager-workflows P02 | 5min 43s | 1 tasks | 7 files |
+| Phase 06-outbox-and-process-manager-workflows P03 | 4min 5s | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,10 @@ Recent decisions affecting current work:
 - [Phase 06-outbox-and-process-manager-workflows]: Use PostgreSQL row locking with FOR UPDATE SKIP LOCKED for concurrent dispatcher claims instead of in-memory locks.
 - [Phase 06-outbox-and-process-manager-workflows]: Keep process-manager progress as tenant-scoped monotonic offsets using GREATEST on upsert.
 - [Phase 06-outbox-and-process-manager-workflows]: Validate inserted outbox rows against the source event's tenant and global position before storing them.
+- [Phase 06-outbox-and-process-manager-workflows]: Keep AppendRequest::new source-compatible by delegating to new_with_outbox with an empty outbox message list.
+- [Phase 06-outbox-and-process-manager-workflows]: Validate pre-append outbox source event IDs against the events in the same append request before storage.
+- [Phase 06-outbox-and-process-manager-workflows]: Insert outbox rows after event rows have committed transaction-local global positions and before command dedupe is recorded.
+- [Phase 06-outbox-and-process-manager-workflows]: Use tenant_id from CommandMetadata for append-created outbox rows and ON CONFLICT (tenant_id, source_event_id, topic) DO NOTHING for late duplicate idempotency.
 
 ### Pending Todos
 
@@ -142,6 +147,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-18T08:17:16.739Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-04-18T08:23:54.626Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None
