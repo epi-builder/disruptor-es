@@ -1,0 +1,84 @@
+# Template Guide
+
+Use this guide when adding a new event-sourced domain, transport adapter, query path, or workflow to the template.
+
+## Create A New Domain
+
+New domains implement `Aggregate`, derive `StreamId`, `PartitionKey`, and `ExpectedRevision`, serialize events at storage boundaries, and keep `decide`/`apply` synchronous.
+
+Start with a domain crate or module that exports typed IDs, commands, events, replies, errors, state, and aggregate structs. Keep the command and event enums strongly typed. Do not replace hot-path decisions with generic JSON maps or reflection.
+
+For each aggregate:
+
+- Validate IDs and value objects before constructing commands.
+- Implement `Aggregate::decide` as deterministic business logic over current state plus command metadata.
+- Implement `Aggregate::apply` as replayable state transition logic.
+- Derive stream IDs and partition keys from the aggregate identity so stable routing sends each ordered key to one local shard owner.
+- Set expected revisions from the command semantics: creation commands usually use `ExpectedRevision::NoStream`, while updates usually use `ExpectedRevision::Exact` or `ExpectedRevision::Any` when the domain intentionally permits it.
+
+Event payloads are typed in the domain and encoded at runtime/storage boundaries. Storage records should carry `event_type`, `schema_version`, `payload`, and metadata so future upcasters or schema checks have explicit inputs.
+
+## Add A Command Gateway
+
+Gateways are bounded ingress handles, not service locators or state containers. Add a `CommandGateway<NewAggregate>` to the adapter or app composition state, then submit commands through `CommandEnvelope::<NewAggregate>::new`.
+
+The submission flow is:
+
+1. Decode transport DTO or process-manager input.
+2. Build `CommandMetadata` with command, correlation, causation, tenant, and timestamp fields.
+3. Build the typed domain command.
+4. Create a one-shot reply channel.
+5. Create `CommandEnvelope` with the command, metadata, idempotency key, and reply sender.
+6. Call `CommandGateway::try_submit`.
+7. Await the reply and return durable append metadata from `CommandOutcome`.
+
+Do not put aggregate state, projector offsets, outbox rows, or broker clients inside a gateway. The gateway only admits typed commands to the runtime.
+
+## HTTP Gateway
+
+Follow `crates/adapter-http/src/commerce.rs`: request DTOs flatten common command metadata, handlers validate IDs and quantities, and success responses return correlation ID, stream ID, stream revisions, global positions, event IDs, and typed reply DTOs.
+
+HTTP handlers should fail fast on invalid request data, overload, unavailable runtime, domain errors, and conflicts. The HTTP adapter owns JSON shape and status mapping; it does not own business state.
+
+## WebSocket Gateway
+
+WebSocket and gRPC gateways should be thin ingress clients of CommandGateway plus read-model query APIs; they must not share hot aggregate state.
+
+Use WebSockets for connection management, subscription registration, command DTO ingress, and pushing read-model or outbox-derived notifications. A WebSocket session can correlate command replies with client request IDs, but command success still comes from the durable append reply.
+
+Do not use a socket connection as the owner of aggregate state. Do not broadcast directly from command handlers. Fanout should be driven from read models, committed events, or outbox-derived notification workers.
+
+## gRPC Gateway
+
+WebSocket and gRPC gateways should be thin ingress clients of CommandGateway plus read-model query APIs; they must not share hot aggregate state.
+
+Use gRPC for typed service-to-service command ingress and query contracts. The generated service implementation should map protobuf requests to domain commands, construct `CommandMetadata`, call `CommandGateway::try_submit`, and return durable append metadata in the response.
+
+Keep gRPC server code in adapter crates. Do not import shard-local cache types, `PostgresOutboxStore`, or projector mutation APIs into gRPC handlers.
+
+## Projection Queries
+
+Query APIs read projection tables and may support read-your-own-write waits through minimum global position policies. Projection freshness is a query concern; it is not part of command success.
+
+Adapters may call read-model query APIs after a command reply if the client explicitly asks for a fresh view. Those waits must be bounded and should return projection lag when the read model cannot catch up in time.
+
+## Outbox And Process Managers
+
+Outbox rows are created in the same append transaction as domain events. Publishers claim durable rows, publish through a `Publisher` trait, and mark published or retry through outbox storage APIs.
+
+Process managers read committed events by global position, persist offsets, and issue follow-up commands through `CommandGateway`. Use deterministic idempotency keys for follow-up commands so restarts and duplicate deliveries remain safe.
+
+Never publish to external brokers directly from command handlers, HTTP handlers, WebSocket handlers, or gRPC handlers.
+
+## Verification Commands
+
+Run these commands before treating a new domain or gateway as template-compatible:
+
+```bash
+cargo test --workspace --no-run
+cargo test -p adapter-http -- --nocapture
+cargo test -p es-store-postgres -- --nocapture
+cargo run -p app -- stress-smoke
+```
+
+For documentation-only changes, also run the plan-specific `rg` checks that verify source-of-truth, gateway, single-owner, outbox, and ring-only wording.
