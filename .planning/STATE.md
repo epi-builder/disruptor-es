@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-07-PLAN.md
-last_updated: "2026-04-19T13:37:49.392Z"
-last_activity: 2026-04-19 -- Phase 08 planning complete
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-04-19T14:21:33.548Z"
+last_activity: 2026-04-19
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 34
-  completed_plans: 31
-  percent: 91
+  completed_plans: 32
+  percent: 94
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** Provide a reusable, production-shaped Rust service template where committed events are the source of truth and `disruptor-rs` is used only as the in-process ordered execution engine.
-**Current focus:** Phase 07 — adapters-observability-stress-and-template-guidance
+**Current focus:** Phase 08 — runtime-duplicate-command-replay
 
 ## Current Position
 
-Phase: 07 (adapters-observability-stress-and-template-guidance) — COMPLETE
-Plan: 7 of 7
+Phase: 08 (runtime-duplicate-command-replay) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-04-19 -- Phase 08 planning complete
+Last activity: 2026-04-19
 
 Progress: [██████████] 100%
 
@@ -76,6 +76,7 @@ Progress: [██████████] 100%
 | Phase 06-outbox-and-process-manager-workflows P04 | 4min 31s | 1 tasks | 6 files |
 | Phase 06-outbox-and-process-manager-workflows P05 | 8min 48s | 1 tasks | 10 files |
 | Phase 07-adapters-observability-stress-and-template-guidance P07 | 10min 42s | 3 tasks | 5 files |
+| Phase 08-runtime-duplicate-command-replay P01 | 6min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,9 @@ Recent decisions affecting current work:
 - [Phase 07]: Projection lag is computed from tenant-scoped durable event-store max global position rather than fetched batch size.
 - [Phase 07]: Single-service stress append latency is recorded around RuntimeEventStore::append instead of command round-trip latency.
 - [Phase 07]: Stress shard depth samples read-only runtime shard state without exposing mutable shard internals.
+- [Phase 08-runtime-duplicate-command-replay]: Store typed command replies as CommandReplayRecord { append, reply } in command_dedup.response_payload for new appends. — This preserves the original typed reply for restart/cache-miss replay without adding a table or re-running aggregate decide.
+- [Phase 08-runtime-duplicate-command-replay]: Keep legacy CommittedAppend response_payload rows readable for append dedupe while typed replay lookup returns None for legacy rows. — This keeps existing duplicate append semantics stable while preventing typed replay consumers from treating legacy append-only rows as full command replies.
+- [Phase 08-runtime-duplicate-command-replay]: Use tenant_id plus idempotency_key for durable replay lookup, matching command_dedup primary key scope. — This preserves tenant isolation and satisfies the Phase 08 replay threat model.
 
 ### Pending Todos
 
@@ -164,6 +168,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-19T02:11:55.753Z
-Stopped at: Completed 07-07-PLAN.md
+Last session: 2026-04-19T14:21:33.544Z
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None
