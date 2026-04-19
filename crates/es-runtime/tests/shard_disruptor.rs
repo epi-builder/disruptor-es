@@ -1,8 +1,8 @@
-use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision};
+use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
 use es_kernel::{Aggregate, Decision};
 use es_runtime::{
-    AggregateCache, CommandEnvelope, DedupeCache, DedupeKey, DedupeRecord, DisruptorPath,
-    RoutedCommand, RuntimeError, ShardHandle, ShardId, ShardState,
+    AggregateCache, AggregateCacheKey, CommandEnvelope, DedupeCache, DedupeKey, DedupeRecord,
+    DisruptorPath, RoutedCommand, RuntimeError, ShardHandle, ShardId, ShardState,
 };
 use es_store_postgres::{CommandReplayRecord, CommandReplyPayload, CommittedAppend};
 use time::OffsetDateTime;
@@ -68,8 +68,15 @@ fn stream_id(value: &'static str) -> StreamId {
     StreamId::new(value).expect("stream id")
 }
 
-fn tenant_id(value: &'static str) -> es_core::TenantId {
-    es_core::TenantId::new(value).expect("tenant id")
+fn tenant_id(value: &'static str) -> TenantId {
+    TenantId::new(value).expect("tenant id")
+}
+
+fn cache_key(tenant: &'static str, stream: &'static str) -> AggregateCacheKey {
+    AggregateCacheKey {
+        tenant_id: tenant_id(tenant),
+        stream_id: stream_id(stream),
+    }
 }
 
 fn metadata(tenant: &'static str) -> CommandMetadata {
@@ -117,28 +124,41 @@ fn committed_append(stream_id: StreamId) -> CommittedAppend {
 #[test]
 fn shard_cache_inserts_default_state_locally() {
     let mut cache = AggregateCache::<CounterAggregate>::new();
-    let stream_id = stream_id("counter-1");
+    let key = cache_key("tenant-a", "counter-1");
 
-    let state = cache.get_or_default(&stream_id);
+    let state = cache.get_or_default(&key);
 
     assert_eq!(CounterState::default(), state);
-    assert_eq!(Some(&CounterState::default()), cache.get(&stream_id));
+    assert_eq!(Some(&CounterState::default()), cache.get(&key));
     assert_eq!(1, cache.len());
 }
 
 #[test]
 fn shard_cache_commits_only_explicit_state() {
     let mut cache = AggregateCache::<CounterAggregate>::new();
-    let stream_id = stream_id("counter-1");
+    let key = cache_key("tenant-a", "counter-1");
 
-    let mut staged_state = cache.get_or_default(&stream_id);
+    let mut staged_state = cache.get_or_default(&key);
     staged_state.value = 7;
 
-    assert_eq!(Some(&CounterState::default()), cache.get(&stream_id));
+    assert_eq!(Some(&CounterState::default()), cache.get(&key));
 
-    cache.commit_state(stream_id.clone(), staged_state.clone());
+    cache.commit_state(key.clone(), staged_state.clone());
 
-    assert_eq!(Some(&staged_state), cache.get(&stream_id));
+    assert_eq!(Some(&staged_state), cache.get(&key));
+}
+
+#[test]
+fn shard_cache_isolates_same_stream_across_tenants() {
+    let mut cache = AggregateCache::<CounterAggregate>::new();
+    let tenant_a_key = cache_key("tenant-a", "counter-1");
+    let tenant_b_key = cache_key("tenant-b", "counter-1");
+    let state = CounterState { value: 7 };
+
+    cache.commit_state(tenant_a_key.clone(), state.clone());
+
+    assert_eq!(Some(&state), cache.get(&tenant_a_key));
+    assert_eq!(None, cache.get(&tenant_b_key));
 }
 
 #[test]
