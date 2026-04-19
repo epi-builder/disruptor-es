@@ -371,14 +371,16 @@ async fn sample_projection_lag(
     tenant_count: usize,
     last_global_position: i64,
 ) -> anyhow::Result<i64> {
+    if last_global_position <= 0 {
+        return Ok(0);
+    }
+
     let projector = ProjectorName::new("stress-order-summary")?;
+    let mut max_projection_lag = 0;
     for tenant_index in 0..tenant_count {
         let tenant = TenantId::new(format!("tenant-{tenant_index}"))?;
-        let before = projection_store
-            .projector_offset(&tenant, &projector)
-            .await?
-            .map(|offset| offset.last_global_position)
-            .unwrap_or(0);
+        let tenant_latest_position =
+            tenant_latest_global_position(projection_store.pool(), &tenant).await?;
         let _ = projection_store
             .catch_up(&tenant, &projector, ProjectionBatchLimit::new(100)?)
             .await?;
@@ -386,12 +388,12 @@ async fn sample_projection_lag(
             .projector_offset(&tenant, &projector)
             .await?
             .map(|offset| offset.last_global_position)
-            .unwrap_or(before);
-        let _lag_sample = (last_global_position - before).max(0);
-        let _post_catch_up_lag = (last_global_position - after).max(0);
+            .unwrap_or(0);
+        let post_catch_up_lag = (tenant_latest_position - after).max(0);
+        max_projection_lag = max_projection_lag.max(post_catch_up_lag);
     }
 
-    Ok(0)
+    Ok(max_projection_lag)
 }
 
 async fn sample_outbox_lag(
@@ -445,6 +447,15 @@ async fn latest_global_position(pool: &PgPool) -> anyhow::Result<i64> {
         .await?
         .unwrap_or(0);
     Ok(position)
+}
+
+async fn tenant_latest_global_position(pool: &PgPool, tenant: &TenantId) -> anyhow::Result<i64> {
+    Ok(sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(max(global_position), 0) FROM events WHERE tenant_id = $1",
+    )
+    .bind(tenant.as_str())
+    .fetch_one(pool)
+    .await?)
 }
 
 fn order_command(config: &StressConfig, index: usize) -> OrderCommand {
