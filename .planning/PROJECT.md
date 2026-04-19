@@ -21,6 +21,7 @@ Provide a reusable, production-shaped Rust service template where committed even
 - [x] Phase 05 validated CQRS projection contracts, tenant-scoped PostgreSQL projector offsets, order summary and product inventory read models, restart-safe catch-up, malformed payload rollback, and bounded read-your-own-write query waits.
 - [x] Phase 06 validated durable outbox integration rows, append-transaction outbox creation, idempotent dispatcher publication/retry semantics, and an app-composed commerce process manager that issues follow-up commands through runtime gateways.
 - [x] Phase 07 validated thin HTTP command adapters, bounded gateway responses, structured observability, PostgreSQL integration coverage, layer-separated benchmarks, measured single-service stress signals, and template guidance for hot-path boundaries.
+- [x] Phase 08 validated runtime duplicate command replay with durable typed reply payloads, shard-local and PostgreSQL idempotency lookup before aggregate decision, HTTP duplicate retry coverage, and process-manager follow-up retry coverage.
 
 ### Active
 
@@ -85,6 +86,7 @@ This gives enough relationships to test uniqueness, entity references, projectio
 | Split generic infrastructure from domain rules | Enables reuse across future services while keeping domain logic strongly typed. | - Pending |
 | Model adapters as thin ingress layers with bounded queues and reply channels | Prevents HTTP/gRPC/WebSocket concerns from forcing mutex-heavy business state. | Validated in Phase 03 with bounded `CommandGateway` ingress and `CommandEngine` wiring. |
 | Treat stress report fields as operational claims | A template user will rely on append latency, queue depth, projection lag, and outbox lag to diagnose bottlenecks, so fields must be measured from the component they name. | Validated in Phase 07 with durable projection-lag computation, measured append latency, read-only shard-depth sampling, and backlog regression tests. |
+| Replay duplicate commands before aggregate decision | Retries must preserve the original committed response even after state mutation, runtime cache miss, or process-manager replay. | Validated in Phase 08 with typed durable replay records, pre-decision shard/runtime lookup, and HTTP/process-manager duplicate retry tests. |
 
 ## Evolution
 
@@ -104,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-19 after Phase 07 completion*
+*Last updated: 2026-04-19 after Phase 08 completion*
