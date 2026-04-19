@@ -197,7 +197,7 @@ struct FakeStore {
 struct FakeStoreInner {
     append_requests: Mutex<Vec<AppendRequest>>,
     append_outcomes: Mutex<VecDeque<Result<AppendOutcome, StoreError>>>,
-    command_replay: Mutex<Option<CommandReplayRecord>>,
+    command_replay: Mutex<VecDeque<Option<CommandReplayRecord>>>,
     lookup_count: Mutex<usize>,
     rehydration: Mutex<RehydrationBatch>,
     rehydration_error: Mutex<Option<StoreError>>,
@@ -219,7 +219,7 @@ impl FakeStore {
             inner: Arc::new(FakeStoreInner {
                 append_requests: Mutex::new(Vec::new()),
                 append_outcomes: Mutex::new(VecDeque::from([result])),
-                command_replay: Mutex::new(None),
+                command_replay: Mutex::new(VecDeque::new()),
                 lookup_count: Mutex::new(0),
                 rehydration: Mutex::new(RehydrationBatch {
                     snapshot: None,
@@ -251,7 +251,11 @@ impl FakeStore {
     }
 
     fn set_command_replay(&self, replay: CommandReplayRecord) {
-        *self.inner.command_replay.lock().expect("command replay") = Some(replay);
+        self.set_command_replay_sequence(vec![Some(replay)]);
+    }
+
+    fn set_command_replay_sequence(&self, replay: Vec<Option<CommandReplayRecord>>) {
+        *self.inner.command_replay.lock().expect("command replay") = replay.into();
     }
 
     fn lookup_count(&self) -> usize {
@@ -332,7 +336,8 @@ impl RuntimeEventStore for FakeStore {
             .command_replay
             .lock()
             .expect("command replay")
-            .clone();
+            .pop_front()
+            .unwrap_or(None);
 
         Box::pin(async move { Ok(replay) })
     }
@@ -748,6 +753,7 @@ async fn runtime_duplicate_store_hit_skips_rehydrate_decide_encode_and_append() 
 #[tokio::test]
 async fn duplicate_append_returns_successful_command_outcome() {
     let store = FakeStore::duplicate();
+    store.set_command_replay_sequence(vec![None, Some(command_replay_record(1, 3))]);
     let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
     let (envelope, receiver) = envelope(3);
@@ -775,7 +781,7 @@ async fn duplicate_append_returns_successful_command_outcome() {
 #[tokio::test]
 async fn duplicate_append_branch_uses_stored_replay_not_fresh_decision_reply() {
     let store = FakeStore::duplicate();
-    store.set_command_replay(command_replay_record(12, 44));
+    store.set_command_replay_sequence(vec![None, Some(command_replay_record(12, 44))]);
     let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
     warm_cache(&mut state, 10);
@@ -793,7 +799,7 @@ async fn duplicate_append_branch_uses_stored_replay_not_fresh_decision_reply() {
     assert_eq!(44, outcome.reply);
     assert_eq!(vec![12], outcome.append.global_positions);
     assert_eq!(1, store.appended_len());
-    assert_eq!(1, store.lookup_count());
+    assert_eq!(2, store.lookup_count());
     assert_eq!(
         Some(&CounterState { value: 10 }),
         state
@@ -805,6 +811,7 @@ async fn duplicate_append_branch_uses_stored_replay_not_fresh_decision_reply() {
 #[tokio::test]
 async fn duplicate_after_warmed_cache_does_not_apply_newly_decided_events() {
     let store = FakeStore::duplicate();
+    store.set_command_replay_sequence(vec![None, Some(command_replay_record(1, 13))]);
     let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
     warm_cache(&mut state, 10);

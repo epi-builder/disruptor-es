@@ -167,6 +167,53 @@ impl<A: Aggregate> ShardState<A> {
             global_position = tracing::field::Empty,
         );
         let _entered = span.enter();
+        let dedupe_key = DedupeKey {
+            tenant_id: envelope.metadata.tenant_id.clone(),
+            idempotency_key: envelope.idempotency_key.clone(),
+        };
+
+        if let Some(record) = self.dedupe.get(&dedupe_key) {
+            let outcome = replay_command_outcome::<A, C>(codec, &record.replay);
+            let _ = envelope.reply.send(outcome);
+            histogram!(
+                "es_command_latency_seconds",
+                "aggregate" => aggregate,
+                "outcome" => "duplicate_cache",
+            )
+            .record(command_started_at.elapsed().as_secs_f64());
+            return Ok(true);
+        }
+
+        match store
+            .lookup_command_replay(&envelope.metadata.tenant_id, &envelope.idempotency_key)
+            .await
+        {
+            Ok(Some(replay)) => {
+                if let Some(global_position) = replay.append.global_positions.last() {
+                    span.record("global_position", global_position);
+                }
+                let outcome = replay_command_outcome::<A, C>(codec, &replay);
+                if outcome.is_ok() {
+                    self.dedupe
+                        .record(dedupe_key.clone(), DedupeRecord { replay });
+                }
+                let _ = envelope.reply.send(outcome);
+                histogram!(
+                    "es_command_latency_seconds",
+                    "aggregate" => aggregate,
+                    "outcome" => "duplicate_store",
+                )
+                .record(command_started_at.elapsed().as_secs_f64());
+                return Ok(true);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                let _ = envelope
+                    .reply
+                    .send(Err(RuntimeError::from_store_error(error)));
+                return Ok(true);
+            }
+        }
 
         let current_state = if let Some(cached) = self.cache.get(&envelope.stream_id) {
             cached.clone()
@@ -261,10 +308,7 @@ impl<A: Aggregate> ShardState<A> {
                 self.cache
                     .commit_state(envelope.stream_id.clone(), staged_state);
                 self.dedupe.record(
-                    DedupeKey {
-                        tenant_id: envelope.metadata.tenant_id.clone(),
-                        idempotency_key: envelope.idempotency_key.clone(),
-                    },
+                    dedupe_key,
                     DedupeRecord {
                         replay: es_store_postgres::CommandReplayRecord {
                             append: committed.clone(),
@@ -272,9 +316,10 @@ impl<A: Aggregate> ShardState<A> {
                         },
                     },
                 );
+                let reply = decision.reply;
                 let _ = envelope
                     .reply
-                    .send(Ok(CommandOutcome::new(decision.reply, committed)));
+                    .send(Ok(CommandOutcome::new(reply, committed)));
                 histogram!(
                     "es_command_latency_seconds",
                     "aggregate" => aggregate,
@@ -286,21 +331,29 @@ impl<A: Aggregate> ShardState<A> {
                 if let Some(global_position) = committed.global_positions.last() {
                     span.record("global_position", global_position);
                 }
-                self.dedupe.record(
-                    DedupeKey {
-                        tenant_id: envelope.metadata.tenant_id.clone(),
-                        idempotency_key: envelope.idempotency_key.clone(),
-                    },
-                    DedupeRecord {
-                        replay: es_store_postgres::CommandReplayRecord {
-                            append: committed.clone(),
-                            reply: command_reply_payload,
-                        },
-                    },
-                );
-                let _ = envelope
-                    .reply
-                    .send(Ok(CommandOutcome::new(decision.reply, committed)));
+                match store
+                    .lookup_command_replay(&envelope.metadata.tenant_id, &envelope.idempotency_key)
+                    .await
+                {
+                    Ok(Some(replay)) => {
+                        let outcome = replay_command_outcome::<A, C>(codec, &replay);
+                        if outcome.is_ok() {
+                            self.dedupe.record(dedupe_key, DedupeRecord { replay });
+                        }
+                        let _ = envelope.reply.send(outcome);
+                    }
+                    Ok(None) => {
+                        let _ = envelope.reply.send(Err(RuntimeError::Codec {
+                            message: "duplicate append did not have a command replay record"
+                                .to_owned(),
+                        }));
+                    }
+                    Err(error) => {
+                        let _ = envelope
+                            .reply
+                            .send(Err(RuntimeError::from_store_error(error)));
+                    }
+                }
                 histogram!(
                     "es_command_latency_seconds",
                     "aggregate" => aggregate,
@@ -323,6 +376,18 @@ impl<A: Aggregate> ShardState<A> {
 
         Ok(true)
     }
+}
+
+fn replay_command_outcome<A, C>(
+    codec: &C,
+    replay: &es_store_postgres::CommandReplayRecord,
+) -> RuntimeResult<CommandOutcome<A::Reply>>
+where
+    A: Aggregate,
+    C: RuntimeEventCodec<A>,
+{
+    let reply = codec.decode_reply(&replay.reply)?;
+    Ok(CommandOutcome::new(reply, replay.append.clone()))
 }
 
 fn aggregate_label<A>() -> &'static str {
