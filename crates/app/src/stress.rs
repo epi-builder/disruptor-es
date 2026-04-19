@@ -538,7 +538,72 @@ impl RuntimeEventCodec<Order> for OrderCodec {
 
 #[cfg(test)]
 mod tests {
-    use super::{StressConfig, StressScenario, run_single_service_stress};
+    use super::{
+        StressConfig, StressScenario, latest_global_position, metadata, run_single_service_stress,
+        sample_projection_lag, start_postgres,
+    };
+    use es_core::{ExpectedRevision, StreamId, TenantId};
+    use es_store_postgres::{
+        AppendOutcome, AppendRequest, NewEvent, PostgresEventStore, PostgresProjectionStore,
+    };
+    use example_commerce::{OrderEvent, OrderId, OrderLine, ProductId, Quantity, Sku, UserId};
+    use serde_json::json;
+    use uuid::Uuid;
+
+    fn controlled_order_event(index: usize) -> anyhow::Result<NewEvent> {
+        let event = OrderEvent::OrderPlaced {
+            order_id: OrderId::new(format!("controlled-order-{index}"))?,
+            user_id: UserId::new("controlled-user")?,
+            lines: vec![OrderLine {
+                product_id: ProductId::new("controlled-product")?,
+                sku: Sku::new("CONTROLLED-SKU")?,
+                quantity: Quantity::new(1)?,
+                product_available: true,
+            }],
+        };
+
+        Ok(NewEvent::new(
+            Uuid::from_u128(500_000 + u128::try_from(index)?),
+            "OrderPlaced",
+            1,
+            serde_json::to_value(event)?,
+            json!({ "source": "stress-projection-lag-test" }),
+        )?)
+    }
+
+    #[tokio::test]
+    async fn stress_projection_lag_reports_controlled_backlog() -> anyhow::Result<()> {
+        let harness = start_postgres().await?;
+        let event_store = PostgresEventStore::new(harness.pool.clone());
+        let projection_store = PostgresProjectionStore::new(harness.pool.clone());
+        let tenant = TenantId::new("tenant-0")?;
+        let events = (0..105)
+            .map(controlled_order_event)
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        let outcome = event_store
+            .append(AppendRequest::new(
+                StreamId::new("controlled-stress-backlog")?,
+                ExpectedRevision::NoStream,
+                metadata(tenant),
+                "controlled-stress-backlog",
+                events,
+            )?)
+            .await?;
+        let AppendOutcome::Committed(_) = outcome else {
+            panic!("controlled backlog append should commit");
+        };
+
+        let lag = sample_projection_lag(
+            &projection_store,
+            1,
+            latest_global_position(&harness.pool).await?,
+        )
+        .await?;
+        assert!(lag > 0);
+
+        Ok(())
+    }
 
     #[tokio::test]
     async fn single_service_stress_smoke() -> anyhow::Result<()> {
