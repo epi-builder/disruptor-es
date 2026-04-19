@@ -186,7 +186,9 @@ Plans:
   2. True process-manager retries still replay original committed follow-up outcomes through runtime/store idempotency.
   3. Duplicate same-product order lines cannot collapse distinct reserve/release commands into the wrong replay record.
   4. App-level process-manager tests cover duplicate product lines and replayed follow-up processing.
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 10-01-PLAN.md — Add line-aware reserve/release follow-up keys and duplicate-line retry replay coverage.
 
 ### Phase 11: v1 Archive Hygiene and HTTP E2E Debt
 **Goal**: Clean up non-blocking milestone audit debt so v1 can be archived with clear runnable service guidance, HTTP-inclusive stress coverage, current requirement traceability, validation hygiene, and advisory domain hardening.
