@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Commerce Fixture Domain** - User, product, and order behavior proves typed decisions, replay, relationships, and invariants. Completed 2026-04-17.
 - [x] **Phase 5: CQRS Projection and Query Catch-Up** - Committed events feed checkpointed read models with restart and read-your-own-write support. Completed 2026-04-18.
 - [x] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions. Completed 2026-04-18.
-- [ ] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible.
+- [x] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible. Completed 2026-04-19.
 
 ## Phase Details
 
@@ -132,7 +132,7 @@ Plans:
   5. Benchmark artifacts separate ring-only, domain-only, adapter-only, storage-only, single-service integrated, full E2E, projector/outbox, hot-key, burst, and degraded-dependency behavior.
   6. A single-service integrated stress test exercises the actual production-shaped service composition in one process and reports throughput, p50/p95/p99 latency, queue depths, append latency, projection lag, outbox lag, reject rate, and CPU/core utilization.
   7. Documentation states hot-path rules plus service-boundary guidance and explains how to interpret single-service stress results separately from ring-only microbenchmarks.
-**Plans**: 6 plans
+**Plans**: 7 plans
 Plans:
 - [x] 07-01-PLAN.md — Implement the thin Axum HTTP command adapter, response/error contract, dependency catalog, and adapter boundary tests.
 - [x] 07-02-PLAN.md — Add app observability bootstrap plus runtime, storage, projection, and outbox trace/metric instrumentation.
@@ -140,6 +140,7 @@ Plans:
 - [x] 07-04-PLAN.md — Create layer-separated benchmark artifacts for ring, domain, adapter, storage, projector/outbox, and required scenario smoke coverage.
 - [x] 07-05-PLAN.md — Implement the single-service integrated stress runner and stress-smoke app bootstrap.
 - [x] 07-06-PLAN.md — Document hot-path rules, gateway boundaries, template extension steps, and stress-result interpretation.
+- [x] 07-07-PLAN.md — Close projection lag and stress signal verifier gaps with durable backlog metrics and measured stress fields.
 
 ## Progress
 
@@ -154,4 +155,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Commerce Fixture Domain | 4/4 | Complete | 2026-04-17 |
 | 5. CQRS Projection and Query Catch-Up | 3/3 | Complete | 2026-04-18 |
 | 6. Outbox and Process Manager Workflows | 5/5 | Complete | 2026-04-18 |
-| 7. Adapters, Observability, Stress, and Template Guidance | 0/TBD | Not started | - |
+| 7. Adapters, Observability, Stress, and Template Guidance | 7/7 | Complete | 2026-04-19 |

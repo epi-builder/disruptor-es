@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 07 gap-closure plan ready to execute
-last_updated: "2026-04-19T01:11:30.754Z"
-last_activity: 2026-04-19 -- Phase 07 planning complete
+status: complete
+stopped_at: Completed 07-07-PLAN.md
+last_updated: "2026-04-19T02:11:55.796Z"
+last_activity: 2026-04-19
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 31
-  completed_plans: 30
-  percent: 97
+  completed_plans: 31
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 07 (adapters-observability-stress-and-template-guidance) — EXECUTING
+Phase: 07 (adapters-observability-stress-and-template-guidance) — COMPLETE
 Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-04-19 -- Phase 07 planning complete
+Status: Complete
+Last activity: 2026-04-19 -- Completed 07-07-PLAN.md
 
 Progress: [██████████] 100%
 
@@ -74,6 +74,7 @@ Progress: [██████████] 100%
 | Phase 06-outbox-and-process-manager-workflows P03 | 4min 5s | 1 tasks | 4 files |
 | Phase 06-outbox-and-process-manager-workflows P04 | 4min 31s | 1 tasks | 6 files |
 | Phase 06-outbox-and-process-manager-workflows P05 | 8min 48s | 1 tasks | 10 files |
+| Phase 07-adapters-observability-stress-and-template-guidance P07 | 10min 42s | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,9 @@ Recent decisions affecting current work:
 - [Phase 06-outbox-and-process-manager-workflows]: Read process-manager batches from PostgresEventStore::read_global using the saved tenant-scoped offset before delegating to process_batch.
 - [Phase 06-outbox-and-process-manager-workflows]: Use deterministic follow-up idempotency keys in the form pm:{process_manager}:{source_event_id}:{action}:{target_id}.
 - [Phase 06-outbox-and-process-manager-workflows]: Advance durable process-manager offsets only after follow-up command replies complete or an event is intentionally skipped.
+- [Phase 07]: Projection lag is computed from tenant-scoped durable event-store max global position rather than fetched batch size.
+- [Phase 07]: Single-service stress append latency is recorded around RuntimeEventStore::append instead of command round-trip latency.
+- [Phase 07]: Stress shard depth samples read-only runtime shard state without exposing mutable shard internals.
 
 ### Pending Todos
 
@@ -159,6 +163,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-18T09:07:42.428Z
-Stopped at: Phase 06 verified; Phase 07 not started
+Last session: 2026-04-19T02:11:55.753Z
+Stopped at: Completed 07-07-PLAN.md
 Resume file: None
