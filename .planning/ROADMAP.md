@@ -172,7 +172,9 @@ Plans:
   2. Runtime command processing cannot reuse cached aggregate state across tenants that share a stream ID.
   3. Store rehydration remains tenant-scoped and is not skipped by a stream-only cache hit.
   4. Regression tests prove same-stream, different-tenant commands preserve isolated domain state and conflict behavior.
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 09-01-PLAN.md — Add tenant-scoped aggregate cache keys, shard runtime isolation, same-stream tenant regressions, and validation sign-off.
 
 ### Phase 10: Duplicate-Safe Process Manager Follow-Up Keys
 **Goal**: Process-manager follow-up commands remain deterministic for retry replay while avoiding idempotency collisions for orders that contain repeated product lines.
@@ -214,6 +216,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Outbox and Process Manager Workflows | 5/5 | Complete | 2026-04-18 |
 | 7. Adapters, Observability, Stress, and Template Guidance | 7/7 | Complete | 2026-04-19 |
 | 8. Runtime Duplicate Command Replay | 3/3 | Complete | 2026-04-19 |
-| 9. Tenant-Scoped Runtime Aggregate Cache | 0/TBD | Pending | - |
+| 9. Tenant-Scoped Runtime Aggregate Cache | 0/1 | Pending | - |
 | 10. Duplicate-Safe Process Manager Follow-Up Keys | 0/TBD | Pending | - |
 | 11. v1 Archive Hygiene and HTTP E2E Debt | 0/TBD | Pending | - |
