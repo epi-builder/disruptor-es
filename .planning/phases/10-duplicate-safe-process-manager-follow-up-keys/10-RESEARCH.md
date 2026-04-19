@@ -363,17 +363,17 @@ The exact helper/store shape may need minor extension because the current `Repla
 |---|-------|---------|---------------|
 | A1 | Existing order-line vector order is stable enough to serve as source-event-local line identity. [ASSUMED] | Primary recommendation | If a future event upcaster reorders lines, retry keys could drift; current code has no upcaster and stores `Vec<OrderLine>` directly. [VERIFIED: crates/example-commerce/src/order.rs:75] |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should duplicate product lines be coalesced instead of line-keyed?**
+1. **RESOLVED: Should duplicate product lines be coalesced instead of line-keyed?**
    - What we know: Success criteria permit either distinguishing duplicate lines or coalescing before command emission. [VERIFIED: user prompt]
    - What's unclear: The project has not recorded a domain decision that repeated same-product lines should become one inventory reservation. [VERIFIED: .planning/STATE.md]
-   - Recommendation: Do not coalesce in Phase 10; use line ordinal keys because it preserves existing command and event granularity. [VERIFIED: crates/app/src/commerce_process_manager.rs:68]
+   - RESOLVED decision: Do not coalesce in Phase 10; use line ordinal keys because it preserves existing command and event granularity. [VERIFIED: crates/app/src/commerce_process_manager.rs:68]
 
-2. **Should line ordinals be one-based or zero-based in keys?**
+2. **RESOLVED: Should line ordinals be one-based or zero-based in keys?**
    - What we know: Rust `enumerate()` produces zero-based `usize` indexes. [VERIFIED: Rust standard library behavior via local code compilation baseline]
    - What's unclear: No project convention for user-facing process-manager key ordinals exists. [VERIFIED: rg results in crates/app/src/commerce_process_manager.rs]
-   - Recommendation: Use zero-based ordinals because keys are internal and it maps directly to `enumerate()` without arithmetic. [VERIFIED: crates/app/src/commerce_process_manager.rs:68]
+   - RESOLVED decision: Use zero-based ordinals because keys are internal and it maps directly to `enumerate()` without arithmetic. [VERIFIED: crates/app/src/commerce_process_manager.rs:68]
 
 ## Environment Availability
 
