@@ -10,7 +10,7 @@ mod router;
 mod shard;
 mod store;
 
-pub use cache::{AggregateCache, DedupeCache, DedupeKey, DedupeRecord};
+pub use cache::{AggregateCache, AggregateCacheKey, DedupeCache, DedupeKey, DedupeRecord};
 pub use command::{CommandEnvelope, CommandOutcome, CommandReply, RuntimeEventCodec};
 pub use disruptor_path::{DisruptorPath, ReleasedHandoff};
 pub use engine::{CommandEngine, CommandEngineConfig};

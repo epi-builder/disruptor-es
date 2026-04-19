@@ -8,9 +8,9 @@ use metrics::{gauge, histogram};
 use tracing::info_span;
 
 use crate::{
-    AggregateCache, CommandEnvelope, CommandOutcome, DedupeCache, DedupeKey, DedupeRecord,
-    DisruptorPath, RoutedCommand, RuntimeError, RuntimeEventCodec, RuntimeEventStore,
-    RuntimeResult, ShardId,
+    AggregateCache, AggregateCacheKey, CommandEnvelope, CommandOutcome, DedupeCache, DedupeKey,
+    DedupeRecord, DisruptorPath, RoutedCommand, RuntimeError, RuntimeEventCodec,
+    RuntimeEventStore, RuntimeResult, ShardId,
 };
 
 /// Command envelope released from the disruptor path for shard processing.
@@ -215,13 +215,18 @@ impl<A: Aggregate> ShardState<A> {
             }
         }
 
-        let current_state = if let Some(cached) = self.cache.get(&envelope.stream_id) {
+        let cache_key = AggregateCacheKey {
+            tenant_id: envelope.metadata.tenant_id.clone(),
+            stream_id: envelope.stream_id.clone(),
+        };
+
+        let current_state = if let Some(cached) = self.cache.get(&cache_key) {
             cached.clone()
         } else {
             match rehydrate_state(store, codec, &envelope).await {
                 Ok(rehydrated) => {
                     self.cache
-                        .commit_state(envelope.stream_id.clone(), rehydrated.clone());
+                        .commit_state(cache_key.clone(), rehydrated.clone());
                     rehydrated
                 }
                 Err(error) => {
@@ -305,8 +310,7 @@ impl<A: Aggregate> ShardState<A> {
                 for event in &decision.events {
                     A::apply(&mut staged_state, event);
                 }
-                self.cache
-                    .commit_state(envelope.stream_id.clone(), staged_state);
+                self.cache.commit_state(cache_key, staged_state);
                 self.dedupe.record(
                     dedupe_key,
                     DedupeRecord {

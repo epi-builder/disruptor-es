@@ -9,8 +9,8 @@ use std::{
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
 use es_kernel::{Aggregate, Decision};
 use es_runtime::{
-    CommandEngine, CommandEngineConfig, CommandEnvelope, DedupeKey, DedupeRecord, RuntimeError,
-    RuntimeEventCodec, RuntimeEventStore, ShardId, ShardState,
+    AggregateCacheKey, CommandEngine, CommandEngineConfig, CommandEnvelope, DedupeKey,
+    DedupeRecord, RuntimeError, RuntimeEventCodec, RuntimeEventStore, ShardId, ShardState,
 };
 use es_store_postgres::{
     AppendOutcome, AppendRequest, CommandReplayRecord, CommandReplyPayload, CommittedAppend,
@@ -343,21 +343,31 @@ impl RuntimeEventStore for FakeStore {
     }
 }
 
-fn tenant_id() -> TenantId {
-    TenantId::new("tenant-a").expect("tenant id")
+fn tenant_id_for(value: &'static str) -> TenantId {
+    TenantId::new(value).expect("tenant id")
 }
 
-fn metadata() -> CommandMetadata {
+fn metadata_for(tenant: &'static str) -> CommandMetadata {
     CommandMetadata {
         command_id: Uuid::from_u128(1),
         correlation_id: Uuid::from_u128(2),
         causation_id: None,
-        tenant_id: tenant_id(),
+        tenant_id: tenant_id_for(tenant),
         requested_at: OffsetDateTime::from_unix_timestamp(1_700_000_000).expect("timestamp"),
     }
 }
 
-fn envelope(
+fn cache_key_for(tenant: &'static str, stream: &'static str) -> AggregateCacheKey {
+    AggregateCacheKey {
+        tenant_id: tenant_id_for(tenant),
+        stream_id: StreamId::new(stream).expect("stream id"),
+    }
+}
+
+fn envelope_for(
+    tenant: &'static str,
+    stream: &'static str,
+    idempotency_key: &'static str,
     amount: i64,
 ) -> (
     CommandEnvelope<CounterAggregate>,
@@ -366,16 +376,33 @@ fn envelope(
     let (reply, receiver) = oneshot::channel();
     let envelope = CommandEnvelope::<CounterAggregate>::new(
         CounterCommand::Add {
-            stream_id: "counter-1",
+            stream_id: stream,
             amount,
         },
-        metadata(),
-        "idem-1",
+        metadata_for(tenant),
+        idempotency_key,
         reply,
     )
     .expect("command envelope");
 
     (envelope, receiver)
+}
+
+fn tenant_id() -> TenantId {
+    tenant_id_for("tenant-a")
+}
+
+fn metadata() -> CommandMetadata {
+    metadata_for("tenant-a")
+}
+
+fn envelope(
+    amount: i64,
+) -> (
+    CommandEnvelope<CounterAggregate>,
+    oneshot::Receiver<es_runtime::RuntimeResult<es_runtime::CommandOutcome<i64>>>,
+) {
+    envelope_for("tenant-a", "counter-1", "idem-1", amount)
 }
 
 fn rejecting_envelope() -> (
@@ -430,7 +457,7 @@ fn dedupe_key() -> DedupeKey {
 
 fn warm_cache(state: &mut ShardState<CounterAggregate>, value: i64) {
     state.cache_mut().commit_state(
-        StreamId::new("counter-1").expect("stream id"),
+        cache_key_for("tenant-a", "counter-1"),
         CounterState { value },
     );
 }
@@ -495,7 +522,7 @@ async fn reply_is_sent_after_append_commit() {
         Some(&CounterState { value: 3 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -534,7 +561,7 @@ async fn conflict_does_not_mutate_cache() {
         Some(&CounterState { value: 10 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -562,7 +589,7 @@ async fn domain_error_does_not_append_or_mutate_cache() {
         Some(&CounterState { value: 10 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -590,7 +617,7 @@ async fn codec_error_does_not_append_or_mutate_cache() {
         Some(&CounterState { value: 10 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -648,7 +675,7 @@ async fn cache_miss_rehydrates_before_decide() {
         Some(&CounterState { value: 8 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -683,7 +710,7 @@ async fn runtime_duplicate_cache_hit_skips_decide_and_append() {
         Some(&CounterState { value: 10 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -717,7 +744,7 @@ async fn duplicate_replay_returns_original_reply_after_state_mutation() {
         Some(&CounterState { value: 50 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -773,7 +800,7 @@ async fn duplicate_append_returns_successful_command_outcome() {
         Some(&CounterState { value: 0 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
     assert_eq!(1, state.dedupe().len());
 }
@@ -804,7 +831,7 @@ async fn duplicate_append_branch_uses_stored_replay_not_fresh_decision_reply() {
         Some(&CounterState { value: 10 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -831,7 +858,7 @@ async fn duplicate_after_warmed_cache_does_not_apply_newly_decided_events() {
         Some(&CounterState { value: 10 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -857,7 +884,7 @@ async fn reply_drop_after_append_still_advances_cache_and_dedupe() {
         Some(&CounterState { value: 3 }),
         state
             .cache()
-            .get(&StreamId::new("counter-1").expect("stream id"))
+            .get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 

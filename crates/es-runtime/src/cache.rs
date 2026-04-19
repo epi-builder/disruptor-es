@@ -5,7 +5,7 @@ use es_kernel::Aggregate;
 
 /// Shard-local aggregate state cache owned by a single shard runtime.
 pub struct AggregateCache<A: Aggregate> {
-    states: HashMap<StreamId, A::State>,
+    states: HashMap<AggregateCacheKey, A::State>,
 }
 
 impl<A: Aggregate> Default for AggregateCache<A> {
@@ -22,19 +22,19 @@ impl<A: Aggregate> AggregateCache<A> {
         }
     }
 
-    /// Returns cached state, inserting a default aggregate state when the stream is absent.
-    pub fn get_or_default(&mut self, stream_id: &StreamId) -> A::State {
-        self.states.entry(stream_id.clone()).or_default().clone()
+    /// Returns cached state, inserting a default aggregate state when the key is absent.
+    pub fn get_or_default(&mut self, key: &AggregateCacheKey) -> A::State {
+        self.states.entry(key.clone()).or_default().clone()
     }
 
     /// Replaces the cached state after the caller has committed the staged state.
-    pub fn commit_state(&mut self, stream_id: StreamId, state: A::State) {
-        self.states.insert(stream_id, state);
+    pub fn commit_state(&mut self, key: AggregateCacheKey, state: A::State) {
+        self.states.insert(key, state);
     }
 
     /// Returns cached state without creating a default entry.
-    pub fn get(&self, stream_id: &StreamId) -> Option<&A::State> {
-        self.states.get(stream_id)
+    pub fn get(&self, key: &AggregateCacheKey) -> Option<&A::State> {
+        self.states.get(key)
     }
 
     /// Returns the number of cached stream states.
@@ -46,6 +46,15 @@ impl<A: Aggregate> AggregateCache<A> {
     pub fn is_empty(&self) -> bool {
         self.states.is_empty()
     }
+}
+
+/// Tenant-scoped aggregate cache key for shard-local hot state.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct AggregateCacheKey {
+    /// Tenant that owns the stream state.
+    pub tenant_id: TenantId,
+    /// Stream whose aggregate state is cached.
+    pub stream_id: StreamId,
 }
 
 /// Tenant-scoped dedupe cache key for a shard-local optimization.
