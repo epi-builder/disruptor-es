@@ -154,6 +154,15 @@ impl RuntimeEventCodec<CounterAggregate> for CounterCodec {
     }
 }
 
+#[test]
+fn command_replay_contract_round_trips_counter_reply() {
+    let codec = CounterCodec::default();
+    let payload = codec.encode_reply(&42).expect("encoded reply");
+    let decoded = codec.decode_reply(&payload).expect("decoded reply");
+
+    assert_eq!(42, decoded);
+}
+
 #[derive(Clone)]
 struct FakeStore {
     inner: Arc<FakeStoreInner>,
