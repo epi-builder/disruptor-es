@@ -101,7 +101,7 @@ pub enum ProductEvent {
 }
 
 /// Replies returned by product commands.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ProductReply {
     /// Product was created.
     Created {

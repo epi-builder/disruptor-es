@@ -14,11 +14,13 @@ es-projection = { path = "../es-projection" }
 es-runtime = { path = "../es-runtime" }
 es-store-postgres = { path = "../es-store-postgres" }
 example-commerce = { path = "../example-commerce" }
+futures.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
 opentelemetry.workspace = true
 opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 sysinfo.workspace = true

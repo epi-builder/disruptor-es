@@ -208,14 +208,23 @@ fn command_submit_error(error: impl std::fmt::Display) -> OutboxError {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use super::*;
-    use es_core::TenantId;
+    use es_core::{StreamId, StreamRevision, TenantId};
     use es_runtime::{
-        CommandGateway, CommandOutcome, PartitionRouter, RoutedCommand, RuntimeError,
+        CommandEngine, CommandEngineConfig, CommandGateway, CommandOutcome, PartitionRouter,
+        RoutedCommand, RuntimeError, RuntimeEventCodec, RuntimeEventStore,
+    };
+    use es_store_postgres::{
+        AppendOutcome, AppendRequest, CommandReplayRecord, CommandReplyPayload, NewEvent,
+        RehydrationBatch, SnapshotRecord, StoreResult, StoredEvent,
     };
     use example_commerce::{
-        OrderId, OrderLine, OrderReply, ProductId, ProductReply, Quantity, Sku, UserId,
+        OrderId, OrderLine, OrderReply, OrderState, ProductEvent, ProductId, ProductReply,
+        ProductState, Quantity, Sku, UserId,
     };
+    use futures::future::BoxFuture;
     use serde_json::json;
     use tokio::sync::mpsc;
     use tokio::time::{Duration, timeout};
@@ -304,6 +313,370 @@ mod tests {
             .await
             .expect("order command received before timeout")
             .expect("order command")
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    struct TestProductCodec;
+
+    impl RuntimeEventCodec<Product> for TestProductCodec {
+        fn encode(
+            &self,
+            event: &ProductEvent,
+            _metadata: &CommandMetadata,
+        ) -> es_runtime::RuntimeResult<NewEvent> {
+            let event_type = match event {
+                ProductEvent::ProductCreated { .. } => "ProductCreated",
+                ProductEvent::InventoryAdjusted { .. } => "InventoryAdjusted",
+                ProductEvent::InventoryReserved { .. } => "InventoryReserved",
+                ProductEvent::InventoryReleased { .. } => "InventoryReleased",
+            };
+            NewEvent::new(
+                Uuid::from_u128(20),
+                event_type,
+                1,
+                serde_json::to_value(event).map_err(|error| RuntimeError::Codec {
+                    message: error.to_string(),
+                })?,
+                json!({ "codec": "test-product" }),
+            )
+            .map_err(RuntimeError::from_store_error)
+        }
+
+        fn decode(&self, stored: &StoredEvent) -> es_runtime::RuntimeResult<ProductEvent> {
+            serde_json::from_value(stored.payload.clone()).map_err(|error| RuntimeError::Codec {
+                message: error.to_string(),
+            })
+        }
+
+        fn decode_snapshot(
+            &self,
+            _snapshot: &SnapshotRecord,
+        ) -> es_runtime::RuntimeResult<ProductState> {
+            Ok(ProductState::default())
+        }
+
+        fn encode_reply(
+            &self,
+            reply: &ProductReply,
+        ) -> es_runtime::RuntimeResult<CommandReplyPayload> {
+            let payload = serde_json::to_value(reply).map_err(|error| RuntimeError::Codec {
+                message: error.to_string(),
+            })?;
+            CommandReplyPayload::new("product_reply", 1, payload)
+                .map_err(RuntimeError::from_store_error)
+        }
+
+        fn decode_reply(
+            &self,
+            payload: &CommandReplyPayload,
+        ) -> es_runtime::RuntimeResult<ProductReply> {
+            if payload.reply_type != "product_reply" {
+                return Err(RuntimeError::Codec {
+                    message: format!("unexpected reply type {}", payload.reply_type),
+                });
+            }
+            if payload.schema_version != 1 {
+                return Err(RuntimeError::Codec {
+                    message: format!("unexpected reply schema version {}", payload.schema_version),
+                });
+            }
+
+            serde_json::from_value::<ProductReply>(payload.payload.clone()).map_err(|error| {
+                RuntimeError::Codec {
+                    message: error.to_string(),
+                }
+            })
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    struct TestOrderCodec;
+
+    impl RuntimeEventCodec<Order> for TestOrderCodec {
+        fn encode(
+            &self,
+            event: &OrderEvent,
+            _metadata: &CommandMetadata,
+        ) -> es_runtime::RuntimeResult<NewEvent> {
+            let event_type = match event {
+                OrderEvent::OrderPlaced { .. } => "OrderPlaced",
+                OrderEvent::OrderConfirmed { .. } => "OrderConfirmed",
+                OrderEvent::OrderRejected { .. } => "OrderRejected",
+                OrderEvent::OrderCancelled { .. } => "OrderCancelled",
+            };
+            NewEvent::new(
+                Uuid::from_u128(21),
+                event_type,
+                1,
+                serde_json::to_value(event).map_err(|error| RuntimeError::Codec {
+                    message: error.to_string(),
+                })?,
+                json!({ "codec": "test-order" }),
+            )
+            .map_err(RuntimeError::from_store_error)
+        }
+
+        fn decode(&self, stored: &StoredEvent) -> es_runtime::RuntimeResult<OrderEvent> {
+            serde_json::from_value(stored.payload.clone()).map_err(|error| RuntimeError::Codec {
+                message: error.to_string(),
+            })
+        }
+
+        fn decode_snapshot(
+            &self,
+            _snapshot: &SnapshotRecord,
+        ) -> es_runtime::RuntimeResult<OrderState> {
+            Ok(OrderState::default())
+        }
+
+        fn encode_reply(
+            &self,
+            reply: &OrderReply,
+        ) -> es_runtime::RuntimeResult<CommandReplyPayload> {
+            let payload = serde_json::to_value(reply).map_err(|error| RuntimeError::Codec {
+                message: error.to_string(),
+            })?;
+            CommandReplyPayload::new("order_reply", 1, payload)
+                .map_err(RuntimeError::from_store_error)
+        }
+
+        fn decode_reply(
+            &self,
+            payload: &CommandReplyPayload,
+        ) -> es_runtime::RuntimeResult<OrderReply> {
+            if payload.reply_type != "order_reply" {
+                return Err(RuntimeError::Codec {
+                    message: format!("unexpected reply type {}", payload.reply_type),
+                });
+            }
+            if payload.schema_version != 1 {
+                return Err(RuntimeError::Codec {
+                    message: format!("unexpected reply schema version {}", payload.schema_version),
+                });
+            }
+
+            serde_json::from_value::<OrderReply>(payload.payload.clone()).map_err(|error| {
+                RuntimeError::Codec {
+                    message: error.to_string(),
+                }
+            })
+        }
+    }
+
+    #[derive(Clone)]
+    struct ReplayAwareProductStore {
+        inner: Arc<ReplayAwareStoreInner>,
+    }
+
+    #[derive(Clone)]
+    struct ReplayAwareOrderStore {
+        inner: Arc<ReplayAwareStoreInner>,
+    }
+
+    struct ReplayAwareStoreInner {
+        global_position: i64,
+        event_id: Uuid,
+        rehydration_events: Vec<StoredEvent>,
+        append_requests: Mutex<Vec<AppendRequest>>,
+        replay_record: Mutex<Option<CommandReplayRecord>>,
+        lookup_count: Mutex<usize>,
+    }
+
+    impl ReplayAwareProductStore {
+        fn new(product: ProductId) -> Self {
+            Self {
+                inner: Arc::new(ReplayAwareStoreInner {
+                    global_position: 20,
+                    event_id: Uuid::from_u128(20),
+                    rehydration_events: vec![stored_event(
+                        "product-product-1",
+                        "ProductCreated",
+                        ProductEvent::ProductCreated {
+                            product_id: product,
+                            sku: Sku::new("SKU-1").expect("sku"),
+                            name: "Keyboard".to_owned(),
+                            initial_quantity: Quantity::new(10).expect("quantity"),
+                        },
+                    )],
+                    append_requests: Mutex::new(Vec::new()),
+                    replay_record: Mutex::new(None),
+                    lookup_count: Mutex::new(0),
+                }),
+            }
+        }
+
+        fn append_count(&self) -> usize {
+            self.inner.append_count()
+        }
+
+        fn idempotency_keys(&self) -> Vec<String> {
+            self.inner.idempotency_keys()
+        }
+
+        fn replay_global_positions(&self) -> Vec<i64> {
+            self.inner.replay_global_positions()
+        }
+    }
+
+    impl ReplayAwareOrderStore {
+        fn new(source_event: &OrderEvent) -> Self {
+            Self {
+                inner: Arc::new(ReplayAwareStoreInner {
+                    global_position: 21,
+                    event_id: Uuid::from_u128(21),
+                    rehydration_events: vec![stored_event(
+                        "order-order-1",
+                        "OrderPlaced",
+                        source_event.clone(),
+                    )],
+                    append_requests: Mutex::new(Vec::new()),
+                    replay_record: Mutex::new(None),
+                    lookup_count: Mutex::new(0),
+                }),
+            }
+        }
+
+        fn append_count(&self) -> usize {
+            self.inner.append_count()
+        }
+
+        fn idempotency_keys(&self) -> Vec<String> {
+            self.inner.idempotency_keys()
+        }
+
+        fn replay_global_positions(&self) -> Vec<i64> {
+            self.inner.replay_global_positions()
+        }
+    }
+
+    impl ReplayAwareStoreInner {
+        fn append_count(&self) -> usize {
+            self.append_requests.lock().expect("append requests").len()
+        }
+
+        fn idempotency_keys(&self) -> Vec<String> {
+            self.append_requests
+                .lock()
+                .expect("append requests")
+                .iter()
+                .map(|request| request.idempotency_key.clone())
+                .collect()
+        }
+
+        fn replay_global_positions(&self) -> Vec<i64> {
+            self.replay_record
+                .lock()
+                .expect("replay record")
+                .as_ref()
+                .map(|record| record.append.global_positions.clone())
+                .unwrap_or_default()
+        }
+
+        fn append(&self, request: AppendRequest) -> StoreResult<AppendOutcome> {
+            let committed = es_store_postgres::CommittedAppend {
+                stream_id: request.stream_id.clone(),
+                first_revision: StreamRevision::new(1),
+                last_revision: StreamRevision::new(1),
+                global_positions: vec![self.global_position],
+                event_ids: vec![self.event_id],
+            };
+            if let Some(reply) = request.command_reply_payload.clone() {
+                *self.replay_record.lock().expect("replay record") = Some(CommandReplayRecord {
+                    append: committed.clone(),
+                    reply,
+                });
+            }
+            self.append_requests
+                .lock()
+                .expect("append requests")
+                .push(request);
+            Ok(AppendOutcome::Committed(committed))
+        }
+
+        fn load_rehydration(&self) -> StoreResult<RehydrationBatch> {
+            Ok(RehydrationBatch {
+                snapshot: None,
+                events: self.rehydration_events.clone(),
+            })
+        }
+
+        fn lookup_command_replay(&self) -> StoreResult<Option<CommandReplayRecord>> {
+            *self.lookup_count.lock().expect("lookup count") += 1;
+            Ok(self.replay_record.lock().expect("replay record").clone())
+        }
+    }
+
+    impl RuntimeEventStore for ReplayAwareProductStore {
+        fn append(&self, request: AppendRequest) -> BoxFuture<'_, StoreResult<AppendOutcome>> {
+            let result = self.inner.append(request);
+            Box::pin(async move { result })
+        }
+
+        fn load_rehydration(
+            &self,
+            _tenant_id: &TenantId,
+            _stream_id: &StreamId,
+        ) -> BoxFuture<'_, StoreResult<RehydrationBatch>> {
+            let result = self.inner.load_rehydration();
+            Box::pin(async move { result })
+        }
+
+        fn lookup_command_replay(
+            &self,
+            _tenant_id: &TenantId,
+            _idempotency_key: &str,
+        ) -> BoxFuture<'_, StoreResult<Option<CommandReplayRecord>>> {
+            let result = self.inner.lookup_command_replay();
+            Box::pin(async move { result })
+        }
+    }
+
+    impl RuntimeEventStore for ReplayAwareOrderStore {
+        fn append(&self, request: AppendRequest) -> BoxFuture<'_, StoreResult<AppendOutcome>> {
+            let result = self.inner.append(request);
+            Box::pin(async move { result })
+        }
+
+        fn load_rehydration(
+            &self,
+            _tenant_id: &TenantId,
+            _stream_id: &StreamId,
+        ) -> BoxFuture<'_, StoreResult<RehydrationBatch>> {
+            let result = self.inner.load_rehydration();
+            Box::pin(async move { result })
+        }
+
+        fn lookup_command_replay(
+            &self,
+            _tenant_id: &TenantId,
+            _idempotency_key: &str,
+        ) -> BoxFuture<'_, StoreResult<Option<CommandReplayRecord>>> {
+            let result = self.inner.lookup_command_replay();
+            Box::pin(async move { result })
+        }
+    }
+
+    fn stored_event<E: serde::Serialize>(
+        stream_id: &str,
+        event_type: &str,
+        event: E,
+    ) -> StoredEvent {
+        StoredEvent {
+            global_position: 1,
+            stream_id: StreamId::new(stream_id).expect("stream id"),
+            stream_revision: StreamRevision::new(1),
+            event_id: Uuid::from_u128(1),
+            event_type: event_type.to_owned(),
+            schema_version: 1,
+            payload: serde_json::to_value(event).expect("event payload"),
+            metadata: json!({ "source": "process-manager-replay-test" }),
+            tenant_id: tenant(),
+            command_id: Uuid::from_u128(1),
+            correlation_id: Uuid::from_u128(2),
+            causation_id: None,
+            recorded_at: time::OffsetDateTime::from_unix_timestamp(1_700_000_000)
+                .expect("timestamp"),
+        }
     }
 
     #[tokio::test]
@@ -657,6 +1030,93 @@ mod tests {
         );
 
         task.await.expect("process task")?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn process_manager_replayed_followups_return_original_outcomes() -> OutboxResult<()> {
+        let process_manager_name =
+            ProcessManagerName::new("commerce-order-pm").expect("process manager name");
+        let product = product_id("product-1");
+        let source_order_event = OrderEvent::OrderPlaced {
+            order_id: order_id(),
+            user_id: UserId::new("user-1").expect("user id"),
+            lines: vec![line(product.clone())],
+        };
+        let event = process_event(source_order_event.clone());
+        let product_store = ReplayAwareProductStore::new(product.clone());
+        let order_store = ReplayAwareOrderStore::new(&source_order_event);
+        let mut product_engine: CommandEngine<Product, _, _> = CommandEngine::new(
+            CommandEngineConfig::new(1, 4, 4).expect("product config"),
+            product_store.clone(),
+            TestProductCodec,
+        )
+        .expect("product engine");
+        let mut order_engine: CommandEngine<Order, _, _> = CommandEngine::new(
+            CommandEngineConfig::new(1, 4, 4).expect("order config"),
+            order_store.clone(),
+            TestOrderCodec,
+        )
+        .expect("order engine");
+        let manager = Arc::new(CommerceOrderProcessManager::new(
+            process_manager_name.clone(),
+            product_engine.gateway(),
+            order_engine.gateway(),
+        ));
+        let expected_reserve_key = format!(
+            "pm:{}:{}:reserve:{}",
+            process_manager_name.as_str(),
+            event.event_id,
+            product.as_str()
+        );
+        let expected_confirm_key = format!(
+            "pm:{}:{}:confirm:{}",
+            process_manager_name.as_str(),
+            event.event_id,
+            order_id().as_str()
+        );
+
+        let first_event = event.clone();
+        let first_manager = manager.clone();
+        let first_task = tokio::spawn(async move { first_manager.process(&first_event).await });
+        assert!(product_engine.process_one().await.expect("first reserve"));
+        assert!(order_engine.process_one().await.expect("first confirm"));
+        assert_eq!(
+            ProcessOutcome::CommandsSubmitted {
+                global_position: event.global_position,
+                command_count: 2
+            },
+            first_task.await.expect("first process")?
+        );
+        assert_eq!(
+            vec![expected_reserve_key.clone()],
+            product_store.idempotency_keys()
+        );
+        assert_eq!(
+            vec![expected_confirm_key.clone()],
+            order_store.idempotency_keys()
+        );
+
+        let second_event = event.clone();
+        let second_manager = manager.clone();
+        let second_task = tokio::spawn(async move { second_manager.process(&second_event).await });
+        assert!(product_engine.process_one().await.expect("second reserve"));
+        assert!(order_engine.process_one().await.expect("second confirm"));
+        assert_eq!(
+            ProcessOutcome::CommandsSubmitted {
+                global_position: event.global_position,
+                command_count: 2
+            },
+            second_task.await.expect("second process")?
+        );
+
+        assert_eq!(1, product_store.append_count());
+        assert_eq!(1, order_store.append_count());
+        assert_eq!(vec![expected_reserve_key], product_store.idempotency_keys());
+        assert_eq!(vec![expected_confirm_key], order_store.idempotency_keys());
+        assert_eq!(product_store.replay_global_positions(), vec![20]);
+        assert_eq!(order_store.replay_global_positions(), vec![21]);
 
         Ok(())
     }
