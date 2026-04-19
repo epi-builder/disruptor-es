@@ -223,7 +223,14 @@ impl<A: Aggregate> ShardState<A> {
         let current_state = if let Some(cached) = self.cache.get(&cache_key) {
             cached.clone()
         } else {
-            match rehydrate_state(store, codec, &envelope).await {
+            match rehydrate_state(
+                store,
+                codec,
+                &envelope.metadata.tenant_id,
+                &envelope.stream_id,
+            )
+            .await
+            {
                 Ok(rehydrated) => {
                     self.cache.commit_state(cache_key.clone(), rehydrated.clone());
                     rehydrated
@@ -341,6 +348,21 @@ impl<A: Aggregate> ShardState<A> {
                     Ok(Some(replay)) => {
                         let outcome = replay_command_outcome::<A, C>(codec, &replay);
                         if outcome.is_ok() {
+                            match rehydrate_state(
+                                store,
+                                codec,
+                                &envelope.metadata.tenant_id,
+                                &envelope.stream_id,
+                            )
+                            .await
+                            {
+                                Ok(refreshed) => {
+                                    self.cache.commit_state(cache_key.clone(), refreshed);
+                                }
+                                Err(_) => {
+                                    self.cache.invalidate(&cache_key);
+                                }
+                            }
                             self.dedupe.record(dedupe_key, DedupeRecord { replay });
                         }
                         let _ = envelope.reply.send(outcome);
@@ -409,7 +431,8 @@ fn aggregate_label<A>() -> &'static str {
 async fn rehydrate_state<A, S, C>(
     store: &S,
     codec: &C,
-    envelope: &CommandEnvelope<A>,
+    tenant_id: &es_core::TenantId,
+    stream_id: &es_core::StreamId,
 ) -> RuntimeResult<A::State>
 where
     A: Aggregate,
@@ -417,7 +440,7 @@ where
     C: RuntimeEventCodec<A>,
 {
     let batch = store
-        .load_rehydration(&envelope.metadata.tenant_id, &envelope.stream_id)
+        .load_rehydration(tenant_id, stream_id)
         .await
         .map_err(RuntimeError::from_store_error)?;
     let mut state = match &batch.snapshot {

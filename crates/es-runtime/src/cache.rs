@@ -32,6 +32,11 @@ impl<A: Aggregate> AggregateCache<A> {
         self.states.insert(key, state);
     }
 
+    /// Removes cached state for a stream, forcing the next command to rehydrate.
+    pub fn invalidate(&mut self, key: &AggregateCacheKey) {
+        self.states.remove(key);
+    }
+
     /// Returns cached state without creating a default entry.
     pub fn get(&self, key: &AggregateCacheKey) -> Option<&A::State> {
         self.states.get(key)

@@ -955,6 +955,10 @@ async fn duplicate_append_returns_successful_command_outcome() {
 async fn duplicate_append_branch_uses_stored_replay_not_fresh_decision_reply() {
     let store = FakeStore::duplicate();
     store.set_command_replay_sequence(vec![None, Some(command_replay_record(12, 44))]);
+    store.set_rehydration(RehydrationBatch {
+        snapshot: None,
+        events: vec![stored_event(12, 40)],
+    });
     let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
     warm_cache(&mut state, 10);
@@ -974,7 +978,7 @@ async fn duplicate_append_branch_uses_stored_replay_not_fresh_decision_reply() {
     assert_eq!(1, store.appended_len());
     assert_eq!(2, store.lookup_count());
     assert_eq!(
-        Some(&CounterState { value: 10 }),
+        Some(&CounterState { value: 40 }),
         state
             .cache()
             .get(&cache_key_for("tenant-a", "counter-1"))
@@ -982,9 +986,17 @@ async fn duplicate_append_branch_uses_stored_replay_not_fresh_decision_reply() {
 }
 
 #[tokio::test]
-async fn duplicate_after_warmed_cache_does_not_apply_newly_decided_events() {
+async fn duplicate_after_warmed_cache_refreshes_from_durable_rehydration() {
     let store = FakeStore::duplicate();
     store.set_command_replay_sequence(vec![None, Some(command_replay_record(1, 13))]);
+    store.set_tenant_rehydration(
+        tenant_id_for("tenant-a"),
+        StreamId::new("counter-1").expect("stream id"),
+        RehydrationBatch {
+            snapshot: None,
+            events: vec![stored_event(1, 25)],
+        },
+    );
     let codec = CounterCodec::default();
     let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
     warm_cache(&mut state, 10);
@@ -1001,10 +1013,19 @@ async fn duplicate_after_warmed_cache_does_not_apply_newly_decided_events() {
     let outcome = receiver.await.expect("reply").expect("success");
     assert_eq!(13, outcome.reply);
     assert_eq!(
-        Some(&CounterState { value: 10 }),
+        Some(&CounterState { value: 25 }),
         state
             .cache()
             .get(&cache_key_for("tenant-a", "counter-1"))
+    );
+    assert_eq!(
+        vec![
+            (
+                tenant_id_for("tenant-a"),
+                StreamId::new("counter-1").expect("stream id")
+            ),
+        ],
+        store.rehydration_calls()
     );
 }
 
