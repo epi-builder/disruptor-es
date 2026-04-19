@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions. Completed 2026-04-18.
 - [x] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible. Completed 2026-04-19.
 - [x] **Phase 8: Runtime Duplicate Command Replay** - Duplicate command retries are replayed from runtime/store idempotency before aggregate decision so API and process-manager retries return the original committed result. Completed 2026-04-19.
-- [ ] **Phase 9: Tenant-Scoped Runtime Aggregate Cache** - Shard-local aggregate cache entries include tenant identity so runtime hot state cannot bleed across tenant-scoped event-store streams.
+- [x] **Phase 9: Tenant-Scoped Runtime Aggregate Cache** - Shard-local aggregate cache entries include tenant identity so runtime hot state cannot bleed across tenant-scoped event-store streams. Completed 2026-04-19.
 - [ ] **Phase 10: Duplicate-Safe Process Manager Follow-Up Keys** - Process-manager reserve/release follow-up commands use collision-safe idempotency keys for duplicate product lines while preserving retry replay.
 - [ ] **Phase 11: v1 Archive Hygiene and HTTP E2E Debt** - Resolve accepted audit debt around runnable HTTP composition, HTTP-inclusive stress coverage, stale requirements traceability, validation hygiene, and advisory domain hardening.
 
@@ -174,7 +174,7 @@ Plans:
   4. Regression tests prove same-stream, different-tenant commands preserve isolated domain state and conflict behavior.
 **Plans**: 1 plan
 Plans:
-- [ ] 09-01-PLAN.md — Add tenant-scoped aggregate cache keys, shard runtime isolation, same-stream tenant regressions, and validation sign-off.
+- [x] 09-01-PLAN.md — Add tenant-scoped aggregate cache keys, shard runtime isolation, same-stream tenant regressions, and validation sign-off.
 
 ### Phase 10: Duplicate-Safe Process Manager Follow-Up Keys
 **Goal**: Process-manager follow-up commands remain deterministic for retry replay while avoiding idempotency collisions for orders that contain repeated product lines.
@@ -216,6 +216,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Outbox and Process Manager Workflows | 5/5 | Complete | 2026-04-18 |
 | 7. Adapters, Observability, Stress, and Template Guidance | 7/7 | Complete | 2026-04-19 |
 | 8. Runtime Duplicate Command Replay | 3/3 | Complete | 2026-04-19 |
-| 9. Tenant-Scoped Runtime Aggregate Cache | 0/1 | Pending | - |
+| 9. Tenant-Scoped Runtime Aggregate Cache | 1/1 | Complete | 2026-04-19 |
 | 10. Duplicate-Safe Process Manager Follow-Up Keys | 0/TBD | Pending | - |
 | 11. v1 Archive Hygiene and HTTP E2E Debt | 0/TBD | Pending | - |

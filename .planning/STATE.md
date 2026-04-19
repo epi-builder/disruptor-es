@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-04-19T20:06:30.452Z"
-last_activity: 2026-04-20 -- Phase 09 planning complete
+status: verifying
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-04-19T21:17:13.614Z"
+last_activity: 2026-04-19
 progress:
   total_phases: 11
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 35
-  completed_plans: 34
-  percent: 97
+  completed_plans: 35
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-19)
 
 ## Current Position
 
-Phase: 09
+Phase: 09 (tenant-scoped-runtime-aggregate-cache) — COMPLETE
 Plan: 1 of 1
-Status: Ready to execute
-Last activity: 2026-04-20 -- Phase 09 planning complete
+Status: Phase complete — ready for verification
+Last activity: 2026-04-19
 
 Progress: [██████████] 100%
 
@@ -81,6 +81,7 @@ Progress: [██████████] 100%
 | Phase 08-runtime-duplicate-command-replay P01 | 6min | 2 tasks | 7 files |
 | Phase 08-runtime-duplicate-command-replay P02 | 10min 5s | 2 tasks | 10 files |
 | Phase 08-runtime-duplicate-command-replay P03 | 10min 35s | 3 tasks | 7 files |
+| Phase 09-tenant-scoped-runtime-aggregate-cache P01 | 6min 29s | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -150,11 +151,13 @@ Recent decisions affecting current work:
 - [Phase 08-runtime-duplicate-command-replay]: HTTP duplicate retry coverage uses the real order CommandEngine and a test RuntimeEventStore instead of adapter-local idempotency or manual reply injection.
 - [Phase 08-runtime-duplicate-command-replay]: Process-manager retry coverage reuses deterministic pm:{manager}:{source_event_id}:... keys through real product/order CommandEngines instead of process-manager-local dedupe state.
 - [Phase 08-runtime-duplicate-command-replay]: Phase 08 validation is recorded as requirement-level sampling because each plan contributes cross-cutting replay coverage.
+- [Phase 09-tenant-scoped-runtime-aggregate-cache]: Aggregate cache identity is a first-class AggregateCacheKey containing TenantId and StreamId. — Matches existing typed DedupeKey pattern and prevents stream-only cache hits from bypassing tenant-scoped rehydration.
+- [Phase 09-tenant-scoped-runtime-aggregate-cache]: ShardState constructs one AggregateCacheKey after duplicate replay misses and reuses it for cache hit, rehydration fill, and committed cache replacement. — Preserves Phase 8 duplicate replay ordering while keeping cache identity stable throughout a handoff.
 
 ### Pending Todos
 
 - Milestone gap closure routing:
-  - Phase 09 is planned to add tenant-scoped aggregate cache keys for non-duplicate commands that share a stream ID across tenants.
+  - Phase 09 completed tenant-scoped aggregate cache keys for non-duplicate commands that share a stream ID across tenants.
   - Phase 10 remains pending for process-manager reserve/release idempotency keys with duplicate product lines.
 
 ### Blockers/Concerns
@@ -178,6 +181,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-20T20:06:30.452Z
-Stopped at: Phase 09 planned; ready to execute 09-01-PLAN.md
+Last session: 2026-04-19T21:17:05.817Z
+Stopped at: Completed 09-01-PLAN.md
 Resume file: None

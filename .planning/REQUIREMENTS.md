@@ -19,17 +19,17 @@ Requirements for the initial template release. Each maps to roadmap phases.
 - [x] **STORE-01**: Command handling can append domain events to a durable event store with per-stream optimistic concurrency.
 - [x] **STORE-02**: Event store records include event ID, stream ID, stream revision, global position, command ID, causation ID, correlation ID, tenant ID, event type, schema version, payload, metadata, and recorded timestamp.
 - [ ] **STORE-03**: Command deduplication returns the prior committed result for a repeated tenant/idempotency key.
-- [ ] **STORE-04**: Aggregate rehydration can load the latest snapshot and replay subsequent stream events.
+- [x] **STORE-04**: Aggregate rehydration can load the latest snapshot and replay subsequent stream events.
 - [x] **STORE-05**: Event store exposes global-position reads for projector and outbox catch-up.
 
 ### Command Runtime
 
 - [x] **RUNTIME-01**: Adapter requests enter the command engine through bounded ingress with explicit overload behavior.
 - [x] **RUNTIME-02**: Partition routing sends all commands for the same aggregate key to the same local shard owner.
-- [ ] **RUNTIME-03**: Shard runtime owns processor-local aggregate cache and dedupe cache without global mutable business-state locks.
+- [x] **RUNTIME-03**: Shard runtime owns processor-local aggregate cache and dedupe cache without global mutable business-state locks.
 - [x] **RUNTIME-04**: Shard runtime integrates the `disruptor` crate as the local command execution/fan-out mechanism.
-- [ ] **RUNTIME-05**: Command replies are sent only after durable event-store append commit succeeds.
-- [ ] **RUNTIME-06**: Optimistic concurrency conflicts are surfaced as typed retryable or conflict errors without corrupting shard-local cache.
+- [x] **RUNTIME-05**: Command replies are sent only after durable event-store append commit succeeds.
+- [x] **RUNTIME-06**: Optimistic concurrency conflicts are surfaced as typed retryable or conflict errors without corrupting shard-local cache.
 
 ### Example Domain
 
@@ -37,7 +37,7 @@ Requirements for the initial template release. Each maps to roadmap phases.
 - [x] **DOM-02**: User commands can register, activate/deactivate, and emit replayable user events.
 - [x] **DOM-03**: Product commands can create products, adjust inventory, reserve inventory, and release inventory.
 - [ ] **DOM-04**: Order commands can place, confirm, reject, and cancel orders referencing user and product identifiers.
-- [ ] **DOM-05**: Domain invariants prevent invalid orders, negative inventory, duplicate order placement, and operations against inactive users or unavailable products.
+- [x] **DOM-05**: Domain invariants prevent invalid orders, negative inventory, duplicate order placement, and operations against inactive users or unavailable products.
 
 ### Projection and Query
 
@@ -119,19 +119,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STORE-01 | Phase 2 | Complete |
 | STORE-02 | Phase 2 | Complete |
 | STORE-03 | Phase 10 | Pending |
-| STORE-04 | Phase 9 | Pending |
+| STORE-04 | Phase 9 | Complete |
 | STORE-05 | Phase 2 | Complete |
 | RUNTIME-01 | Phase 3 | Complete |
 | RUNTIME-02 | Phase 3 | Complete |
-| RUNTIME-03 | Phase 9 | Pending |
+| RUNTIME-03 | Phase 9 | Complete |
 | RUNTIME-04 | Phase 3 | Complete |
-| RUNTIME-05 | Phase 9, Phase 10 | Pending |
-| RUNTIME-06 | Phase 9 | Pending |
+| RUNTIME-05 | Phase 9, Phase 10 | Complete |
+| RUNTIME-06 | Phase 9 | Complete |
 | DOM-01 | Phase 4 | Complete |
 | DOM-02 | Phase 4 | Complete |
 | DOM-03 | Phase 4 | Complete |
 | DOM-04 | Phase 10 | Pending |
-| DOM-05 | Phase 9, Phase 10 | Pending |
+| DOM-05 | Phase 9, Phase 10 | Complete |
 | PROJ-01 | Phase 5 | Complete |
 | PROJ-02 | Phase 5 | Complete |
 | PROJ-03 | Phase 5 | Complete |
