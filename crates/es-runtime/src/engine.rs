@@ -86,6 +86,14 @@ where
         self.gateway.clone()
     }
 
+    /// Returns accepted and processable command depth for each shard.
+    pub fn shard_depths(&self) -> Vec<usize> {
+        self.shards
+            .iter()
+            .map(|shard| shard.pending_len() + shard.state().pending_handoffs())
+            .collect()
+    }
+
     /// Processes one accepted command through its owning shard, if one is available.
     pub async fn process_one(&mut self) -> RuntimeResult<bool>
     where

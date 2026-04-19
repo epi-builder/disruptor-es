@@ -1,6 +1,11 @@
 //! Single-service integrated stress runner.
 
-use std::time::{Duration, Instant};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use anyhow::Context;
 use es_core::{CommandMetadata, TenantId};
@@ -11,7 +16,7 @@ use es_outbox::{
 use es_projection::{ProjectionBatchLimit, ProjectorName};
 use es_runtime::{
     CommandEngine, CommandEngineConfig, CommandEnvelope, CommandGateway, CommandOutcome,
-    PostgresRuntimeEventStore, RuntimeError, RuntimeEventCodec,
+    PostgresRuntimeEventStore, RuntimeError, RuntimeEventCodec, RuntimeEventStore,
 };
 use es_store_postgres::{
     NewEvent, PostgresEventStore, PostgresOutboxStore, PostgresProjectionStore, SnapshotRecord,
@@ -162,13 +167,73 @@ struct PostgresHarness {
     pool: PgPool,
 }
 
+#[derive(Clone, Debug)]
+struct MeasuredRuntimeEventStore {
+    inner: PostgresRuntimeEventStore,
+    append_durations: Arc<Mutex<Vec<u64>>>,
+}
+
+impl MeasuredRuntimeEventStore {
+    fn new(inner: PostgresRuntimeEventStore) -> Self {
+        Self {
+            inner,
+            append_durations: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn append_durations(&self) -> Arc<Mutex<Vec<u64>>> {
+        self.append_durations.clone()
+    }
+}
+
+impl RuntimeEventStore for MeasuredRuntimeEventStore {
+    fn append(
+        &self,
+        request: es_store_postgres::AppendRequest,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = es_store_postgres::StoreResult<es_store_postgres::AppendOutcome>>
+                + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async move {
+            let started = Instant::now();
+            let outcome = self.inner.append(request).await;
+            if outcome.is_ok() {
+                self.append_durations
+                    .lock()
+                    .expect("append durations mutex poisoned")
+                    .push(micros(started.elapsed()));
+            }
+            outcome
+        })
+    }
+
+    fn load_rehydration(
+        &self,
+        tenant_id: &es_core::TenantId,
+        stream_id: &es_core::StreamId,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = es_store_postgres::StoreResult<es_store_postgres::RehydrationBatch>>
+                + Send
+                + '_,
+        >,
+    > {
+        self.inner.load_rehydration(tenant_id, stream_id)
+    }
+}
+
 /// Runs one production-shaped single-service stress pass.
 pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<StressReport> {
     let harness = start_postgres().await?;
     let event_store = PostgresEventStore::new(harness.pool.clone());
     let projection_store = PostgresProjectionStore::new(harness.pool.clone());
     let outbox_store = PostgresOutboxStore::new(harness.pool.clone());
-    let runtime_store = PostgresRuntimeEventStore::new(event_store.clone());
+    let runtime_store =
+        MeasuredRuntimeEventStore::new(PostgresRuntimeEventStore::new(event_store.clone()));
+    let append_durations = runtime_store.append_durations();
     let engine_config = CommandEngineConfig::new(
         config.shard_count,
         config.ingress_capacity,
@@ -184,6 +249,7 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
     let mut replies = Vec::new();
     let mut commands_rejected = 0;
     let mut ingress_depth_max = 0;
+    let mut shard_depth_max = engine.shard_depths().into_iter().max().unwrap_or(0);
 
     for index in 0..config.command_count {
         let (reply, receiver) = oneshot::channel();
@@ -206,10 +272,13 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
             }
             Err(error) => return Err(error).context("submitting stress command"),
         }
+        shard_depth_max = shard_depth_max.max(engine.shard_depths().into_iter().max().unwrap_or(0));
     }
 
     for _ in 0..replies.len() {
+        shard_depth_max = shard_depth_max.max(engine.shard_depths().into_iter().max().unwrap_or(0));
         engine.process_one().await?;
+        shard_depth_max = shard_depth_max.max(engine.shard_depths().into_iter().max().unwrap_or(0));
     }
 
     let mut commands_succeeded = 0;
@@ -219,13 +288,21 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
                 commands_succeeded += 1;
                 let elapsed = micros(submitted_at.elapsed());
                 latency.record(elapsed)?;
-                append_latency.record(elapsed)?;
             }
             Err(RuntimeError::Overloaded | RuntimeError::ShardOverloaded { .. }) => {
                 commands_rejected += 1;
             }
             Err(error) => return Err(error).context("processing stress command"),
         }
+    }
+    shard_depth_max = shard_depth_max.max(engine.shard_depths().into_iter().max().unwrap_or(0));
+
+    let durations = append_durations
+        .lock()
+        .expect("append durations mutex poisoned")
+        .clone();
+    for append_elapsed in durations {
+        append_latency.record(append_elapsed)?;
     }
 
     let last_global_position = latest_global_position(&harness.pool).await?;
@@ -261,7 +338,7 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
         p99_micros: percentile(&latency, 99.0),
         max_micros: latency.max(),
         ingress_depth_max,
-        shard_depth_max: ingress_depth_max.min(config.ring_size),
+        shard_depth_max,
         append_latency_p95_micros: percentile(&append_latency, 95.0),
         projection_lag,
         outbox_lag,
