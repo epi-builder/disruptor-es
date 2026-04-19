@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
+status: complete
 stopped_at: Completed 08-03-PLAN.md
 last_updated: "2026-04-19T14:57:32.528Z"
 last_activity: 2026-04-19
@@ -18,7 +18,7 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-18)
+See: .planning/PROJECT.md (updated 2026-04-19)
 
 **Core value:** Provide a reusable, production-shaped Rust service template where committed events are the source of truth and `disruptor-rs` is used only as the in-process ordered execution engine.
 **Current focus:** Phase 08 — runtime-duplicate-command-replay
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 ## Current Position
 
 Phase: 08
-Plan: Not started
-Status: Phase complete — ready for verification
+Plan: 3 of 3
+Status: Phase complete — verified
 Last activity: 2026-04-19
 
 Progress: [██████████] 100%
@@ -152,9 +152,9 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Phase 07 verification gaps:
-  - Projection lag metric underreports backlog; compute against tenant durable max global position and test backlog behavior.
-  - Single-service stress report has synthetic append latency, shard depth, and projection lag fields; replace with measured values or change the report contract.
+- Phase 08 follow-up risks from code review:
+  - Tenant-scoped aggregate cache keys are recommended for non-duplicate commands that share a stream ID across tenants.
+  - Process-manager reserve/release idempotency keys should include a stable line ordinal or coalesce duplicate product lines.
 
 ### Blockers/Concerns
 
