@@ -315,17 +315,15 @@ Record the `(tenant_id, stream_id)` pairs in the fake store so the test proves t
 | A5 | Cache refactors can accidentally move aggregate-cache lookup above dedupe lookup. | Pitfalls | If planner preserves order explicitly, this risk is mitigated. |
 | A6 | Two tenants can still land on the same local shard under modulo routing. | Pitfalls | Exact collisions depend on shard count and hash values; tests can force one shard to prove isolation. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `AggregateCacheKey` be public?** [VERIFIED: crates/es-runtime/src/lib.rs]
    - What we know: tests currently import `AggregateCache`, `DedupeKey`, and `ShardState` from the crate API. [VERIFIED: crates/es-runtime/tests/shard_disruptor.rs]
-   - What's unclear: whether downstream crates should construct aggregate cache keys directly. [ASSUMED]
-   - Recommendation: Re-export `AggregateCacheKey` if integration tests or documented runtime extension points need it; otherwise keep construction methods on `AggregateCache`. [ASSUMED]
+   - RESOLVED: Re-export `AggregateCacheKey` from `crates/es-runtime/src/lib.rs` so runtime integration tests and documented runtime extension points can construct the typed composite cache key without relying on module-private paths. [VERIFIED: .planning/phases/09-tenant-scoped-runtime-aggregate-cache/09-01-PLAN.md]
 
 2. **Should `get_or_default` survive?** [VERIFIED: crates/es-runtime/src/cache.rs:25]
    - What we know: runtime command flow uses explicit `get` plus rehydration, while tests use `get_or_default`. [VERIFIED: crates/es-runtime/src/shard.rs:218] [VERIFIED: crates/es-runtime/tests/shard_disruptor.rs]
-   - What's unclear: whether any future runtime path should insert default aggregate state without storage rehydration. [ASSUMED]
-   - Recommendation: Keep it only if tests need direct cache unit coverage, but require an `AggregateCacheKey` argument. [VERIFIED: crates/es-runtime/src/cache.rs]
+   - RESOLVED: Keep `get_or_default` only as a direct cache helper that requires an `AggregateCacheKey` argument; do not allow any aggregate cache API to accept only `StreamId`. [VERIFIED: .planning/phases/09-tenant-scoped-runtime-aggregate-cache/09-01-PLAN.md]
 
 ## Environment Availability
 
