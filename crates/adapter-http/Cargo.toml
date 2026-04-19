@@ -20,5 +20,10 @@ tower-http.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
+[dev-dependencies]
+es-store-postgres = { path = "../es-store-postgres" }
+futures.workspace = true
+serde_json.workspace = true
+
 [lints]
 workspace = true

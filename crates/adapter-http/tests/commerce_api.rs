@@ -1,5 +1,10 @@
 //! HTTP adapter commerce contract tests.
 
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
+
 use adapter_http::{HttpState, router};
 use axum::{
     body::{Body, to_bytes},
@@ -7,11 +12,19 @@ use axum::{
 };
 use es_core::{CommandMetadata, StreamId, StreamRevision, TenantId};
 use es_runtime::{
-    CommandEnvelope, CommandGateway, CommandOutcome, CommittedAppend, PartitionRouter, RuntimeError,
+    CommandEngine, CommandEngineConfig, CommandEnvelope, CommandGateway, CommandOutcome,
+    CommittedAppend, PartitionRouter, RuntimeError, RuntimeEventCodec, RuntimeEventStore,
+};
+use es_store_postgres::{
+    AppendOutcome, AppendRequest, CommandReplayRecord, CommandReplyPayload, NewEvent,
+    RehydrationBatch, SnapshotRecord, StoreResult, StoredEvent,
 };
 use example_commerce::{
-    Order, OrderCommand, OrderId, OrderLine, OrderReply, ProductId, Quantity, Sku, UserId,
+    Order, OrderCommand, OrderEvent, OrderId, OrderLine, OrderReply, OrderState, ProductId,
+    Quantity, Sku, UserId,
 };
+use futures::future::BoxFuture;
+use serde_json::json;
 use time::OffsetDateTime;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -147,6 +160,60 @@ async fn commerce_api_response_contract_maps_conflict_to_json_409() {
     assert!(body.contains(r#""actual":3"#));
 }
 
+#[tokio::test]
+async fn duplicate_place_order_retry_returns_original_response() {
+    let order_store = ReplayAwareOrderStore::new(committed_append("order-order-1", 10));
+    let mut order_engine: CommandEngine<Order, _, _> = CommandEngine::new(
+        CommandEngineConfig::new(1, 4, 4).expect("config"),
+        order_store.clone(),
+        TestOrderCodec,
+    )
+    .expect("order engine");
+    let (product_gateway, _product_rx) =
+        CommandGateway::new(PartitionRouter::new(1).expect("router"), 4).expect("product gateway");
+    let (user_gateway, _user_rx) =
+        CommandGateway::new(PartitionRouter::new(1).expect("router"), 4).expect("user gateway");
+
+    let app = router(HttpState {
+        order_gateway: order_engine.gateway(),
+        product_gateway,
+        user_gateway,
+    });
+
+    let first_response_task = tokio::spawn(
+        app.clone()
+            .oneshot(place_order_request("idem-place-duplicate-1")),
+    );
+    assert!(order_engine.process_one().await.expect("processed first"));
+    let first_response = first_response_task
+        .await
+        .expect("first response task")
+        .expect("first response");
+    assert_eq!(StatusCode::OK, first_response.status());
+    let first_body = body_string(first_response.into_body()).await;
+
+    let second_response_task =
+        tokio::spawn(app.oneshot(place_order_request("idem-place-duplicate-1")));
+    assert!(order_engine.process_one().await.expect("processed second"));
+    let second_response = second_response_task
+        .await
+        .expect("second response task")
+        .expect("second response");
+    assert_eq!(StatusCode::OK, second_response.status());
+    let second_body = body_string(second_response.into_body()).await;
+
+    assert_eq!(1, order_store.append_count());
+    assert!(order_store.lookup_count() >= 1);
+    assert!(second_body.contains(r#""stream_id":"order-order-1""#));
+    assert!(second_body.contains(r#""stream_revision":1"#));
+    assert!(second_body.contains(r#""first_revision":1"#));
+    assert!(second_body.contains(r#""last_revision":1"#));
+    assert!(second_body.contains(r#""global_positions":[10]"#));
+    assert!(second_body.contains(r#""event_ids":["00000000-0000-0000-0000-00000000000a"]"#));
+    assert!(second_body.contains(r#""reply":{"type":"placed","order_id":"order-1"}"#));
+    assert_eq!(first_body, second_body);
+}
+
 fn place_order_request(idempotency_key: &str) -> Request<Body> {
     Request::builder()
         .method("POST")
@@ -156,6 +223,8 @@ fn place_order_request(idempotency_key: &str) -> Request<Body> {
             r#"{{
                 "tenant_id": "tenant-a",
                 "idempotency_key": "{idempotency_key}",
+                "command_id": "018f3212-9299-7a4b-8bd3-3f3cc48c0f45",
+                "correlation_id": "018f3212-9299-7a4b-8bd3-3f3cc48c0f46",
                 "order_id": "order-1",
                 "user_id": "user-1",
                 "user_active": true,
@@ -209,4 +278,166 @@ fn committed_append(stream_id: &str, global_position: i64) -> CommittedAppend {
 async fn body_string(body: Body) -> String {
     let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
     String::from_utf8(bytes.to_vec()).expect("utf8 body")
+}
+
+#[derive(Clone, Copy, Debug)]
+struct TestOrderCodec;
+
+impl RuntimeEventCodec<Order> for TestOrderCodec {
+    fn encode(
+        &self,
+        event: &OrderEvent,
+        _metadata: &CommandMetadata,
+    ) -> es_runtime::RuntimeResult<NewEvent> {
+        let event_type = match event {
+            OrderEvent::OrderPlaced { .. } => "OrderPlaced",
+            OrderEvent::OrderConfirmed { .. } => "OrderConfirmed",
+            OrderEvent::OrderRejected { .. } => "OrderRejected",
+            OrderEvent::OrderCancelled { .. } => "OrderCancelled",
+        };
+        NewEvent::new(
+            Uuid::from_u128(10),
+            event_type,
+            1,
+            serde_json::to_value(event).map_err(|error| RuntimeError::Codec {
+                message: error.to_string(),
+            })?,
+            json!({ "codec": "test-order" }),
+        )
+        .map_err(RuntimeError::from_store_error)
+    }
+
+    fn decode(&self, stored: &StoredEvent) -> es_runtime::RuntimeResult<OrderEvent> {
+        serde_json::from_value(stored.payload.clone()).map_err(|error| RuntimeError::Codec {
+            message: error.to_string(),
+        })
+    }
+
+    fn decode_snapshot(&self, _snapshot: &SnapshotRecord) -> es_runtime::RuntimeResult<OrderState> {
+        Ok(OrderState::default())
+    }
+
+    fn encode_reply(&self, reply: &OrderReply) -> es_runtime::RuntimeResult<CommandReplyPayload> {
+        CommandReplyPayload::new(
+            "order_reply",
+            1,
+            serde_json::to_value(reply).map_err(|error| RuntimeError::Codec {
+                message: error.to_string(),
+            })?,
+        )
+        .map_err(RuntimeError::from_store_error)
+    }
+
+    fn decode_reply(&self, payload: &CommandReplyPayload) -> es_runtime::RuntimeResult<OrderReply> {
+        if payload.reply_type != "order_reply" {
+            return Err(RuntimeError::Codec {
+                message: format!("unexpected reply type {}", payload.reply_type),
+            });
+        }
+        if payload.schema_version != 1 {
+            return Err(RuntimeError::Codec {
+                message: format!("unexpected reply schema version {}", payload.schema_version),
+            });
+        }
+
+        serde_json::from_value::<OrderReply>(payload.payload.clone()).map_err(|error| {
+            RuntimeError::Codec {
+                message: error.to_string(),
+            }
+        })
+    }
+}
+
+#[derive(Clone)]
+struct ReplayAwareOrderStore {
+    inner: Arc<ReplayAwareOrderStoreInner>,
+}
+
+struct ReplayAwareOrderStoreInner {
+    committed: CommittedAppend,
+    append_requests: Mutex<Vec<AppendRequest>>,
+    replay_records: Mutex<VecDeque<CommandReplayRecord>>,
+    lookup_count: Mutex<usize>,
+}
+
+impl ReplayAwareOrderStore {
+    fn new(committed: CommittedAppend) -> Self {
+        Self {
+            inner: Arc::new(ReplayAwareOrderStoreInner {
+                committed,
+                append_requests: Mutex::new(Vec::new()),
+                replay_records: Mutex::new(VecDeque::new()),
+                lookup_count: Mutex::new(0),
+            }),
+        }
+    }
+
+    fn append_count(&self) -> usize {
+        self.inner
+            .append_requests
+            .lock()
+            .expect("append requests")
+            .len()
+    }
+
+    fn lookup_count(&self) -> usize {
+        *self.inner.lookup_count.lock().expect("lookup count")
+    }
+}
+
+impl RuntimeEventStore for ReplayAwareOrderStore {
+    fn append(&self, request: AppendRequest) -> BoxFuture<'_, StoreResult<AppendOutcome>> {
+        self.inner
+            .append_requests
+            .lock()
+            .expect("append requests")
+            .push(request.clone());
+        let committed = self.inner.committed.clone();
+        let replay = request
+            .command_reply_payload
+            .clone()
+            .map(|reply| CommandReplayRecord {
+                append: committed.clone(),
+                reply,
+            });
+        if let Some(replay) = replay {
+            self.inner
+                .replay_records
+                .lock()
+                .expect("replay records")
+                .push_back(replay);
+        }
+
+        Box::pin(async move { Ok(AppendOutcome::Committed(committed)) })
+    }
+
+    fn load_rehydration(
+        &self,
+        _tenant_id: &TenantId,
+        _stream_id: &StreamId,
+    ) -> BoxFuture<'_, StoreResult<RehydrationBatch>> {
+        Box::pin(async {
+            Ok(RehydrationBatch {
+                snapshot: None,
+                events: Vec::new(),
+            })
+        })
+    }
+
+    fn lookup_command_replay(
+        &self,
+        _tenant_id: &TenantId,
+        _idempotency_key: &str,
+    ) -> BoxFuture<'_, StoreResult<Option<CommandReplayRecord>>> {
+        *self.inner.lookup_count.lock().expect("lookup count") += 1;
+        let replay = self
+            .inner
+            .replay_records
+            .lock()
+            .expect("replay records")
+            .front()
+            .cloned();
+
+        Box::pin(async move { Ok(replay) })
+    }
 }
