@@ -153,11 +153,9 @@ Plans:
   2. Duplicate commands return the original committed success/error reply shape without appending events or surfacing fresh domain validation errors.
   3. Durable store dedupe remains the source of truth when the runtime cache misses, after restart, or across process-manager replay scenarios.
   4. HTTP duplicate retries and deterministic process-manager follow-up retries are covered by tests that prove original committed results are replayed.
-**Plans**: 3 plans
+**Plans**: 0 plans
 Plans:
-- [ ] 08-01-PLAN.md — Implement durable tenant-scoped duplicate result lookup with original reply payload.
-- [ ] 08-02-PLAN.md — Replay runtime duplicate commands before rehydration or aggregate decision.
-- [ ] 08-03-PLAN.md — Verify HTTP and process-manager duplicate retry behavior through gateway/runtime paths.
+- [ ] Pending planning
 
 ## Progress
 
@@ -173,4 +171,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. CQRS Projection and Query Catch-Up | 3/3 | Complete | 2026-04-18 |
 | 6. Outbox and Process Manager Workflows | 5/5 | Complete | 2026-04-18 |
 | 7. Adapters, Observability, Stress, and Template Guidance | 7/7 | Complete | 2026-04-19 |
-| 8. Runtime Duplicate Command Replay | 0/3 | Planned | |
+| 8. Runtime Duplicate Command Replay | 0/0 | Planned | |
