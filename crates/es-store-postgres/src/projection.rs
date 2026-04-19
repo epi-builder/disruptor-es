@@ -85,6 +85,7 @@ impl PostgresProjectionStore {
             .await?
             .map(|offset| offset.last_global_position)
             .unwrap_or(0);
+        let tenant_latest_position = tenant_latest_global_position(&self.pool, tenant_id).await?;
 
         let stored_events = self
             .event_store
@@ -92,7 +93,8 @@ impl PostgresProjectionStore {
             .await
             .map_err(store_error)?;
         if stored_events.is_empty() {
-            gauge!("es_projection_lag", "projector" => projector_name.as_str().to_owned()).set(0.0);
+            gauge!("es_projection_lag", "projector" => projector_name.as_str().to_owned())
+                .set((tenant_latest_position - current_offset).max(0) as f64);
             return Ok(CatchUpOutcome::Idle);
         }
 
@@ -105,8 +107,6 @@ impl PostgresProjectionStore {
             .expect("non-empty projection batch")
             .global_position;
         span.record("global_position", last_global_position);
-        gauge!("es_projection_lag", "projector" => projector_name.as_str().to_owned())
-            .set((last_global_position - current_offset).max(0) as f64);
 
         let mut tx = self.pool.begin().await.map_err(projection_store_error)?;
         let apply_result = async {
@@ -121,6 +121,8 @@ impl PostgresProjectionStore {
             return Err(error);
         }
         tx.commit().await.map_err(projection_store_error)?;
+        gauge!("es_projection_lag", "projector" => projector_name.as_str().to_owned())
+            .set((tenant_latest_position - last_global_position).max(0) as f64);
         histogram!("es_projection_catch_up_seconds", "projector" => projector_name.as_str().to_owned())
             .record(started_at.elapsed().as_secs_f64());
 
@@ -182,6 +184,19 @@ impl PostgresProjectionStore {
 
         select_product_inventory(&self.pool, tenant_id, product_id).await
     }
+}
+
+async fn tenant_latest_global_position(
+    pool: &sqlx::PgPool,
+    tenant_id: &TenantId,
+) -> ProjectionResult<i64> {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(max(global_position), 0) FROM events WHERE tenant_id = $1",
+    )
+    .bind(tenant_id.as_str())
+    .fetch_one(pool)
+    .await
+    .map_err(projection_store_error)
 }
 
 /// Denormalized order summary read model.

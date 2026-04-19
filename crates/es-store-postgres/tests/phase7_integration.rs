@@ -15,9 +15,7 @@ use es_store_postgres::{
     PostgresProjectionStore, SaveSnapshotRequest, StoreError,
 };
 use example_commerce::{OrderEvent, OrderId, OrderLine, ProductId, Quantity, Sku, UserId};
-use metrics::{
-    Counter, Gauge, GaugeFn, Histogram, Key, KeyName, Metadata, Recorder, SharedString, Unit,
-};
+use metrics::{Counter, Gauge, Histogram, Key, KeyName, Metadata, SharedString, Unit};
 use serde_json::json;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
@@ -208,7 +206,7 @@ impl ProjectionLagGauge {
     }
 }
 
-impl GaugeFn for ProjectionLagGauge {
+impl metrics::GaugeFn for ProjectionLagGauge {
     fn increment(&self, value: f64) {
         let mut guard = self.value.lock().expect("projection lag mutex poisoned");
         let current = guard.unwrap_or(0.0);
@@ -237,7 +235,7 @@ impl ProjectionLagRecorder {
     }
 }
 
-impl Recorder for ProjectionLagRecorder {
+impl metrics::Recorder for ProjectionLagRecorder {
     fn describe_counter(&self, _key: KeyName, _unit: Option<Unit>, _description: SharedString) {}
 
     fn describe_gauge(&self, _key: KeyName, _unit: Option<Unit>, _description: SharedString) {}
