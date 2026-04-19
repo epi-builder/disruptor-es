@@ -63,6 +63,50 @@ impl NewEvent {
     }
 }
 
+/// Versioned typed reply payload stored for durable command replay.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CommandReplyPayload {
+    /// Stable reply type name.
+    pub reply_type: String,
+    /// Positive reply payload schema version.
+    pub schema_version: i32,
+    /// JSON reply payload stored in PostgreSQL JSONB.
+    pub payload: serde_json::Value,
+}
+
+impl CommandReplyPayload {
+    /// Creates a validated command reply payload DTO.
+    pub fn new(
+        reply_type: impl Into<String>,
+        schema_version: i32,
+        payload: serde_json::Value,
+    ) -> StoreResult<Self> {
+        let reply_type = reply_type.into();
+        if reply_type.is_empty() {
+            return Err(StoreError::InvalidReplyType);
+        }
+        if schema_version <= 0 {
+            return Err(StoreError::InvalidSchemaVersion { schema_version });
+        }
+
+        let actual_bytes = serde_json::to_vec(&payload)
+            .expect("serializing serde_json::Value to bytes cannot fail")
+            .len();
+        if actual_bytes > MAX_JSON_PAYLOAD_BYTES {
+            return Err(StoreError::PayloadTooLarge {
+                actual_bytes,
+                max_bytes: MAX_JSON_PAYLOAD_BYTES,
+            });
+        }
+
+        Ok(Self {
+            reply_type,
+            schema_version,
+            payload,
+        })
+    }
+}
+
 /// Request to append one or more events to a stream.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AppendRequest {
@@ -78,6 +122,8 @@ pub struct AppendRequest {
     pub events: Vec<NewEvent>,
     /// Outbox messages derived from the appended events.
     pub outbox_messages: Vec<NewOutboxMessage>,
+    /// Optional typed command reply payload for durable replay.
+    pub command_reply_payload: Option<CommandReplyPayload>,
 }
 
 impl AppendRequest {
@@ -135,7 +181,14 @@ impl AppendRequest {
             idempotency_key,
             events,
             outbox_messages,
+            command_reply_payload: None,
         })
+    }
+
+    /// Attaches a typed command reply payload for durable replay.
+    pub fn with_command_reply_payload(mut self, payload: CommandReplyPayload) -> Self {
+        self.command_reply_payload = Some(payload);
+        self
     }
 }
 
@@ -152,6 +205,15 @@ pub struct CommittedAppend {
     pub global_positions: Vec<i64>,
     /// Event identifiers committed by the append.
     pub event_ids: Vec<Uuid>,
+}
+
+/// Durable replay record stored in command dedupe payloads for new appends.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CommandReplayRecord {
+    /// Durable append summary returned by the first command execution.
+    pub append: CommittedAppend,
+    /// Typed command reply payload returned by the first command execution.
+    pub reply: CommandReplyPayload,
 }
 
 /// Outcome of an append request after idempotency handling.

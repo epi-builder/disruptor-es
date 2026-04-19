@@ -10,6 +10,9 @@ pub enum StoreError {
     /// Event type was empty.
     #[error("event type cannot be empty")]
     InvalidEventType,
+    /// Command reply type was empty.
+    #[error("reply type cannot be empty")]
+    InvalidReplyType,
     /// Idempotency key was empty.
     #[error("idempotency key cannot be empty")]
     InvalidIdempotencyKey,

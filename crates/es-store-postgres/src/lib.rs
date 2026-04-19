@@ -19,8 +19,9 @@ pub use error::{StoreError, StoreResult};
 pub use event_store::PostgresEventStore;
 pub use ids::{IdGenerator, UuidV7Generator};
 pub use models::{
-    AppendOutcome, AppendRequest, CommittedAppend, MAX_JSON_PAYLOAD_BYTES, NewEvent,
-    RehydrationBatch, SaveSnapshotRequest, SnapshotRecord, StoredEvent,
+    AppendOutcome, AppendRequest, CommandReplayRecord, CommandReplyPayload, CommittedAppend,
+    MAX_JSON_PAYLOAD_BYTES, NewEvent, RehydrationBatch, SaveSnapshotRequest, SnapshotRecord,
+    StoredEvent,
 };
 pub use outbox::PostgresOutboxStore;
 pub use projection::{OrderSummaryReadModel, PostgresProjectionStore, ProductInventoryReadModel};
