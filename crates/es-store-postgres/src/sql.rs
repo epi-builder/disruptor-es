@@ -6,8 +6,8 @@ use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    AppendOutcome, AppendRequest, CommittedAppend, NewEvent, SaveSnapshotRequest, SnapshotRecord,
-    StoreError, StoreResult, StoredEvent,
+    AppendOutcome, AppendRequest, CommandReplayRecord, CommandReplyPayload, CommittedAppend,
+    NewEvent, SaveSnapshotRequest, SnapshotRecord, StoreError, StoreResult, StoredEvent,
 };
 
 pub(crate) async fn append(pool: &PgPool, request: AppendRequest) -> StoreResult<AppendOutcome> {
@@ -125,10 +125,7 @@ async fn select_dedupe_result(
     .await?;
 
     response_payload
-        .map(|payload| {
-            serde_json::from_value(payload)
-                .map_err(|source| StoreError::DedupeResultDecode { source })
-        })
+        .map(decode_committed_append_from_dedupe_payload)
         .transpose()
 }
 
@@ -149,11 +146,19 @@ async fn select_dedupe_result_from_pool(
     .await?;
 
     response_payload
-        .map(|payload| {
-            serde_json::from_value(payload)
-                .map_err(|source| StoreError::DedupeResultDecode { source })
-        })
+        .map(decode_committed_append_from_dedupe_payload)
         .transpose()
+}
+
+fn decode_committed_append_from_dedupe_payload(
+    payload: serde_json::Value,
+) -> StoreResult<CommittedAppend> {
+    if let Ok(record) = serde_json::from_value::<CommandReplayRecord>(payload.clone()) {
+        return Ok(record.append);
+    }
+
+    serde_json::from_value::<CommittedAppend>(payload)
+        .map_err(|source| StoreError::DedupeResultDecode { source })
 }
 
 async fn select_stream_revision_for_update(
@@ -342,8 +347,7 @@ async fn insert_dedupe_result(
         .last()
         .copied()
         .ok_or(StoreError::InvalidGlobalPosition { value: 0 })?;
-    let response_payload = serde_json::to_value(committed)
-        .map_err(|source| StoreError::DedupeResultDecode { source })?;
+    let response_payload = encode_dedupe_response_payload(request, committed)?;
 
     let inserted = sqlx::query_scalar::<_, i64>(
         r#"
@@ -382,6 +386,55 @@ async fn insert_dedupe_result(
     .await?;
 
     Ok(inserted.is_some())
+}
+
+fn encode_dedupe_response_payload(
+    request: &AppendRequest,
+    committed: &CommittedAppend,
+) -> StoreResult<serde_json::Value> {
+    if request.command_reply_payload.is_some() {
+        let reply: CommandReplyPayload = request
+            .command_reply_payload
+            .clone()
+            .expect("checked command reply payload is present");
+        return serde_json::to_value(CommandReplayRecord {
+            append: committed.clone(),
+            reply,
+        })
+        .map_err(|source| StoreError::DedupeResultDecode { source });
+    }
+
+    serde_json::to_value(committed).map_err(|source| StoreError::DedupeResultDecode { source })
+}
+
+pub(crate) async fn lookup_command_replay(
+    pool: &PgPool,
+    tenant_id: &TenantId,
+    idempotency_key: &str,
+) -> StoreResult<Option<CommandReplayRecord>> {
+    let response_payload = sqlx::query_scalar::<_, serde_json::Value>(
+        r#"
+        SELECT response_payload
+        FROM command_dedup
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        "#,
+    )
+    .bind(tenant_id.as_str())
+    .bind(idempotency_key)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(payload) = response_payload else {
+        return Ok(None);
+    };
+
+    match serde_json::from_value::<CommandReplayRecord>(payload.clone()) {
+        Ok(record) => Ok(Some(record)),
+        Err(_) => match serde_json::from_value::<CommittedAppend>(payload) {
+            Ok(_) => Ok(None),
+            Err(source) => Err(StoreError::DedupeResultDecode { source }),
+        },
+    }
 }
 
 async fn select_duplicate_after_late_conflict(

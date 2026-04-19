@@ -1,6 +1,6 @@
 use crate::{
-    AppendOutcome, AppendRequest, RehydrationBatch, SaveSnapshotRequest, SnapshotRecord,
-    StoreError, StoreResult, StoredEvent, rehydrate, sql,
+    AppendOutcome, AppendRequest, CommandReplayRecord, RehydrationBatch, SaveSnapshotRequest,
+    SnapshotRecord, StoreError, StoreResult, StoredEvent, rehydrate, sql,
 };
 use metrics::{counter, histogram};
 use tracing::info_span;
@@ -93,6 +93,15 @@ impl PostgresEventStore {
         limit: i64,
     ) -> StoreResult<Vec<StoredEvent>> {
         sql::read_global(&self.pool, tenant_id, after_global_position, limit).await
+    }
+
+    /// Looks up a durable typed command replay record by tenant and idempotency key.
+    pub async fn lookup_command_replay(
+        &self,
+        tenant_id: &es_core::TenantId,
+        idempotency_key: &str,
+    ) -> StoreResult<Option<CommandReplayRecord>> {
+        sql::lookup_command_replay(&self.pool, tenant_id, idempotency_key).await
     }
 
     /// Saves a stream snapshot.

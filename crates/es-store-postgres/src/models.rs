@@ -343,8 +343,8 @@ mod models {
 
     #[test]
     fn command_reply_payload_rejects_empty_reply_type() {
-        let error = CommandReplyPayload::new("", 1, json!({}))
-            .expect_err("empty reply type rejected");
+        let error =
+            CommandReplyPayload::new("", 1, json!({})).expect_err("empty reply type rejected");
 
         assert!(matches!(error, StoreError::InvalidReplyType));
     }
@@ -362,12 +362,8 @@ mod models {
 
     #[test]
     fn append_request_can_attach_command_reply_payload() {
-        let reply = CommandReplyPayload::new(
-            "order_placed",
-            1,
-            json!({ "order_id": "order-1" }),
-        )
-        .expect("valid reply payload");
+        let reply = CommandReplyPayload::new("order_placed", 1, json!({ "order_id": "order-1" }))
+            .expect("valid reply payload");
         let request = AppendRequest::new(
             StreamId::new("order-1").expect("valid stream id"),
             ExpectedRevision::NoStream,

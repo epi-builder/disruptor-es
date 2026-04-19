@@ -42,12 +42,8 @@ fn new_event(seed: u128, order_id: &str) -> NewEvent {
 }
 
 fn command_reply_payload(label: &str) -> CommandReplyPayload {
-    CommandReplyPayload::new(
-        "counter_added",
-        1,
-        json!({ "reply": label }),
-    )
-    .expect("valid command reply payload")
+    CommandReplyPayload::new("counter_added", 1, json!({ "reply": label }))
+        .expect("valid command reply payload")
 }
 
 fn append_request(
@@ -91,18 +87,18 @@ async fn command_replay_record_round_trips_from_response_payload() -> anyhow::Re
     let store = PostgresEventStore::new(harness.pool.clone());
     let tenant = tenant_id("tenant-a");
     let stream = stream_id("order-1");
-    let request = append_request(
-        tenant.clone(),
-        stream.clone(),
-        "idempotency-1",
-        10,
-        100,
-    )
-    .with_command_reply_payload(command_reply_payload("first"));
+    let request = append_request(tenant.clone(), stream.clone(), "idempotency-1", 10, 100)
+        .with_command_reply_payload(command_reply_payload("first"));
 
     let first = store.append(request).await?;
     let duplicate = store
-        .append(append_request(tenant.clone(), stream, "idempotency-1", 20, 101))
+        .append(append_request(
+            tenant.clone(),
+            stream,
+            "idempotency-1",
+            20,
+            101,
+        ))
         .await?;
     let first_committed = committed(first);
     let duplicate_committed = committed(duplicate);
@@ -127,14 +123,8 @@ async fn lookup_command_replay_returns_original_reply_after_store_recreation() -
     let stream = stream_id("order-1");
     let first = store
         .append(
-            append_request(
-                tenant.clone(),
-                stream,
-                "idempotency-1",
-                10,
-                100,
-            )
-            .with_command_reply_payload(command_reply_payload("first")),
+            append_request(tenant.clone(), stream, "idempotency-1", 10, 100)
+                .with_command_reply_payload(command_reply_payload("first")),
         )
         .await?;
     let first_committed = committed(first);
@@ -147,7 +137,7 @@ async fn lookup_command_replay_returns_original_reply_after_store_recreation() -
 
     assert_eq!(json!({"reply":"first"}), replay.reply.payload);
     assert_eq!("counter_added", replay.reply.reply_type);
-    assert_eq!(1, replay.reply.schema_version);
+    assert_eq!(replay.reply.schema_version, 1);
     assert_eq!(first_committed, replay.append);
 
     Ok(())
