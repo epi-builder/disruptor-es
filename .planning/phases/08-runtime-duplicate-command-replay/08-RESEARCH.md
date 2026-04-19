@@ -371,22 +371,25 @@ format!(
 | A2 | Existing committed reply types can be serialized to JSON or decoded from committed event payloads without adding a new external crate. | Architecture Patterns | If a reply cannot be serialized or deterministically decoded, planner must add trait bounds/API changes or narrow replay guarantees. |
 | A3 | No runtime state outside PostgreSQL and process memory needs migration for Phase 8. | Runtime State Inventory | If deployed services exist outside repo evidence, operators may need to drain/restart them after schema/runtime changes. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should durable idempotency store typed replies or derive replies from committed events?**
    - What we know: `CommandOutcome<R>` needs `reply: R` and `append: CommittedAppend`; durable `response_payload` currently stores only `CommittedAppend`. [VERIFIED: crates/es-runtime/src/command.rs; VERIFIED: crates/es-store-postgres/src/sql.rs]
    - What's unclear: Whether all future domains can provide a stable reply decoder from committed event payloads. [ASSUMED]
    - Recommendation: Persist a versioned reply payload through a runtime codec extension because it is the most direct way to satisfy restart/API replay. [VERIFIED: local code constraints]
+   - RESOLVED: Durable dedupe persists typed reply payloads using `CommandReplayRecord { append, reply }` inside `command_dedup.response_payload`; do not reconstruct replies by calling `A::decide`.
 
 2. **Should "error reply shape" include non-committed domain/API errors?**
    - What we know: Current durable dedupe row is inserted after events/outbox rows and committed append metadata are available. [VERIFIED: crates/es-store-postgres/src/sql.rs]
    - What's unclear: Whether the phrase means accepted domain failure events/replies or all HTTP errors. [ASSUMED]
    - Recommendation: Scope Phase 8 to committed command outcomes; keep adapter validation and pre-append domain errors retryable unless requirements are clarified. [ASSUMED]
+   - RESOLVED: Phase 8 replays committed command outcomes only; pre-append validation/domain errors are not persisted or replayed in this phase.
 
 3. **Should mismatched payload reuse of an idempotency key be rejected?**
    - What we know: Stripe compares request parameters to prevent accidental misuse; current local store keys only by tenant/idempotency and does not store a request fingerprint. [CITED: https://docs.stripe.com/api/idempotent_requests; VERIFIED: migrations/20260417000000_event_store.sql]
    - What's unclear: Whether Phase 8 requires misuse detection or only duplicate replay. [ASSUMED]
    - Recommendation: Do not add request fingerprinting in Phase 8 unless planner has capacity after replay correctness; document it as future hardening. [ASSUMED]
+   - RESOLVED: Mismatched command payload reuse is deferred hardening unless covered by lightweight request fingerprint validation already planned.
 
 ## Environment Availability
 
