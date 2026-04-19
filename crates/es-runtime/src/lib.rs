@@ -16,7 +16,10 @@ pub use disruptor_path::{DisruptorPath, ReleasedHandoff};
 pub use engine::{CommandEngine, CommandEngineConfig};
 pub use error::{RuntimeError, RuntimeResult};
 pub use es_kernel::Aggregate;
-pub use es_store_postgres::CommittedAppend;
+pub use es_store_postgres::{
+    AppendOutcome, AppendRequest, CommandReplayRecord, CommandReplyPayload, CommittedAppend,
+    NewEvent, RehydrationBatch, SnapshotRecord, StoreResult, StoredEvent,
+};
 pub use gateway::{CommandGateway, RoutedCommand};
 pub use router::{PartitionRouter, ROUTING_HASH_SEED, ShardId};
 pub use shard::{LocalHandoffId, ShardHandle, ShardHandoff, ShardHandoffToken, ShardState};

@@ -13,7 +13,6 @@ dependencies = [
  "axum",
  "es-core",
  "es-runtime",
- "es-store-postgres",
  "example-commerce",
  "futures",
  "metrics",

@@ -12,12 +12,10 @@ use axum::{
 };
 use es_core::{CommandMetadata, StreamId, StreamRevision, TenantId};
 use es_runtime::{
-    CommandEngine, CommandEngineConfig, CommandEnvelope, CommandGateway, CommandOutcome,
-    CommittedAppend, PartitionRouter, RuntimeError, RuntimeEventCodec, RuntimeEventStore,
-};
-use es_store_postgres::{
-    AppendOutcome, AppendRequest, CommandReplayRecord, CommandReplyPayload, NewEvent,
-    RehydrationBatch, SnapshotRecord, StoreResult, StoredEvent,
+    AppendOutcome, AppendRequest, CommandEngine, CommandEngineConfig, CommandEnvelope,
+    CommandGateway, CommandOutcome, CommandReplayRecord, CommandReplyPayload, CommittedAppend,
+    NewEvent, PartitionRouter, RehydrationBatch, RuntimeError, RuntimeEventCodec,
+    RuntimeEventStore, SnapshotRecord, StoreResult, StoredEvent,
 };
 use example_commerce::{
     Order, OrderCommand, OrderEvent, OrderId, OrderLine, OrderReply, OrderState, ProductId,
