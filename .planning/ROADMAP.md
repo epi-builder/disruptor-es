@@ -19,6 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: CQRS Projection and Query Catch-Up** - Committed events feed checkpointed read models with restart and read-your-own-write support. Completed 2026-04-18.
 - [x] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions. Completed 2026-04-18.
 - [x] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible. Completed 2026-04-19.
+- [ ] **Phase 8: Runtime Duplicate Command Replay** - Duplicate command retries are replayed from runtime/store idempotency before aggregate decision so API and process-manager retries return the original committed result.
 
 ## Phase Details
 
@@ -142,10 +143,24 @@ Plans:
 - [x] 07-06-PLAN.md — Document hot-path rules, gateway boundaries, template extension steps, and stress-result interpretation.
 - [x] 07-07-PLAN.md — Close projection lag and stress signal verifier gaps with durable backlog metrics and measured stress fields.
 
+### Phase 8: Runtime Duplicate Command Replay
+**Goal**: Repeated commands with the same tenant and idempotency key are detected before aggregate decision and return the original committed result, preserving duplicate retry behavior across HTTP, runtime, storage, and process-manager replay paths.
+**Depends on**: Phase 7
+**Requirements**: STORE-03, RUNTIME-03, RUNTIME-05, INT-04, API-01, API-03
+**Gap Closure**: Closes gaps from `.planning/v1.0-MILESTONE-AUDIT.md` for runtime/store idempotency integration and duplicate retry flows.
+**Success Criteria** (what must be TRUE):
+  1. Shard command processing checks shard-local idempotency before rehydrating aggregate state or calling domain `decide`.
+  2. Duplicate commands return the original committed success/error reply shape without appending events or surfacing fresh domain validation errors.
+  3. Durable store dedupe remains the source of truth when the runtime cache misses, after restart, or across process-manager replay scenarios.
+  4. HTTP duplicate retries and deterministic process-manager follow-up retries are covered by tests that prove original committed results are replayed.
+**Plans**: 0 plans
+Plans:
+- [ ] Pending planning
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -156,3 +171,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. CQRS Projection and Query Catch-Up | 3/3 | Complete | 2026-04-18 |
 | 6. Outbox and Process Manager Workflows | 5/5 | Complete | 2026-04-18 |
 | 7. Adapters, Observability, Stress, and Template Guidance | 7/7 | Complete | 2026-04-19 |
+| 8. Runtime Duplicate Command Replay | 0/0 | Planned | |

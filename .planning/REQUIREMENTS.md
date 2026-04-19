@@ -18,7 +18,7 @@ Requirements for the initial template release. Each maps to roadmap phases.
 
 - [x] **STORE-01**: Command handling can append domain events to a durable event store with per-stream optimistic concurrency.
 - [x] **STORE-02**: Event store records include event ID, stream ID, stream revision, global position, command ID, causation ID, correlation ID, tenant ID, event type, schema version, payload, metadata, and recorded timestamp.
-- [x] **STORE-03**: Command deduplication returns the prior committed result for a repeated tenant/idempotency key.
+- [ ] **STORE-03**: Command deduplication returns the prior committed result for a repeated tenant/idempotency key.
 - [x] **STORE-04**: Aggregate rehydration can load the latest snapshot and replay subsequent stream events.
 - [x] **STORE-05**: Event store exposes global-position reads for projector and outbox catch-up.
 
@@ -26,9 +26,9 @@ Requirements for the initial template release. Each maps to roadmap phases.
 
 - [x] **RUNTIME-01**: Adapter requests enter the command engine through bounded ingress with explicit overload behavior.
 - [x] **RUNTIME-02**: Partition routing sends all commands for the same aggregate key to the same local shard owner.
-- [x] **RUNTIME-03**: Shard runtime owns processor-local aggregate cache and dedupe cache without global mutable business-state locks.
+- [ ] **RUNTIME-03**: Shard runtime owns processor-local aggregate cache and dedupe cache without global mutable business-state locks.
 - [x] **RUNTIME-04**: Shard runtime integrates the `disruptor` crate as the local command execution/fan-out mechanism.
-- [x] **RUNTIME-05**: Command replies are sent only after durable event-store append commit succeeds.
+- [ ] **RUNTIME-05**: Command replies are sent only after durable event-store append commit succeeds.
 - [x] **RUNTIME-06**: Optimistic concurrency conflicts are surfaced as typed retryable or conflict errors without corrupting shard-local cache.
 
 ### Example Domain
@@ -51,7 +51,7 @@ Requirements for the initial template release. Each maps to roadmap phases.
 - [x] **INT-01**: Append transaction can create outbox rows derived from committed domain events.
 - [x] **INT-02**: Outbox dispatcher publishes pending rows through a publisher trait and marks successful rows as published.
 - [x] **INT-03**: Outbox dispatch is retryable and idempotent by source event and topic.
-- [x] **INT-04**: A process-manager example reacts to order/product events and issues follow-up commands through the same command gateway.
+- [ ] **INT-04**: A process-manager example reacts to order/product events and issues follow-up commands through the same command gateway.
 
 ### Adapter and API
 
@@ -118,14 +118,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-04 | Phase 1 | Complete |
 | STORE-01 | Phase 2 | Complete |
 | STORE-02 | Phase 2 | Complete |
-| STORE-03 | Phase 2 | Complete |
+| STORE-03 | Phase 8 | Pending |
 | STORE-04 | Phase 2 | Complete |
 | STORE-05 | Phase 2 | Complete |
 | RUNTIME-01 | Phase 3 | Complete |
 | RUNTIME-02 | Phase 3 | Complete |
-| RUNTIME-03 | Phase 3 | Complete |
+| RUNTIME-03 | Phase 8 | Pending |
 | RUNTIME-04 | Phase 3 | Complete |
-| RUNTIME-05 | Phase 3 | Complete |
+| RUNTIME-05 | Phase 8 | Pending |
 | RUNTIME-06 | Phase 3 | Complete |
 | DOM-01 | Phase 4 | Complete |
 | DOM-02 | Phase 4 | Complete |
@@ -139,10 +139,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INT-01 | Phase 6 | Complete |
 | INT-02 | Phase 6 | Complete |
 | INT-03 | Phase 6 | Complete |
-| INT-04 | Phase 6 | Complete |
-| API-01 | Phase 7 | Pending |
+| INT-04 | Phase 8 | Pending |
+| API-01 | Phase 8 | Pending |
 | API-02 | Phase 7 | Pending |
-| API-03 | Phase 7 | Pending |
+| API-03 | Phase 8 | Pending |
 | API-04 | Phase 7 | Pending |
 | OBS-01 | Phase 7 | Pending |
 | OBS-02 | Phase 7 | Complete |
@@ -159,4 +159,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-16*
-*Last updated: 2026-04-18 after Phase 05 completion*
+*Last updated: 2026-04-19 after milestone audit gap closure planning*
