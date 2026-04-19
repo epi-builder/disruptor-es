@@ -1,7 +1,7 @@
 ---
 phase: 09
 slug: tenant-scoped-runtime-aggregate-cache
-status: draft
+status: verified
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-04-20
@@ -57,6 +57,23 @@ created: 2026-04-20
 ## Manual-Only Verifications
 
 All phase behaviors have automated verification.
+
+---
+
+## Validation Audit 2026-04-20
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+### Re-Verification Evidence
+
+- `cargo test -p es-runtime -- --nocapture` exited 0; 42 tests passed across lib, integration, and doc-test targets.
+- Required Phase 09 regression tests still exist: `shard_cache_isolates_same_stream_across_tenants`, `same_stream_different_tenant_rehydrates_independently`, `same_stream_different_tenant_preserves_domain_state`, `runtime_duplicate_store_hit_skips_rehydrate_decide_encode_and_append`, and `conflict_does_not_mutate_cache`.
+- No pending validation rows, `nyquist_compliant: false`, or `wave_0_complete: false` markers remain in this validation file.
+- Cargo emitted the pre-existing missing-docs warning for `crates/es-runtime/tests/shard_disruptor.rs`; it does not block validation.
 
 ---
 
