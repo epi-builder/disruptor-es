@@ -19,12 +19,12 @@ use es_runtime::{
     PostgresRuntimeEventStore, RuntimeError, RuntimeEventCodec, RuntimeEventStore,
 };
 use es_store_postgres::{
-    NewEvent, PostgresEventStore, PostgresOutboxStore, PostgresProjectionStore, SnapshotRecord,
-    StoredEvent,
+    CommandReplayRecord, CommandReplyPayload, NewEvent, PostgresEventStore, PostgresOutboxStore,
+    PostgresProjectionStore, SnapshotRecord, StoredEvent,
 };
 use example_commerce::{
-    Order, OrderCommand, OrderEvent, OrderId, OrderLine, OrderState, ProductId, Quantity, Sku,
-    UserId,
+    Order, OrderCommand, OrderEvent, OrderId, OrderLine, OrderReply, OrderState, ProductId,
+    Quantity, Sku, UserId,
 };
 use hdrhistogram::Histogram;
 use serde_json::json;
@@ -222,6 +222,20 @@ impl RuntimeEventStore for MeasuredRuntimeEventStore {
         >,
     > {
         self.inner.load_rehydration(tenant_id, stream_id)
+    }
+
+    fn lookup_command_replay(
+        &self,
+        tenant_id: &es_core::TenantId,
+        idempotency_key: &str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = es_store_postgres::StoreResult<Option<CommandReplayRecord>>>
+                + Send
+                + '_,
+        >,
+    > {
+        self.inner.lookup_command_replay(tenant_id, idempotency_key)
     }
 }
 
@@ -544,6 +558,36 @@ impl RuntimeEventCodec<Order> for OrderCodec {
 
     fn decode_snapshot(&self, _snapshot: &SnapshotRecord) -> es_runtime::RuntimeResult<OrderState> {
         Ok(OrderState::default())
+    }
+
+    fn encode_reply(&self, reply: &OrderReply) -> es_runtime::RuntimeResult<CommandReplyPayload> {
+        CommandReplyPayload::new(
+            "order_reply",
+            1,
+            serde_json::to_value(reply).map_err(|error| RuntimeError::Codec {
+                message: error.to_string(),
+            })?,
+        )
+        .map_err(RuntimeError::from_store_error)
+    }
+
+    fn decode_reply(&self, payload: &CommandReplyPayload) -> es_runtime::RuntimeResult<OrderReply> {
+        if payload.reply_type != "order_reply" {
+            return Err(RuntimeError::Codec {
+                message: format!("unexpected reply type {}", payload.reply_type),
+            });
+        }
+        if payload.schema_version != 1 {
+            return Err(RuntimeError::Codec {
+                message: format!("unexpected reply schema version {}", payload.schema_version),
+            });
+        }
+
+        serde_json::from_value::<OrderReply>(payload.payload.clone()).map_err(|error| {
+            RuntimeError::Codec {
+                message: error.to_string(),
+            }
+        })
     }
 }
 

@@ -225,6 +225,13 @@ impl<A: Aggregate> ShardState<A> {
                 }
             }
         }
+        let command_reply_payload = match codec.encode_reply(&decision.reply) {
+            Ok(payload) => payload,
+            Err(error) => {
+                let _ = envelope.reply.send(Err(error));
+                return Ok(true);
+            }
+        };
 
         let append_request = match es_store_postgres::AppendRequest::new(
             envelope.stream_id.clone(),
@@ -233,7 +240,7 @@ impl<A: Aggregate> ShardState<A> {
             envelope.idempotency_key.clone(),
             new_events,
         ) {
-            Ok(request) => request,
+            Ok(request) => request.with_command_reply_payload(command_reply_payload.clone()),
             Err(error) => {
                 let _ = envelope
                     .reply
@@ -259,7 +266,10 @@ impl<A: Aggregate> ShardState<A> {
                         idempotency_key: envelope.idempotency_key.clone(),
                     },
                     DedupeRecord {
-                        append: committed.clone(),
+                        replay: es_store_postgres::CommandReplayRecord {
+                            append: committed.clone(),
+                            reply: command_reply_payload.clone(),
+                        },
                     },
                 );
                 let _ = envelope
@@ -282,7 +292,10 @@ impl<A: Aggregate> ShardState<A> {
                         idempotency_key: envelope.idempotency_key.clone(),
                     },
                     DedupeRecord {
-                        append: committed.clone(),
+                        replay: es_store_postgres::CommandReplayRecord {
+                            append: committed.clone(),
+                            reply: command_reply_payload,
+                        },
                     },
                 );
                 let _ = envelope

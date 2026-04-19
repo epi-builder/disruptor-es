@@ -82,7 +82,7 @@ pub enum OrderEvent {
 }
 
 /// Replies returned by order commands.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum OrderReply {
     /// Order placement succeeded.
     Placed {

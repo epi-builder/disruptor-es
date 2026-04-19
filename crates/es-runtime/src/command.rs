@@ -86,6 +86,18 @@ pub trait RuntimeEventCodec<A: Aggregate>: Clone + Send + Sync + 'static {
         &self,
         snapshot: &es_store_postgres::SnapshotRecord,
     ) -> RuntimeResult<A::State>;
+
+    /// Encodes a typed command reply for durable replay.
+    fn encode_reply(
+        &self,
+        reply: &A::Reply,
+    ) -> RuntimeResult<es_store_postgres::CommandReplyPayload>;
+
+    /// Decodes a durable replay payload into a typed command reply.
+    fn decode_reply(
+        &self,
+        payload: &es_store_postgres::CommandReplyPayload,
+    ) -> RuntimeResult<A::Reply>;
 }
 
 #[cfg(test)]

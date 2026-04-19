@@ -4,7 +4,7 @@ use es_runtime::{
     AggregateCache, CommandEnvelope, DedupeCache, DedupeKey, DedupeRecord, DisruptorPath,
     RoutedCommand, RuntimeError, ShardHandle, ShardId, ShardState,
 };
-use es_store_postgres::CommittedAppend;
+use es_store_postgres::{CommandReplayRecord, CommandReplyPayload, CommittedAppend};
 use time::OffsetDateTime;
 use tokio::sync::oneshot;
 use uuid::Uuid;
@@ -149,7 +149,11 @@ fn shard_dedupe_cache_records_tenant_scoped_committed_append() {
         idempotency_key: "idem-1".to_owned(),
     };
     let record = DedupeRecord {
-        append: committed_append(stream_id("counter-1")),
+        replay: CommandReplayRecord {
+            append: committed_append(stream_id("counter-1")),
+            reply: CommandReplyPayload::new("counter_reply", 1, serde_json::json!({ "value": 7 }))
+                .expect("reply payload"),
+        },
     };
 
     cache.record(key.clone(), record.clone());

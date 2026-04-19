@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use es_core::{StreamId, TenantId};
 use es_kernel::Aggregate;
-use es_store_postgres::CommittedAppend;
 
 /// Shard-local aggregate state cache owned by a single shard runtime.
 pub struct AggregateCache<A: Aggregate> {
@@ -58,11 +57,11 @@ pub struct DedupeKey {
     pub idempotency_key: String,
 }
 
-/// Cached committed append summary returned for a duplicate command.
+/// Cached replay record returned for a duplicate command.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DedupeRecord {
-    /// Durable append result originally returned by PostgreSQL.
-    pub append: CommittedAppend,
+    /// Durable append and typed reply originally returned by PostgreSQL.
+    pub replay: es_store_postgres::CommandReplayRecord,
 }
 
 /// Shard-local dedupe cache. PostgreSQL remains authoritative for command dedupe.

@@ -14,6 +14,13 @@ pub trait RuntimeEventStore: Clone + Send + Sync + 'static {
         tenant_id: &es_core::TenantId,
         stream_id: &es_core::StreamId,
     ) -> BoxFuture<'_, es_store_postgres::StoreResult<es_store_postgres::RehydrationBatch>>;
+
+    /// Looks up a durable command replay record by tenant and idempotency key.
+    fn lookup_command_replay(
+        &self,
+        tenant_id: &es_core::TenantId,
+        idempotency_key: &str,
+    ) -> BoxFuture<'_, es_store_postgres::StoreResult<Option<es_store_postgres::CommandReplayRecord>>>;
 }
 
 /// PostgreSQL-backed runtime event-store adapter.
@@ -51,5 +58,24 @@ impl RuntimeEventStore for PostgresRuntimeEventStore {
         let stream_id = stream_id.clone();
 
         Box::pin(async move { self.inner.load_rehydration(&tenant_id, &stream_id).await })
+    }
+
+    fn lookup_command_replay(
+        &self,
+        tenant_id: &es_core::TenantId,
+        idempotency_key: &str,
+    ) -> BoxFuture<'_, es_store_postgres::StoreResult<Option<es_store_postgres::CommandReplayRecord>>>
+    {
+        // Keep the runtime boundary as a thin inner.lookup_command_replay delegate.
+        let tenant_id = tenant_id.clone();
+        let idempotency_key = idempotency_key.to_owned();
+        let inner = self.inner.clone();
+
+        Box::pin(async move {
+            let replay = inner
+                .lookup_command_replay(&tenant_id, &idempotency_key)
+                .await;
+            replay
+        })
     }
 }

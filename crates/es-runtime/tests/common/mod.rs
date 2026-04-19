@@ -106,4 +106,13 @@ impl RuntimeEventStore for FakeRuntimeEventStore {
 
         Box::pin(async move { result })
     }
+
+    fn lookup_command_replay(
+        &self,
+        _tenant_id: &es_core::TenantId,
+        _idempotency_key: &str,
+    ) -> BoxFuture<'_, es_store_postgres::StoreResult<Option<es_store_postgres::CommandReplayRecord>>>
+    {
+        Box::pin(async move { Ok(None) })
+    }
 }

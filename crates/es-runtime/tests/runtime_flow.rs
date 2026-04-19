@@ -13,8 +13,8 @@ use es_runtime::{
     RuntimeEventStore, ShardId, ShardState,
 };
 use es_store_postgres::{
-    AppendOutcome, AppendRequest, CommittedAppend, NewEvent, RehydrationBatch, SnapshotRecord,
-    StoreError, StoredEvent,
+    AppendOutcome, AppendRequest, CommandReplayRecord, CommandReplyPayload, CommittedAppend,
+    NewEvent, RehydrationBatch, SnapshotRecord, StoreError, StoredEvent,
 };
 use futures::future::BoxFuture;
 use serde_json::json;
@@ -152,6 +152,32 @@ impl RuntimeEventCodec<CounterAggregate> for CounterCodec {
 
         Ok(CounterState { value })
     }
+
+    fn encode_reply(&self, reply: &i64) -> es_runtime::RuntimeResult<CommandReplyPayload> {
+        CommandReplyPayload::new("counter_reply", 1, json!({ "value": reply }))
+            .map_err(RuntimeError::from_store_error)
+    }
+
+    fn decode_reply(&self, payload: &CommandReplyPayload) -> es_runtime::RuntimeResult<i64> {
+        if payload.reply_type != "counter_reply" {
+            return Err(RuntimeError::Codec {
+                message: format!("unexpected reply type {}", payload.reply_type),
+            });
+        }
+        if payload.schema_version != 1 {
+            return Err(RuntimeError::Codec {
+                message: format!("unexpected reply schema version {}", payload.schema_version),
+            });
+        }
+
+        payload
+            .payload
+            .get("value")
+            .and_then(serde_json::Value::as_i64)
+            .ok_or_else(|| RuntimeError::Codec {
+                message: "missing counter reply value".to_owned(),
+            })
+    }
 }
 
 #[test]
@@ -171,6 +197,8 @@ struct FakeStore {
 struct FakeStoreInner {
     append_requests: Mutex<Vec<AppendRequest>>,
     append_outcomes: Mutex<VecDeque<Result<AppendOutcome, StoreError>>>,
+    command_replay: Mutex<Option<CommandReplayRecord>>,
+    lookup_count: Mutex<usize>,
     rehydration: Mutex<RehydrationBatch>,
     rehydration_error: Mutex<Option<StoreError>>,
     append_gate: Mutex<Option<oneshot::Receiver<()>>>,
@@ -191,6 +219,8 @@ impl FakeStore {
             inner: Arc::new(FakeStoreInner {
                 append_requests: Mutex::new(Vec::new()),
                 append_outcomes: Mutex::new(VecDeque::from([result])),
+                command_replay: Mutex::new(None),
+                lookup_count: Mutex::new(0),
                 rehydration: Mutex::new(RehydrationBatch {
                     snapshot: None,
                     events: Vec::new(),
@@ -218,6 +248,14 @@ impl FakeStore {
             .rehydration_error
             .lock()
             .expect("rehydration error") = Some(error);
+    }
+
+    fn set_command_replay(&self, replay: CommandReplayRecord) {
+        *self.inner.command_replay.lock().expect("command replay") = Some(replay);
+    }
+
+    fn lookup_count(&self) -> usize {
+        *self.inner.lookup_count.lock().expect("lookup count")
     }
 
     async fn wait_for_append_start(&self) {
@@ -281,6 +319,22 @@ impl RuntimeEventStore for FakeStore {
                 Ok(batch)
             }
         })
+    }
+
+    fn lookup_command_replay(
+        &self,
+        _tenant_id: &TenantId,
+        _idempotency_key: &str,
+    ) -> BoxFuture<'_, es_store_postgres::StoreResult<Option<CommandReplayRecord>>> {
+        *self.inner.lookup_count.lock().expect("lookup count") += 1;
+        let replay = self
+            .inner
+            .command_replay
+            .lock()
+            .expect("command replay")
+            .clone();
+
+        Box::pin(async move { Ok(replay) })
     }
 }
 
