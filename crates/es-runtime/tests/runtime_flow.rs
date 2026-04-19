@@ -680,6 +680,110 @@ async fn cache_miss_rehydrates_before_decide() {
 }
 
 #[tokio::test]
+async fn same_stream_different_tenant_rehydrates_independently() {
+    let store = FakeStore::with_append_result(Ok(AppendOutcome::Committed(committed_append(1))));
+    store.set_tenant_rehydration(
+        tenant_id_for("tenant-a"),
+        StreamId::new("counter-1").expect("stream id"),
+        RehydrationBatch {
+            snapshot: None,
+            events: vec![],
+        },
+    );
+    store.set_tenant_rehydration(
+        tenant_id_for("tenant-b"),
+        StreamId::new("counter-1").expect("stream id"),
+        RehydrationBatch {
+            snapshot: None,
+            events: vec![],
+        },
+    );
+    let codec = CounterCodec::default();
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+
+    let (tenant_a, tenant_a_receiver) = envelope_for("tenant-a", "counter-1", "idem-a", 3);
+    record_handoff(&mut state, tenant_a);
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("tenant a processed")
+    );
+    assert_eq!(3, tenant_a_receiver.await.expect("reply").expect("success").reply);
+
+    let (tenant_b, tenant_b_receiver) = envelope_for("tenant-b", "counter-1", "idem-b", 2);
+    record_handoff(&mut state, tenant_b);
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("tenant b processed")
+    );
+    assert_eq!(2, tenant_b_receiver.await.expect("reply").expect("success").reply);
+
+    assert_eq!(
+        vec![
+            (
+                tenant_id_for("tenant-a"),
+                StreamId::new("counter-1").expect("stream id")
+            ),
+            (
+                tenant_id_for("tenant-b"),
+                StreamId::new("counter-1").expect("stream id")
+            ),
+        ],
+        store.rehydration_calls()
+    );
+}
+
+#[tokio::test]
+async fn same_stream_different_tenant_preserves_domain_state() {
+    let store = FakeStore::with_append_result(Ok(AppendOutcome::Committed(committed_append(1))));
+    store.set_tenant_rehydration(
+        tenant_id_for("tenant-a"),
+        StreamId::new("counter-1").expect("stream id"),
+        RehydrationBatch {
+            snapshot: None,
+            events: vec![stored_event(1, 5)],
+        },
+    );
+    store.set_tenant_rehydration(
+        tenant_id_for("tenant-b"),
+        StreamId::new("counter-1").expect("stream id"),
+        RehydrationBatch {
+            snapshot: None,
+            events: vec![stored_event(40, 40)],
+        },
+    );
+    let codec = CounterCodec::default();
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+
+    let (tenant_a, tenant_a_receiver) = envelope_for("tenant-a", "counter-1", "idem-a", 3);
+    record_handoff(&mut state, tenant_a);
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("tenant a processed")
+    );
+    assert_eq!(8, tenant_a_receiver.await.expect("reply").expect("success").reply);
+
+    let (tenant_b, tenant_b_receiver) = envelope_for("tenant-b", "counter-1", "idem-b", 2);
+    record_handoff(&mut state, tenant_b);
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("tenant b processed")
+    );
+    assert_eq!(42, tenant_b_receiver.await.expect("reply").expect("success").reply);
+    assert_ne!(
+        Some(&CounterState { value: 10 }),
+        state.cache().get(&cache_key_for("tenant-b", "counter-1"))
+    );
+}
+
+#[tokio::test]
 async fn runtime_duplicate_cache_hit_skips_decide_and_append() {
     let store = FakeStore::committed();
     let codec = CounterCodec::default();
