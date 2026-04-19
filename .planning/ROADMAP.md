@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: CQRS Projection and Query Catch-Up** - Committed events feed checkpointed read models with restart and read-your-own-write support. Completed 2026-04-18.
 - [x] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions. Completed 2026-04-18.
 - [x] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible. Completed 2026-04-19.
-- [ ] **Phase 8: Runtime Duplicate Command Replay** - Duplicate command retries are replayed from runtime/store idempotency before aggregate decision so API and process-manager retries return the original committed result.
+- [x] **Phase 8: Runtime Duplicate Command Replay** - Duplicate command retries are replayed from runtime/store idempotency before aggregate decision so API and process-manager retries return the original committed result. Completed 2026-04-19.
 
 ## Phase Details
 
@@ -157,7 +157,7 @@ Plans:
 Plans:
 - [x] 08-01-PLAN.md — Create durable typed command replay payload persistence and lookup in PostgreSQL command dedupe.
 - [x] 08-02-PLAN.md — Add runtime pre-decision duplicate replay from shard-local and durable idempotency records.
-- [ ] 08-03-PLAN.md — Prove HTTP duplicate retry and process-manager follow-up retry replay original committed outcomes.
+- [x] 08-03-PLAN.md — Prove HTTP duplicate retry and process-manager follow-up retry replay original committed outcomes.
 
 ## Progress
 
@@ -173,4 +173,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. CQRS Projection and Query Catch-Up | 3/3 | Complete | 2026-04-18 |
 | 6. Outbox and Process Manager Workflows | 5/5 | Complete | 2026-04-18 |
 | 7. Adapters, Observability, Stress, and Template Guidance | 7/7 | Complete | 2026-04-19 |
-| 8. Runtime Duplicate Command Replay | 0/0 | Planned | |
+| 8. Runtime Duplicate Command Replay | 3/3 | Complete | 2026-04-19 |

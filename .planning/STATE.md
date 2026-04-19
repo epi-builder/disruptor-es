@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-04-19T14:35:12.653Z"
+status: verifying
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-04-19T14:48:35.638Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 34
-  completed_plans: 33
-  percent: 97
+  completed_plans: 34
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 Phase: 08 (runtime-duplicate-command-replay) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-19
 
 Progress: [██████████] 100%
@@ -78,6 +78,7 @@ Progress: [██████████] 100%
 | Phase 07-adapters-observability-stress-and-template-guidance P07 | 10min 42s | 3 tasks | 5 files |
 | Phase 08-runtime-duplicate-command-replay P01 | 6min | 2 tasks | 7 files |
 | Phase 08-runtime-duplicate-command-replay P02 | 10min 5s | 2 tasks | 10 files |
+| Phase 08-runtime-duplicate-command-replay P03 | 10min 35s | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,9 @@ Recent decisions affecting current work:
 - [Phase 08-runtime-duplicate-command-replay]: Runtime duplicate replay now checks shard-local dedupe first, then durable tenant/idempotency lookup, before aggregate rehydration or decision.
 - [Phase 08-runtime-duplicate-command-replay]: Runtime codecs own typed reply payload validation so stored replay records are decoded without calling aggregate decide.
 - [Phase 08-runtime-duplicate-command-replay]: Duplicate append races require a durable CommandReplayRecord lookup and return a codec error when no typed replay row exists.
+- [Phase 08-runtime-duplicate-command-replay]: HTTP duplicate retry coverage uses the real order CommandEngine and a test RuntimeEventStore instead of adapter-local idempotency or manual reply injection.
+- [Phase 08-runtime-duplicate-command-replay]: Process-manager retry coverage reuses deterministic pm:{manager}:{source_event_id}:... keys through real product/order CommandEngines instead of process-manager-local dedupe state.
+- [Phase 08-runtime-duplicate-command-replay]: Phase 08 validation is recorded as requirement-level sampling because each plan contributes cross-cutting replay coverage.
 
 ### Pending Todos
 
@@ -172,6 +176,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-19T14:35:12.649Z
-Stopped at: Completed 08-02-PLAN.md
+Last session: 2026-04-19T14:48:35.634Z
+Stopped at: Completed 08-03-PLAN.md
 Resume file: None

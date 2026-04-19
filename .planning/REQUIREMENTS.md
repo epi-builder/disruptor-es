@@ -51,13 +51,13 @@ Requirements for the initial template release. Each maps to roadmap phases.
 - [x] **INT-01**: Append transaction can create outbox rows derived from committed domain events.
 - [x] **INT-02**: Outbox dispatcher publishes pending rows through a publisher trait and marks successful rows as published.
 - [x] **INT-03**: Outbox dispatch is retryable and idempotent by source event and topic.
-- [ ] **INT-04**: A process-manager example reacts to order/product events and issues follow-up commands through the same command gateway.
+- [x] **INT-04**: A process-manager example reacts to order/product events and issues follow-up commands through the same command gateway.
 
 ### Adapter and API
 
-- [ ] **API-01**: Thin HTTP adapter exposes command endpoints that decode requests, attach metadata, send through bounded ingress, and await command replies.
+- [x] **API-01**: Thin HTTP adapter exposes command endpoints that decode requests, attach metadata, send through bounded ingress, and await command replies.
 - [ ] **API-02**: Adapter code does not mutate aggregate state, projector state, or outbox state directly.
-- [ ] **API-03**: API responses include stream revision, global position, correlation ID, and typed success/error payloads.
+- [x] **API-03**: API responses include stream revision, global position, correlation ID, and typed success/error payloads.
 - [ ] **API-04**: Project documentation explains how WebSocket or gRPC gateways should connect without sharing hot business state.
 
 ### Observability and Stress Testing
@@ -139,10 +139,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INT-01 | Phase 6 | Complete |
 | INT-02 | Phase 6 | Complete |
 | INT-03 | Phase 6 | Complete |
-| INT-04 | Phase 8 | Pending |
-| API-01 | Phase 8 | Pending |
+| INT-04 | Phase 8 | Complete |
+| API-01 | Phase 8 | Complete |
 | API-02 | Phase 7 | Pending |
-| API-03 | Phase 8 | Pending |
+| API-03 | Phase 8 | Complete |
 | API-04 | Phase 7 | Pending |
 | OBS-01 | Phase 7 | Pending |
 | OBS-02 | Phase 7 | Complete |
