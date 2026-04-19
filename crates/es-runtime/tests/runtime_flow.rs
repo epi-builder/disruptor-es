@@ -9,8 +9,8 @@ use std::{
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
 use es_kernel::{Aggregate, Decision};
 use es_runtime::{
-    CommandEngine, CommandEngineConfig, CommandEnvelope, RuntimeError, RuntimeEventCodec,
-    RuntimeEventStore, ShardId, ShardState,
+    CommandEngine, CommandEngineConfig, CommandEnvelope, DedupeKey, DedupeRecord, RuntimeError,
+    RuntimeEventCodec, RuntimeEventStore, ShardId, ShardState,
 };
 use es_store_postgres::{
     AppendOutcome, AppendRequest, CommandReplayRecord, CommandReplyPayload, CommittedAppend,
@@ -408,6 +408,21 @@ fn committed_append(position: i64) -> CommittedAppend {
     }
 }
 
+fn command_replay_record(position: i64, reply: i64) -> CommandReplayRecord {
+    CommandReplayRecord {
+        append: committed_append(position),
+        reply: CommandReplyPayload::new("counter_reply", 1, json!({ "value": reply }))
+            .expect("reply payload"),
+    }
+}
+
+fn dedupe_key() -> DedupeKey {
+    DedupeKey {
+        tenant_id: tenant_id(),
+        idempotency_key: "idem-1".to_owned(),
+    }
+}
+
 fn warm_cache(state: &mut ShardState<CounterAggregate>, value: i64) {
     state.cache_mut().commit_state(
         StreamId::new("counter-1").expect("stream id"),
@@ -633,6 +648,104 @@ async fn cache_miss_rehydrates_before_decide() {
 }
 
 #[tokio::test]
+async fn runtime_duplicate_cache_hit_skips_decide_and_append() {
+    let store = FakeStore::committed();
+    let codec = CounterCodec::default();
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    warm_cache(&mut state, 10);
+    state.dedupe_mut().record(
+        dedupe_key(),
+        DedupeRecord {
+            replay: command_replay_record(7, 3),
+        },
+    );
+    let (envelope, receiver) = envelope(100);
+    record_handoff(&mut state, envelope);
+
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
+
+    let outcome = receiver.await.expect("reply").expect("success");
+    assert_eq!(3, outcome.reply);
+    assert_eq!(vec![7], outcome.append.global_positions);
+    assert_eq!(0, store.appended_len());
+    assert_eq!(0, store.lookup_count());
+    assert_eq!(
+        Some(&CounterState { value: 10 }),
+        state
+            .cache()
+            .get(&StreamId::new("counter-1").expect("stream id"))
+    );
+}
+
+#[tokio::test]
+async fn duplicate_replay_returns_original_reply_after_state_mutation() {
+    let store = FakeStore::committed();
+    let codec = CounterCodec::default();
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    warm_cache(&mut state, 50);
+    state.dedupe_mut().record(
+        dedupe_key(),
+        DedupeRecord {
+            replay: command_replay_record(8, 5),
+        },
+    );
+    let (envelope, receiver) = envelope(20);
+    record_handoff(&mut state, envelope);
+
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
+
+    let outcome = receiver.await.expect("reply").expect("success");
+    assert_eq!(5, outcome.reply);
+    assert_eq!(vec![8], outcome.append.global_positions);
+    assert_eq!(0, store.appended_len());
+    assert_eq!(
+        Some(&CounterState { value: 50 }),
+        state
+            .cache()
+            .get(&StreamId::new("counter-1").expect("stream id"))
+    );
+}
+
+#[tokio::test]
+async fn runtime_duplicate_store_hit_skips_rehydrate_decide_encode_and_append() {
+    let store = FakeStore::committed();
+    store.set_command_replay(command_replay_record(9, 11));
+    store.set_rehydration_error(StoreError::DedupeConflict {
+        tenant_id: "tenant-a".to_owned(),
+        idempotency_key: "idem-1".to_owned(),
+    });
+    let codec = CounterCodec { fail_encode: true };
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    let (envelope, receiver) = envelope(30);
+    record_handoff(&mut state, envelope);
+
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
+
+    let outcome = receiver.await.expect("reply").expect("success");
+    assert_eq!(11, outcome.reply);
+    assert_eq!(vec![9], outcome.append.global_positions);
+    assert_eq!(0, store.appended_len());
+    assert_eq!(1, store.lookup_count());
+    assert!(state.cache().is_empty());
+    assert_eq!(1, state.dedupe().len());
+}
+
+#[tokio::test]
 async fn duplicate_append_returns_successful_command_outcome() {
     let store = FakeStore::duplicate();
     let codec = CounterCodec::default();
@@ -657,6 +770,36 @@ async fn duplicate_append_returns_successful_command_outcome() {
             .get(&StreamId::new("counter-1").expect("stream id"))
     );
     assert_eq!(1, state.dedupe().len());
+}
+
+#[tokio::test]
+async fn duplicate_append_branch_uses_stored_replay_not_fresh_decision_reply() {
+    let store = FakeStore::duplicate();
+    store.set_command_replay(command_replay_record(12, 44));
+    let codec = CounterCodec::default();
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    warm_cache(&mut state, 10);
+    let (envelope, receiver) = envelope(3);
+    record_handoff(&mut state, envelope);
+
+    assert!(
+        state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
+
+    let outcome = receiver.await.expect("reply").expect("success");
+    assert_eq!(44, outcome.reply);
+    assert_eq!(vec![12], outcome.append.global_positions);
+    assert_eq!(1, store.appended_len());
+    assert_eq!(1, store.lookup_count());
+    assert_eq!(
+        Some(&CounterState { value: 10 }),
+        state
+            .cache()
+            .get(&StreamId::new("counter-1").expect("stream id"))
+    );
 }
 
 #[tokio::test]
