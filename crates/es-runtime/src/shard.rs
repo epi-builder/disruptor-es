@@ -225,8 +225,7 @@ impl<A: Aggregate> ShardState<A> {
         } else {
             match rehydrate_state(store, codec, &envelope).await {
                 Ok(rehydrated) => {
-                    self.cache
-                        .commit_state(cache_key.clone(), rehydrated.clone());
+                    self.cache.commit_state(cache_key.clone(), rehydrated.clone());
                     rehydrated
                 }
                 Err(error) => {

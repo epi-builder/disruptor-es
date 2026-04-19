@@ -200,6 +200,8 @@ struct FakeStoreInner {
     command_replay: Mutex<VecDeque<Option<CommandReplayRecord>>>,
     lookup_count: Mutex<usize>,
     rehydration: Mutex<RehydrationBatch>,
+    rehydration_calls: Mutex<Vec<(TenantId, StreamId)>>,
+    tenant_rehydration: Mutex<VecDeque<((TenantId, StreamId), RehydrationBatch)>>,
     rehydration_error: Mutex<Option<StoreError>>,
     append_gate: Mutex<Option<oneshot::Receiver<()>>>,
     append_started: Notify,
@@ -225,6 +227,8 @@ impl FakeStore {
                     snapshot: None,
                     events: Vec::new(),
                 }),
+                rehydration_calls: Mutex::new(Vec::new()),
+                tenant_rehydration: Mutex::new(VecDeque::new()),
                 rehydration_error: Mutex::new(None),
                 append_gate: Mutex::new(None),
                 append_started: Notify::new(),
@@ -240,6 +244,27 @@ impl FakeStore {
 
     fn set_rehydration(&self, rehydration: RehydrationBatch) {
         *self.inner.rehydration.lock().expect("rehydration") = rehydration;
+    }
+
+    fn set_tenant_rehydration(
+        &self,
+        tenant_id: TenantId,
+        stream_id: StreamId,
+        rehydration: RehydrationBatch,
+    ) {
+        self.inner
+            .tenant_rehydration
+            .lock()
+            .expect("tenant rehydration")
+            .push_back(((tenant_id, stream_id), rehydration));
+    }
+
+    fn rehydration_calls(&self) -> Vec<(TenantId, StreamId)> {
+        self.inner
+            .rehydration_calls
+            .lock()
+            .expect("rehydration calls")
+            .clone()
     }
 
     fn set_rehydration_error(&self, error: StoreError) {
@@ -305,16 +330,33 @@ impl RuntimeEventStore for FakeStore {
 
     fn load_rehydration(
         &self,
-        _tenant_id: &TenantId,
-        _stream_id: &StreamId,
+        tenant_id: &TenantId,
+        stream_id: &StreamId,
     ) -> BoxFuture<'_, es_store_postgres::StoreResult<RehydrationBatch>> {
+        self.inner
+            .rehydration_calls
+            .lock()
+            .expect("rehydration calls")
+            .push((tenant_id.clone(), stream_id.clone()));
         let error = self
             .inner
             .rehydration_error
             .lock()
             .expect("rehydration error")
             .take();
-        let batch = self.inner.rehydration.lock().expect("rehydration").clone();
+        let tenant_batch = {
+            let mut tenant_rehydration = self
+                .inner
+                .tenant_rehydration
+                .lock()
+                .expect("tenant rehydration");
+            tenant_rehydration
+                .iter()
+                .position(|((tenant, stream), _)| tenant == tenant_id && stream == stream_id)
+                .and_then(|index| tenant_rehydration.remove(index).map(|(_, batch)| batch))
+        };
+        let batch = tenant_batch
+            .unwrap_or_else(|| self.inner.rehydration.lock().expect("rehydration").clone());
 
         Box::pin(async move {
             if let Some(error) = error {
