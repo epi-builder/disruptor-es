@@ -20,6 +20,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Outbox and Process Manager Workflows** - Committed events create durable integration rows and cross-entity workflows without distributed transactions. Completed 2026-04-18.
 - [x] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible. Completed 2026-04-19.
 - [x] **Phase 8: Runtime Duplicate Command Replay** - Duplicate command retries are replayed from runtime/store idempotency before aggregate decision so API and process-manager retries return the original committed result. Completed 2026-04-19.
+- [ ] **Phase 9: Tenant-Scoped Runtime Aggregate Cache** - Shard-local aggregate cache entries include tenant identity so runtime hot state cannot bleed across tenant-scoped event-store streams.
+- [ ] **Phase 10: Duplicate-Safe Process Manager Follow-Up Keys** - Process-manager reserve/release follow-up commands use collision-safe idempotency keys for duplicate product lines while preserving retry replay.
+- [ ] **Phase 11: v1 Archive Hygiene and HTTP E2E Debt** - Resolve accepted audit debt around runnable HTTP composition, HTTP-inclusive stress coverage, stale requirements traceability, validation hygiene, and advisory domain hardening.
 
 ## Phase Details
 
@@ -159,10 +162,47 @@ Plans:
 - [x] 08-02-PLAN.md — Add runtime pre-decision duplicate replay from shard-local and durable idempotency records.
 - [x] 08-03-PLAN.md — Prove HTTP duplicate retry and process-manager follow-up retry replay original committed outcomes.
 
+### Phase 9: Tenant-Scoped Runtime Aggregate Cache
+**Goal**: Shard-owned runtime aggregate state remains isolated by tenant as well as stream, so cache hits cannot bypass tenant-scoped rehydration or evaluate commands against another tenant's state.
+**Depends on**: Phase 8
+**Requirements**: STORE-04, RUNTIME-03, RUNTIME-05, RUNTIME-06, DOM-05
+**Gap Closure**: Closes the `es-runtime::AggregateCache` to tenant-scoped event-store rehydration gap from `.planning/v1.0-MILESTONE-AUDIT.md`.
+**Success Criteria** (what must be TRUE):
+  1. Aggregate cache entries are keyed by tenant identity plus stream ID, while remaining shard-owned and free of global mutable business-state locks.
+  2. Runtime command processing cannot reuse cached aggregate state across tenants that share a stream ID.
+  3. Store rehydration remains tenant-scoped and is not skipped by a stream-only cache hit.
+  4. Regression tests prove same-stream, different-tenant commands preserve isolated domain state and conflict behavior.
+**Plans**: TBD
+
+### Phase 10: Duplicate-Safe Process Manager Follow-Up Keys
+**Goal**: Process-manager follow-up commands remain deterministic for retry replay while avoiding idempotency collisions for orders that contain repeated product lines.
+**Depends on**: Phase 9
+**Requirements**: STORE-03, RUNTIME-05, DOM-04, DOM-05, INT-04
+**Gap Closure**: Closes the commerce process-manager to runtime/store idempotency replay gap from `.planning/v1.0-MILESTONE-AUDIT.md`.
+**Success Criteria** (what must be TRUE):
+  1. Reserve and release follow-up idempotency keys distinguish duplicate product lines or otherwise coalesce them before command emission.
+  2. True process-manager retries still replay original committed follow-up outcomes through runtime/store idempotency.
+  3. Duplicate same-product order lines cannot collapse distinct reserve/release commands into the wrong replay record.
+  4. App-level process-manager tests cover duplicate product lines and replayed follow-up processing.
+**Plans**: TBD
+
+### Phase 11: v1 Archive Hygiene and HTTP E2E Debt
+**Goal**: Clean up non-blocking milestone audit debt so v1 can be archived with clear runnable service guidance, HTTP-inclusive stress coverage, current requirement traceability, validation hygiene, and advisory domain hardening.
+**Depends on**: Phase 10
+**Requirements**: API-02, API-04, OBS-01, TEST-03, TEST-04, DOC-01
+**Gap Closure**: Addresses tech debt noted in `.planning/v1.0-MILESTONE-AUDIT.md` after the correctness blockers are closed.
+**Success Criteria** (what must be TRUE):
+  1. The app crate exposes a runnable HTTP service entrypoint or explicitly documents the accepted reason it remains out of scope.
+  2. Full E2E stress coverage exercises HTTP DTO decode, router, and error mapping, or records an explicit accepted-debt decision.
+  3. `REQUIREMENTS.md` checkboxes and traceability reflect current verification evidence for adapter boundaries, gateway docs, observability, benchmark coverage, and template documentation.
+  4. Validation hygiene for partial Nyquist phases is resolved or explicitly routed to accepted follow-up work.
+  5. Advisory aggregate lifecycle command ID hardening is implemented or recorded as accepted debt with rationale.
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -174,3 +214,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 6. Outbox and Process Manager Workflows | 5/5 | Complete | 2026-04-18 |
 | 7. Adapters, Observability, Stress, and Template Guidance | 7/7 | Complete | 2026-04-19 |
 | 8. Runtime Duplicate Command Replay | 3/3 | Complete | 2026-04-19 |
+| 9. Tenant-Scoped Runtime Aggregate Cache | 0/TBD | Pending | - |
+| 10. Duplicate-Safe Process Manager Follow-Up Keys | 0/TBD | Pending | - |
+| 11. v1 Archive Hygiene and HTTP E2E Debt | 0/TBD | Pending | - |
