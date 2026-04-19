@@ -2,8 +2,8 @@
 phase: 09
 slug: tenant-scoped-runtime-aggregate-cache
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-20
 ---
 
@@ -38,19 +38,19 @@ created: 2026-04-20
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 09-01-01 | 01 | 1 | RUNTIME-03 | T-09-01 | Aggregate cache keys include tenant identity and stream identity | unit | `cargo test -p es-runtime shard_cache -- --nocapture` | Yes | pending |
-| 09-01-02 | 01 | 1 | STORE-04 | T-09-02 | Same-stream different-tenant cache miss calls tenant-scoped rehydration | runtime regression | `cargo test -p es-runtime same_stream_different_tenant_rehydrates_independently -- --nocapture` | No - Wave 0 adds | pending |
-| 09-01-03 | 01 | 1 | DOM-05 | T-09-01 | Tenant B command is not decided against tenant A cached state | runtime regression | `cargo test -p es-runtime same_stream_different_tenant_preserves_domain_state -- --nocapture` | No - Wave 0 adds | pending |
-| 09-01-04 | 01 | 1 | RUNTIME-05 | T-09-03 | Duplicate replay still happens before aggregate cache lookup or rehydration | regression | `cargo test -p es-runtime runtime_duplicate -- --nocapture` | Yes | pending |
-| 09-01-05 | 01 | 1 | RUNTIME-06 | T-09-01 | Optimistic conflict does not mutate another tenant's cached state | regression | `cargo test -p es-runtime conflict_does_not_mutate_cache -- --nocapture` | Yes | pending |
+| 09-01-01 | 01 | 1 | RUNTIME-03 | T-09-01 | Aggregate cache keys include tenant identity and stream identity | unit | `cargo test -p es-runtime shard_cache -- --nocapture` | Yes | passed |
+| 09-01-02 | 01 | 1 | STORE-04 | T-09-02 | Same-stream different-tenant cache miss calls tenant-scoped rehydration | runtime regression | `cargo test -p es-runtime same_stream_different_tenant_rehydrates_independently -- --nocapture` | Yes | passed |
+| 09-01-03 | 01 | 1 | DOM-05 | T-09-01 | Tenant B command is not decided against tenant A cached state | runtime regression | `cargo test -p es-runtime same_stream_different_tenant_preserves_domain_state -- --nocapture` | Yes | passed |
+| 09-01-04 | 01 | 1 | RUNTIME-05 | T-09-03 | Duplicate replay still happens before aggregate cache lookup or rehydration | regression | `cargo test -p es-runtime runtime_duplicate -- --nocapture` | Yes | passed |
+| 09-01-05 | 01 | 1 | RUNTIME-06 | T-09-01 | Optimistic conflict does not mutate another tenant's cached state | regression | `cargo test -p es-runtime conflict_does_not_mutate_cache -- --nocapture` | Yes | passed |
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `crates/es-runtime/tests/shard_disruptor.rs` - update cache unit tests to use tenant plus stream keys.
-- [ ] `crates/es-runtime/tests/runtime_flow.rs` - add same-stream/different-tenant regression tests.
-- [ ] `crates/es-runtime/tests/runtime_flow.rs` - extend `FakeStore` support to record `load_rehydration` calls by `(TenantId, StreamId)` and return tenant-specific batches.
+- [x] `crates/es-runtime/tests/shard_disruptor.rs` - update cache unit tests to use tenant plus stream keys.
+- [x] `crates/es-runtime/tests/runtime_flow.rs` - add same-stream/different-tenant regression tests.
+- [x] `crates/es-runtime/tests/runtime_flow.rs` - extend `FakeStore` support to record `load_rehydration` calls by `(TenantId, StreamId)` and return tenant-specific batches.
 
 ---
 
@@ -72,11 +72,11 @@ All phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all missing references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter after validation evidence is complete
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all missing references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter after validation evidence is complete
 
-**Approval:** pending
+**Approval:** passed
