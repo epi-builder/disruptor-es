@@ -1,9 +1,9 @@
 ---
 phase: 08
 slug: runtime-duplicate-command-replay
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: passed
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-19
 ---
 
@@ -34,22 +34,20 @@ created: 2026-04-19
 
 ---
 
-## Per-Task Verification Map
+## Requirement-Level Verification Sampling Map
 
-| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 08-01-01 | 01 | 1 | RUNTIME-03, RUNTIME-05 | T-08-01 | Duplicate commands do not execute fresh domain decisions before idempotency replay | unit | `cargo test -p es-runtime duplicate` | W0 | pending |
-| 08-02-01 | 02 | 1 | STORE-03 | T-08-02 | Durable dedupe replay remains authoritative after runtime cache miss/restart | integration | `cargo test -p es-store-postgres dedupe` | W0 | pending |
-| 08-03-01 | 03 | 2 | API-01, API-03, INT-04 | T-08-03 | HTTP and process-manager retries return original committed outcomes | integration | `cargo test --workspace duplicate` | W0 | pending |
-
-*Status: pending · green · red · flaky*
+| Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
+|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
+| 08-01 Durable replay substrate | 1 | STORE-03, RUNTIME-05 | T-08-01, T-08-02 | Durable replay storage stores typed command replies and returns original append data for repeated tenant/idempotency keys. | integration | `cargo test -p es-store-postgres command_reply_payload -- --nocapture`<br>`cargo test -p es-store-postgres command_replay -- --nocapture`<br>`cargo test -p es-store-postgres duplicate_idempotency_key_returns_original_result -- --nocapture` | yes | green |
+| 08-02 Runtime replay ordering | 2 | STORE-03, RUNTIME-03, RUNTIME-05 | T-08-01, T-08-02, T-08-03 | Runtime codec, shard-local cache replay, durable lookup replay, and duplicate append branch checks return original committed replies before fresh domain decisions. | unit/integration | `cargo test -p es-runtime command_replay_contract -- --nocapture`<br>`cargo test -p app single_service_stress_smoke -- --nocapture`<br>`cargo test -p es-runtime runtime_duplicate -- --nocapture`<br>`cargo test -p es-runtime duplicate_replay_returns_original_reply_after_state_mutation -- --nocapture` | yes | green |
+| 08-03 External replay consumers | 3 | STORE-03, RUNTIME-05, INT-04, API-01, API-03 | T-08-01, T-08-02, T-08-03, T-08-04 | HTTP duplicate retry and process-manager duplicate follow-up retry preserve original committed outcomes without adapter or process-manager-local dedupe state. | adapter/app integration | `cargo test -p adapter-http duplicate_place_order_retry_returns_original_response -- --nocapture`<br>`cargo test -p app process_manager_replayed_followups_return_original_outcomes -- --nocapture` | yes | green |
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] Existing Rust test infrastructure covers runtime, storage, adapter, and app crates.
-- [ ] Phase plans must add or update tests for runtime warm replay, durable fallback replay, HTTP duplicate retry, and process-manager follow-up retry.
+- [x] Existing Rust test infrastructure covers runtime, storage, adapter, and app crates.
+- [x] Phase plans must add or update tests for runtime warm replay, durable fallback replay, HTTP duplicate retry, and process-manager follow-up retry.
 
 ---
 
@@ -63,11 +61,11 @@ created: 2026-04-19
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** automated Phase 08 requirement-level sampling coverage present
