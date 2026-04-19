@@ -2,6 +2,8 @@
 
 mod common;
 
+use std::sync::{Arc, Mutex as StdMutex};
+
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
 use es_outbox::{
     DispatchBatchLimit, DispatchOutcome, InMemoryPublisher, MessageKey, NewOutboxMessage,
@@ -13,6 +15,9 @@ use es_store_postgres::{
     PostgresProjectionStore, SaveSnapshotRequest, StoreError,
 };
 use example_commerce::{OrderEvent, OrderId, OrderLine, ProductId, Quantity, Sku, UserId};
+use metrics::{
+    Counter, Gauge, GaugeFn, Histogram, Key, KeyName, Metadata, Recorder, SharedString, Unit,
+};
 use serde_json::json;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
@@ -155,6 +160,120 @@ fn order_placed_event(seed: u128, order: &str, user: &str) -> NewEvent {
     )
 }
 
+async fn append_order_placed_sequence(
+    store: &PostgresEventStore,
+    tenant: TenantId,
+    order_prefix: &str,
+    user: &str,
+    count: usize,
+    seed: u128,
+) -> anyhow::Result<()> {
+    for index in 0..count {
+        let event_seed = seed + u128::try_from(index).expect("usize fits u128");
+        let order = format!("{order_prefix}-{index}");
+        store
+            .append(append_request(
+                tenant.clone(),
+                stream_id(&format!("order-{order}")),
+                ExpectedRevision::NoStream,
+                &format!("{order}-place"),
+                event_seed + 10_000,
+                vec![order_placed_event(event_seed, &order, user)],
+            ))
+            .await?;
+    }
+
+    Ok(())
+}
+
+async fn tenant_latest_position(pool: &sqlx::PgPool, tenant: &TenantId) -> anyhow::Result<i64> {
+    Ok(sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(max(global_position), 0) FROM events WHERE tenant_id = $1",
+    )
+    .bind(tenant.as_str())
+    .fetch_one(pool)
+    .await?)
+}
+
+#[derive(Debug)]
+struct ProjectionLagGauge {
+    value: StdMutex<Option<f64>>,
+}
+
+impl ProjectionLagGauge {
+    fn new() -> Self {
+        Self {
+            value: StdMutex::new(None),
+        }
+    }
+}
+
+impl GaugeFn for ProjectionLagGauge {
+    fn increment(&self, value: f64) {
+        let mut guard = self.value.lock().expect("projection lag mutex poisoned");
+        let current = guard.unwrap_or(0.0);
+        *guard = Some(current + value);
+    }
+
+    fn decrement(&self, value: f64) {
+        let mut guard = self.value.lock().expect("projection lag mutex poisoned");
+        let current = guard.unwrap_or(0.0);
+        *guard = Some(current - value);
+    }
+
+    fn set(&self, value: f64) {
+        *self.value.lock().expect("projection lag mutex poisoned") = Some(value);
+    }
+}
+
+#[derive(Debug)]
+struct ProjectionLagRecorder {
+    gauge: Arc<ProjectionLagGauge>,
+}
+
+impl ProjectionLagRecorder {
+    fn new(gauge: Arc<ProjectionLagGauge>) -> Self {
+        Self { gauge }
+    }
+}
+
+impl Recorder for ProjectionLagRecorder {
+    fn describe_counter(&self, _key: KeyName, _unit: Option<Unit>, _description: SharedString) {}
+
+    fn describe_gauge(&self, _key: KeyName, _unit: Option<Unit>, _description: SharedString) {}
+
+    fn describe_histogram(&self, _key: KeyName, _unit: Option<Unit>, _description: SharedString) {}
+
+    fn register_counter(&self, _key: &Key, _metadata: &Metadata<'_>) -> Counter {
+        Counter::noop()
+    }
+
+    fn register_gauge(&self, key: &Key, _metadata: &Metadata<'_>) -> Gauge {
+        let is_projection_lag = key.name() == "es_projection_lag";
+        let is_phase7_projector = key.labels().any(|label| {
+            label.key() == "projector" && label.value() == "phase7-commerce-read-models"
+        });
+
+        if is_projection_lag && is_phase7_projector {
+            Gauge::from_arc(self.gauge.clone())
+        } else {
+            Gauge::noop()
+        }
+    }
+
+    fn register_histogram(&self, _key: &Key, _metadata: &Metadata<'_>) -> Histogram {
+        Histogram::noop()
+    }
+}
+
+fn observed_projection_lag_value(gauge: &ProjectionLagGauge) -> f64 {
+    gauge
+        .value
+        .lock()
+        .expect("projection lag mutex poisoned")
+        .expect("projection lag gauge was set")
+}
+
 #[tokio::test]
 async fn phase7_append_conflict_and_global_positions() -> anyhow::Result<()> {
     let _guard = POSTGRES_TEST_LOCK.lock().await;
@@ -213,6 +332,84 @@ async fn phase7_append_conflict_and_global_positions() -> anyhow::Result<()> {
             ..
         }
     ));
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn phase7_projection_lag_uses_tenant_durable_backlog_not_batch_size() -> anyhow::Result<()> {
+    let _guard = POSTGRES_TEST_LOCK.lock().await;
+    let harness = common::start_postgres().await?;
+    let events = PostgresEventStore::new(harness.pool.clone());
+    let projections = PostgresProjectionStore::new(harness.pool.clone());
+    let tenant_a = tenant_id("tenant-lag-a");
+    let tenant_b = tenant_id("tenant-lag-b");
+    let projector = projector_name();
+
+    append_order_placed_sequence(
+        &events,
+        tenant_a.clone(),
+        "tenant-lag-a-order",
+        "lag-user-a",
+        250,
+        10_000,
+    )
+    .await?;
+    append_order_placed_sequence(
+        &events,
+        tenant_b.clone(),
+        "tenant-lag-b-order",
+        "lag-user-b",
+        3,
+        20_000,
+    )
+    .await?;
+
+    let gauge = Arc::new(ProjectionLagGauge::new());
+    let recorder = ProjectionLagRecorder::new(gauge.clone());
+    let _recorder_guard = metrics::set_default_local_recorder(&recorder);
+
+    let outcome = projections
+        .catch_up(
+            &tenant_a,
+            &projector,
+            ProjectionBatchLimit::new(25).expect("valid batch limit"),
+        )
+        .await?;
+    assert!(matches!(
+        outcome,
+        CatchUpOutcome::Applied {
+            event_count: 25,
+            ..
+        }
+    ));
+
+    let offset = projections
+        .projector_offset(&tenant_a, &projector)
+        .await?
+        .expect("projector offset");
+    let tenant_latest = tenant_latest_position(&harness.pool, &tenant_a).await?;
+    let expected_lag = (tenant_latest - offset.last_global_position).max(0) as f64;
+
+    assert!(expected_lag > 25.0);
+    assert_eq!(observed_projection_lag_value(&gauge), expected_lag);
+
+    loop {
+        match projections
+            .catch_up(&tenant_a, &projector, projection_limit())
+            .await?
+        {
+            CatchUpOutcome::Applied { .. } => {}
+            CatchUpOutcome::Idle => break,
+        }
+    }
+
+    let final_offset = projections
+        .projector_offset(&tenant_a, &projector)
+        .await?
+        .expect("projector offset");
+    assert_eq!(tenant_latest, final_offset.last_global_position);
+    assert_eq!(observed_projection_lag_value(&gauge), 0.0);
 
     Ok(())
 }
