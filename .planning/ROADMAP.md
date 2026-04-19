@@ -153,9 +153,11 @@ Plans:
   2. Duplicate commands return the original committed success/error reply shape without appending events or surfacing fresh domain validation errors.
   3. Durable store dedupe remains the source of truth when the runtime cache misses, after restart, or across process-manager replay scenarios.
   4. HTTP duplicate retries and deterministic process-manager follow-up retries are covered by tests that prove original committed results are replayed.
-**Plans**: 0 plans
+**Plans**: 3 plans
 Plans:
-- [ ] Pending planning
+- [ ] 08-01-PLAN.md — Create durable typed command replay payload persistence and lookup in PostgreSQL command dedupe.
+- [ ] 08-02-PLAN.md — Add runtime pre-decision duplicate replay from shard-local and durable idempotency records.
+- [ ] 08-03-PLAN.md — Prove HTTP duplicate retry and process-manager follow-up retry replay original committed outcomes.
 
 ## Progress
 
