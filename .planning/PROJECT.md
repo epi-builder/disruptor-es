@@ -20,14 +20,11 @@ Provide a reusable, production-shaped Rust service template where committed even
 - [x] Phase 04 validated the commerce fixture domain with typed user, product, and order aggregates, replayable lifecycle/inventory/order events, explicit cross-entity IDs, typed invalid-state errors, and generated replay/invariant tests.
 - [x] Phase 05 validated CQRS projection contracts, tenant-scoped PostgreSQL projector offsets, order summary and product inventory read models, restart-safe catch-up, malformed payload rollback, and bounded read-your-own-write query waits.
 - [x] Phase 06 validated durable outbox integration rows, append-transaction outbox creation, idempotent dispatcher publication/retry semantics, and an app-composed commerce process manager that issues follow-up commands through runtime gateways.
+- [x] Phase 07 validated thin HTTP command adapters, bounded gateway responses, structured observability, PostgreSQL integration coverage, layer-separated benchmarks, measured single-service stress signals, and template guidance for hot-path boundaries.
 
 ### Active
 
 - [ ] Implement a generic command-processing kernel that supports typed aggregates, commands, events, replies, and domain errors.
-- [ ] Expose a thin adapter boundary suitable for HTTP/gRPC/WebSocket frontends without putting shared mutable business state behind `Arc<Mutex<_>>`.
-- [ ] Include stress-test and observability hooks that measure ring wait, routing latency, decision time, append latency, projection lag, outbox lag, and p95/p99 latency.
-- [ ] Include a single-service integrated stress test that runs the actual production-shaped process composition: adapter, bounded ingress, partition router, shard runtime, disruptor command path, event store append, projection, outbox dispatcher, and query path.
-- [ ] Document what must stay inside the hot path and what must be moved to projector, outbox, or saga/process-manager paths.
 
 ### Out of Scope
 
@@ -87,6 +84,7 @@ This gives enough relationships to test uniqueness, entity references, projectio
 | Use typed domain kernels instead of JSON/reflection in the hot path | Preserves Rust type safety and avoids erasing the performance benefits of preallocated ring entries. | - Pending |
 | Split generic infrastructure from domain rules | Enables reuse across future services while keeping domain logic strongly typed. | - Pending |
 | Model adapters as thin ingress layers with bounded queues and reply channels | Prevents HTTP/gRPC/WebSocket concerns from forcing mutex-heavy business state. | Validated in Phase 03 with bounded `CommandGateway` ingress and `CommandEngine` wiring. |
+| Treat stress report fields as operational claims | A template user will rely on append latency, queue depth, projection lag, and outbox lag to diagnose bottlenecks, so fields must be measured from the component they name. | Validated in Phase 07 with durable projection-lag computation, measured append latency, read-only shard-depth sampling, and backlog regression tests. |
 
 ## Evolution
 
@@ -106,4 +104,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-18 after Phase 06 completion*
+*Last updated: 2026-04-19 after Phase 07 completion*
