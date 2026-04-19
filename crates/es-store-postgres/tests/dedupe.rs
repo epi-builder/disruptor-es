@@ -4,7 +4,8 @@ mod common;
 
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, TenantId};
 use es_store_postgres::{
-    AppendOutcome, AppendRequest, CommittedAppend, NewEvent, PostgresEventStore,
+    AppendOutcome, AppendRequest, CommandReplyPayload, CommittedAppend, NewEvent,
+    PostgresEventStore,
 };
 use serde_json::json;
 use time::OffsetDateTime;
@@ -40,6 +41,15 @@ fn new_event(seed: u128, order_id: &str) -> NewEvent {
     .expect("valid event")
 }
 
+fn command_reply_payload(label: &str) -> CommandReplyPayload {
+    CommandReplyPayload::new(
+        "counter_added",
+        1,
+        json!({ "reply": label }),
+    )
+    .expect("valid command reply payload")
+}
+
 fn append_request(
     tenant: TenantId,
     stream: StreamId,
@@ -73,6 +83,101 @@ async fn event_count(pool: &sqlx::PgPool, tenant_id: &str, stream_id: &str) -> a
     .await?;
 
     Ok(count)
+}
+
+#[tokio::test]
+async fn command_replay_record_round_trips_from_response_payload() -> anyhow::Result<()> {
+    let harness = common::start_postgres().await?;
+    let store = PostgresEventStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let stream = stream_id("order-1");
+    let request = append_request(
+        tenant.clone(),
+        stream.clone(),
+        "idempotency-1",
+        10,
+        100,
+    )
+    .with_command_reply_payload(command_reply_payload("first"));
+
+    let first = store.append(request).await?;
+    let duplicate = store
+        .append(append_request(tenant.clone(), stream, "idempotency-1", 20, 101))
+        .await?;
+    let first_committed = committed(first);
+    let duplicate_committed = committed(duplicate);
+    let replay = store
+        .lookup_command_replay(&tenant, "idempotency-1")
+        .await?
+        .expect("typed replay record");
+
+    assert_eq!(first_committed, duplicate_committed);
+    assert_eq!(first_committed, replay.append);
+    assert_eq!(json!({"reply":"first"}), replay.reply.payload);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn lookup_command_replay_returns_original_reply_after_store_recreation() -> anyhow::Result<()>
+{
+    let harness = common::start_postgres().await?;
+    let store = PostgresEventStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    let stream = stream_id("order-1");
+    let first = store
+        .append(
+            append_request(
+                tenant.clone(),
+                stream,
+                "idempotency-1",
+                10,
+                100,
+            )
+            .with_command_reply_payload(command_reply_payload("first")),
+        )
+        .await?;
+    let first_committed = committed(first);
+    let store_after_restart = PostgresEventStore::new(harness.pool.clone());
+
+    let replay = store_after_restart
+        .lookup_command_replay(&tenant, "idempotency-1")
+        .await?
+        .expect("typed replay record after restart");
+
+    assert_eq!(json!({"reply":"first"}), replay.reply.payload);
+    assert_eq!("counter_added", replay.reply.reply_type);
+    assert_eq!(1, replay.reply.schema_version);
+    assert_eq!(first_committed, replay.append);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn lookup_command_replay_is_tenant_scoped() -> anyhow::Result<()> {
+    let harness = common::start_postgres().await?;
+    let store = PostgresEventStore::new(harness.pool.clone());
+    let tenant = tenant_id("tenant-a");
+    store
+        .append(
+            append_request(
+                tenant.clone(),
+                stream_id("order-1"),
+                "idempotency-1",
+                10,
+                100,
+            )
+            .with_command_reply_payload(command_reply_payload("first")),
+        )
+        .await?;
+
+    let replay = store
+        .lookup_command_replay(&tenant_id("tenant-b"), "idempotency-1")
+        .await?;
+
+    assert_eq!(None, replay);
+
+    Ok(())
 }
 
 #[tokio::test]
