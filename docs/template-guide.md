@@ -126,6 +126,29 @@ Phase 12 benchmark output may still include build/startup effects and Criterion 
 
 External-process stress and benchmark output must carry the same required report fields used in other archive-facing stress reports: `throughput_per_second`, `p95_micros`, `projection_lag`, `outbox_lag`, `reject_rate`, `cpu_utilization_percent`, and related percentile/depth fields described in [docs/stress-results.md](/Users/epikem/dev/projects/disruptor-es/docs/stress-results.md:1). Phase 13 steady-state runs also record `profile_name`, `warmup_seconds`, `measurement_seconds`, `run_duration_seconds`, `concurrency`, `deadline_policy`, `drain_timeout_seconds`, and host metadata.
 
+## Run Layer Comparisons
+
+Use the Phase 13.1 comparison script when you need one repeatable pass across ring-only, adapter-only, storage-only, in-process runtime, and live HTTP lanes:
+
+```bash
+PHASE13_1_COMPARE_MODE=smoke bash scripts/compare-stress-layers.sh
+PHASE13_1_COMPARE_MODE=baseline bash scripts/compare-stress-layers.sh
+```
+
+The script writes fixed lane outputs under `target/phase-13.1/layer-comparison`. Keep those filenames intact so later summaries can compare identical evidence lanes instead of ad hoc command output.
+
+For direct live HTTP comparison runs, use the explicit workload-shape commands instead of relying on profile names alone:
+
+```bash
+cargo run -q -p app -- http-stress --profile baseline --workload-shape unique --warmup-seconds 5 --measure-seconds 30 --concurrency 8 --shard-count 8 --ingress-capacity 256 --ring-size 256
+
+cargo run -q -p app -- http-stress --profile baseline --workload-shape hot-set --hot-set-size 8 --warmup-seconds 5 --measure-seconds 30 --concurrency 8 --shard-count 8 --ingress-capacity 256 --ring-size 256
+
+cargo run -q -p app -- http-stress --profile hot-key --workload-shape single-hot-key --warmup-seconds 3 --measure-seconds 20 --concurrency 16 --shard-count 8 --ingress-capacity 128 --ring-size 256
+```
+
+Explain the post-Phase-13.1 throughput ceiling in terms of the slowest measured layer. For example, call out durable PostgreSQL append, HTTP overhead, bounded admission, or command-path side effects when they dominate. Do not collapse every shortfall into "the ring is slow" when the slower evidence lane is outside the ring.
+
 ## WebSocket Gateway
 
 WebSocket and gRPC gateways should be thin ingress clients of CommandGateway plus read-model query APIs; they must not share hot aggregate state.

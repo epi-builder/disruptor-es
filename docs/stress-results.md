@@ -21,6 +21,54 @@ Layer benchmarks isolate one cost center at a time:
 
 These benchmarks are diagnostic. Use them to identify which layer changed after a code or schema edit. They are not a replacement for single-service integrated stress.
 
+## Layer Comparison
+
+Phase 13.1 adds one repeatable comparison entrypoint:
+
+```bash
+PHASE13_1_COMPARE_MODE=smoke bash scripts/compare-stress-layers.sh
+PHASE13_1_COMPARE_MODE=baseline bash scripts/compare-stress-layers.sh
+```
+
+The script writes these fixed outputs under `target/phase-13.1/layer-comparison`:
+
+- `ring-only.txt`
+- `adapter-only.txt`
+- `storage-only.txt`
+- `in-process-runtime.json`
+- `live-http-unique.json`
+- `live-http-single-hot-key.json`
+
+Interpret the outputs by layer:
+
+- `ring-only.txt` measures local disruptor handoff cost only and must not be read as durable-service throughput.
+- `adapter-only.txt` measures DTO decode, `CommandEnvelope` construction, and bounded ingress admission without durable append.
+- `storage-only.txt` measures PostgreSQL event-store operations without HTTP adapter overhead.
+- `in-process-runtime.json`, `live-http-unique.json`, and `live-http-single-hot-key.json` include durable PostgreSQL append, HTTP or runtime overhead, and bounded admission behavior on the command path.
+
+Projector and outbox lag stay observational in these command-path runs. If an operator wants an active projection or outbox bottleneck lane, that extra projector/outbox pressure must be enabled separately instead of inferred from the default comparison outputs.
+
+For live HTTP comparison review, require these report keys:
+
+- `throughput_per_second`
+- `p50_micros`
+- `p95_micros`
+- `p99_micros`
+- `max_micros`
+- `commands_rejected`
+- `commands_failed`
+- `ingress_depth_max`
+- `shard_depth_max`
+- `append_latency_p95_micros`
+- `ring_wait_p95_micros`
+- `metrics_scrape_successes`
+- `metrics_scrape_failures`
+- `metrics_sample_count`
+- `workload_shape`
+- `hot_set_size`
+
+Explain the throughput ceiling in terms of the slowest measured layer: durable PostgreSQL append, HTTP overhead, bounded admission, or command-path side effects. Do not attribute every shortfall to the disruptor ring when the slower lane is elsewhere.
+
 ## In-Process Integrated Stress
 
 In-process integrated stress includes adapter DTO work, bounded ingress, runtime execution, append behavior, projection lag, and outbox lag in one process.
@@ -52,6 +100,10 @@ Use:
 The runner starts `app serve` once, then performs readiness, warmup, and measurement on that same process. PostgreSQL container startup, migrations, readiness probing, binary compilation, and warmup traffic are outside the measured window. Only the measured window contributes to throughput, latency, reject, lag, and resource counters.
 
 Measured-window deadline semantics are fixed for comparability: the runner stops submitting at the measured deadline, drains in-flight work for up to 5 seconds, and reports that policy through `deadline_policy` and `drain_timeout_seconds`.
+
+### Phase 13.1 Result
+
+See [13.1-03-SUMMARY.md](/Users/epikem/dev/projects/disruptor-es/.planning/phases/13.1-disruptor-throughput-bottleneck-investigation-and-runtime-st/13.1-03-SUMMARY.md) for the archived layer comparison, shard-count evidence, and the current dominant throughput ceiling classification.
 
 Required steady-state output fields:
 
