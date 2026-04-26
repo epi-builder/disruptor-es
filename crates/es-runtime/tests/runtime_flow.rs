@@ -706,6 +706,108 @@ async fn reply_stays_blocked_until_append_gate_opens() {
 }
 
 #[tokio::test]
+async fn accepted_but_undispatched_commands_receive_unavailable_on_shutdown() {
+    let (release_first, wait_first) = oneshot::channel();
+    let (release_second, wait_second) = oneshot::channel();
+    let store = FakeStore::with_delayed_commit(wait_first);
+    store.push_append_gate(wait_second);
+    store
+        .inner
+        .append_outcomes
+        .lock()
+        .expect("append outcomes")
+        .push_back(Ok(AppendOutcome::Committed(committed_append(2))));
+
+    let codec = CounterCodec::default();
+    let config = CommandEngineConfig::new(1, 8, 8).expect("config");
+    let engine = CommandEngine::<CounterAggregate, _, _>::new(config, store.clone(), codec)
+        .expect("engine");
+    let gateway = engine.gateway();
+    let shutdown = Arc::new(Notify::new());
+
+    let (first_envelope, first_reply) = envelope_for("tenant-a", "counter-1", "idem-1", 1);
+    gateway.try_submit(first_envelope).expect("submit first");
+
+    let mut engine_task = tokio::spawn({
+        let shutdown = shutdown.clone();
+        async move { engine.run(shutdown).await }
+    });
+
+    store.wait_for_append_start().await;
+
+    let (second_envelope, second_reply) = envelope_for("tenant-a", "counter-1", "idem-2", 2);
+    gateway.try_submit(second_envelope).expect("submit second");
+    shutdown.notify_waiters();
+
+    let second_result = tokio::time::timeout(Duration::from_millis(200), second_reply)
+        .await
+        .expect("second reply should resolve during shutdown")
+        .expect("second reply channel");
+    assert!(
+        matches!(second_result, Err(RuntimeError::Unavailable)),
+        "accepted but undispatched command should fail with unavailable during shutdown"
+    );
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut engine_task)
+            .await
+            .is_err(),
+        "engine should wait for dispatched work before returning"
+    );
+
+    release_first.send(()).expect("release first");
+    let first_outcome = first_reply.await.expect("first reply").expect("first success");
+    assert_eq!(1, first_outcome.reply);
+
+    let _ = release_second.send(());
+    let run_result = engine_task.await.expect("engine task joined");
+    assert!(run_result.is_ok(), "engine run should finish once worker drains");
+}
+
+#[tokio::test]
+async fn dispatched_commands_finish_before_engine_shutdown_returns() {
+    let (release_append, wait_for_release) = oneshot::channel();
+    let store = FakeStore::with_delayed_commit(wait_for_release);
+    let codec = CounterCodec::default();
+    let config = CommandEngineConfig::new(1, 8, 8).expect("config");
+    let engine = CommandEngine::<CounterAggregate, _, _>::new(config, store.clone(), codec)
+        .expect("engine");
+    let gateway = engine.gateway();
+    let shutdown = Arc::new(Notify::new());
+
+    let (envelope, mut reply) = envelope_for("tenant-a", "counter-1", "idem-1", 4);
+    gateway.try_submit(envelope).expect("submit");
+
+    let mut engine_task = tokio::spawn({
+        let shutdown = shutdown.clone();
+        async move { engine.run(shutdown).await }
+    });
+
+    store.wait_for_append_start().await;
+    shutdown.notify_waiters();
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut reply)
+            .await
+            .is_err(),
+        "dispatched reply should remain commit-gated until append releases"
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut engine_task)
+            .await
+            .is_err(),
+        "engine should stay pending while dispatched work is still committing"
+    );
+
+    release_append.send(()).expect("release append");
+
+    let outcome = reply.await.expect("reply").expect("success");
+    assert_eq!(4, outcome.reply);
+    let run_result = engine_task.await.expect("engine task joined");
+    assert!(run_result.is_ok(), "engine should return after dispatched work finishes");
+}
+
+#[tokio::test]
 async fn no_stream_cache_miss_skips_rehydration_before_append() {
     let store = FakeStore::committed();
     let codec = CounterCodec::default();
