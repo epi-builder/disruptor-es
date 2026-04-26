@@ -137,6 +137,13 @@ PHASE13_1_COMPARE_MODE=baseline bash scripts/compare-stress-layers.sh
 
 The script writes fixed lane outputs under `target/phase-13.1/layer-comparison`. Keep those filenames intact so later summaries can compare identical evidence lanes instead of ad hoc command output.
 
+Baseline mode regenerates four live HTTP artifacts under the corrected Plan 13.1-05 report semantics:
+
+- `live-http-unique.json`
+- `live-http-shard-1.json`
+- `live-http-shard-8.json`
+- `live-http-single-hot-key-diagnostic.json`
+
 For direct live HTTP comparison runs, use the explicit workload-shape commands instead of relying on profile names alone:
 
 ```bash
@@ -146,6 +153,13 @@ cargo run -q -p app -- http-stress --profile baseline --workload-shape hot-set -
 
 cargo run -q -p app -- http-stress --profile hot-key --workload-shape single-hot-key --warmup-seconds 3 --measure-seconds 20 --concurrency 16 --shard-count 8 --ingress-capacity 128 --ring-size 256
 ```
+
+When interpreting archived live HTTP evidence:
+
+- Treat `ingress_depth_max` and the other scrape-derived fields as observed-only metrics.
+- Treat `ingress_depth_estimated_max` as a fallback hint, not a measured queue depth.
+- Require `metrics_scrape_successes > 0` in every cited baseline live HTTP file before claiming any ceiling narrower than `inconclusive`.
+- Exclude `live-http-single-hot-key-diagnostic.json` from success-throughput comparisons; it is a repeated-stream diagnostic lane only.
 
 Explain the post-Phase-13.1 throughput ceiling in terms of the slowest measured layer. For example, call out durable PostgreSQL append, HTTP overhead, bounded admission, or command-path side effects when they dominate. Do not collapse every shortfall into "the ring is slow" when the slower evidence lane is outside the ring.
 

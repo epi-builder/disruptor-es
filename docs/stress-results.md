@@ -16,7 +16,7 @@ Layer benchmarks isolate one cost center at a time:
 
 - `domain_only` measures synchronous commerce aggregate `decide`/`apply` behavior in memory.
 - `adapter_only` measures HTTP-shaped DTO decode, `CommandEnvelope` creation, and bounded `CommandGateway` admission.
-- `storage_only` measures PostgreSQL event-store operations against an explicit `DATABASE_URL`.
+- `storage_only` measures PostgreSQL event-store operations against a real database path, using `DATABASE_URL` when provided or an ephemeral PostgreSQL 18 Testcontainers fallback otherwise.
 - `projector_outbox` measures PostgreSQL projector catch-up plus durable outbox claim and publish behavior with a PostgreSQL 18 Testcontainers harness.
 
 These benchmarks are diagnostic. Use them to identify which layer changed after a code or schema edit. They are not a replacement for single-service integrated stress.
@@ -37,14 +37,17 @@ The script writes these fixed outputs under `target/phase-13.1/layer-comparison`
 - `storage-only.txt`
 - `in-process-runtime.json`
 - `live-http-unique.json`
-- `live-http-single-hot-key.json`
+- `live-http-shard-1.json`
+- `live-http-shard-8.json`
+- `live-http-single-hot-key-diagnostic.json`
 
 Interpret the outputs by layer:
 
 - `ring-only.txt` measures local disruptor handoff cost only and must not be read as durable-service throughput.
 - `adapter-only.txt` measures DTO decode, `CommandEnvelope` construction, and bounded ingress admission without durable append.
 - `storage-only.txt` measures PostgreSQL event-store operations without HTTP adapter overhead.
-- `in-process-runtime.json`, `live-http-unique.json`, and `live-http-single-hot-key.json` include durable PostgreSQL append, HTTP or runtime overhead, and bounded admission behavior on the command path.
+- `in-process-runtime.json`, `live-http-unique.json`, `live-http-shard-1.json`, and `live-http-shard-8.json` include durable PostgreSQL append, HTTP or runtime overhead, and bounded admission behavior on the command path.
+- `live-http-single-hot-key-diagnostic.json` is a repeated-stream diagnostic lane. It can surface ordering or hot-key contention behavior, but it is excluded from success-throughput ceiling claims.
 
 Projector and outbox lag stay observational in these command-path runs. If an operator wants an active projection or outbox bottleneck lane, that extra projector/outbox pressure must be enabled separately instead of inferred from the default comparison outputs.
 
@@ -66,6 +69,14 @@ For live HTTP comparison review, require these report keys:
 - `metrics_sample_count`
 - `workload_shape`
 - `hot_set_size`
+- `workload_purpose`
+
+Interpret live HTTP queue-depth and ceiling evidence with these rules:
+
+- `ingress_depth_max` and the other scrape-derived fields are observed-only values. They describe what the metrics endpoint actually reported, not what concurrency or submission count might imply.
+- `ingress_depth_estimated_max` is a fallback hint for missing scrape data, not a measured queue-depth result.
+- Any ceiling classification narrower than `inconclusive` requires `metrics_scrape_successes > 0` in every cited baseline live HTTP artifact. If a cited baseline file has zero successful scrapes, the ceiling stays `inconclusive`.
+- `live-http-single-hot-key-diagnostic.json` is diagnostic-only and must stay out of baseline success-throughput comparisons.
 
 Explain the throughput ceiling in terms of the slowest measured layer: durable PostgreSQL append, HTTP overhead, bounded admission, or command-path side effects. Do not attribute every shortfall to the disruptor ring when the slower lane is elsewhere.
 
@@ -103,7 +114,7 @@ Measured-window deadline semantics are fixed for comparability: the runner stops
 
 ### Phase 13.1 Result
 
-See [13.1-03-SUMMARY.md](/Users/epikem/dev/projects/disruptor-es/.planning/phases/13.1-disruptor-throughput-bottleneck-investigation-and-runtime-st/13.1-03-SUMMARY.md) for the archived layer comparison, shard-count evidence, and the current dominant throughput ceiling classification. Phase 13.1 classifies the current dominant throughput ceiling as `live HTTP`.
+See [13.1-03-SUMMARY.md](/Users/epikem/dev/projects/disruptor-es/.planning/phases/13.1-disruptor-throughput-bottleneck-investigation-and-runtime-st/13.1-03-SUMMARY.md) for the archived layer comparison and prior shard-count evidence. After Plan 13.1-06, only classify the current dominant throughput ceiling more narrowly than `inconclusive` when the cited baseline live HTTP artifacts each report `metrics_scrape_successes > 0`.
 
 Required steady-state output fields:
 

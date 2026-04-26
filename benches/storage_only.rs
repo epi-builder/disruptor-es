@@ -5,7 +5,11 @@
 
 #![allow(missing_docs)]
 
-use std::{env, hint::black_box};
+use std::{
+    env,
+    hint::black_box,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, TenantId};
@@ -20,10 +24,11 @@ use testcontainers_modules::postgres::Postgres;
 use uuid::Uuid;
 
 static STORAGE_BENCH_HARNESS: OnceCell<StorageBenchHarness> = OnceCell::const_new();
+static BENCH_RUN_NONCE: AtomicU64 = AtomicU64::new(1);
 
 struct StorageBenchHarness {
     _container: Option<ContainerAsync<Postgres>>,
-    pool: PgPool,
+    database_url: String,
 }
 
 fn database_url() -> Option<String> {
@@ -37,17 +42,17 @@ async fn connect_storage_pool() -> anyhow::Result<PgPool> {
     let harness = STORAGE_BENCH_HARNESS
         .get_or_try_init(StorageBenchHarness::connect_or_spawn)
         .await?;
-    Ok(harness.pool.clone())
+    connect_pool(&harness.database_url).await
 }
 
 impl StorageBenchHarness {
     async fn connect_or_spawn() -> anyhow::Result<Self> {
         match database_url() {
             Some(database_url) => {
-                let pool = connect_pool(&database_url).await?;
+                connect_pool(&database_url).await?;
                 Ok(Self {
                     _container: None,
-                    pool,
+                    database_url,
                 })
             }
             None => {
@@ -56,10 +61,10 @@ impl StorageBenchHarness {
                 let database_url = format!(
                     "postgres://postgres:postgres@127.0.0.1:{port}/postgres?sslmode=disable"
                 );
-                let pool = connect_pool(&database_url).await?;
+                connect_pool(&database_url).await?;
                 Ok(Self {
                     _container: Some(container),
-                    pool,
+                    database_url,
                 })
             }
         }
@@ -68,7 +73,7 @@ impl StorageBenchHarness {
 
 async fn connect_pool(database_url: &str) -> anyhow::Result<PgPool> {
     let pool = PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections(10)
         .connect(database_url)
         .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
@@ -81,6 +86,12 @@ fn tenant_id() -> TenantId {
 
 fn stream_id(value: impl Into<String>) -> StreamId {
     StreamId::new(value).expect("stream id")
+}
+
+fn bench_run_seed() -> u128 {
+    let nonce = BENCH_RUN_NONCE.fetch_add(1, Ordering::Relaxed) as u128;
+    let nanos = OffsetDateTime::now_utc().unix_timestamp_nanos() as u128;
+    nanos ^ nonce
 }
 
 fn command_metadata(seed: u128) -> CommandMetadata {
@@ -123,9 +134,6 @@ fn append_request(
 }
 
 fn storage_only_append(criterion: &mut Criterion) {
-    let Some(_) = database_url() else {
-        return;
-    };
     let runtime = Runtime::new().expect("tokio runtime");
     let store = runtime
         .block_on(async { connect_storage_pool().await.map(PostgresEventStore::new) })
@@ -151,25 +159,23 @@ fn storage_only_append(criterion: &mut Criterion) {
 }
 
 fn storage_only_occ_conflict(criterion: &mut Criterion) {
-    let Some(_) = database_url() else {
-        return;
-    };
     let runtime = Runtime::new().expect("tokio runtime");
     let store = runtime
         .block_on(async { connect_storage_pool().await.map(PostgresEventStore::new) })
         .expect("storage bench pool");
-    let stream = stream_id("storage-occ-conflict");
+    let base_seed = bench_run_seed();
+    let stream = stream_id(format!("storage-occ-conflict-{base_seed}"));
     runtime
         .block_on(store.append(append_request(
             stream.clone(),
             ExpectedRevision::NoStream,
-            "storage-occ-seed".to_owned(),
-            2_000,
-            12_000,
+            format!("storage-occ-seed-{base_seed}"),
+            base_seed + 2_000,
+            base_seed + 12_000,
             "StorageOnlySeeded",
         )))
         .expect("seed stream");
-    let mut seed = 2_100_u128;
+    let mut seed = base_seed + 2_100;
 
     criterion.bench_function("storage_only_occ_conflict", |bench| {
         bench.iter(|| {
@@ -190,21 +196,20 @@ fn storage_only_occ_conflict(criterion: &mut Criterion) {
 }
 
 fn storage_only_dedupe(criterion: &mut Criterion) {
-    let Some(_) = database_url() else {
-        return;
-    };
     let runtime = Runtime::new().expect("tokio runtime");
     let store = runtime
         .block_on(async { connect_storage_pool().await.map(PostgresEventStore::new) })
         .expect("storage bench pool");
-    let stream = stream_id("storage-dedupe");
+    let base_seed = bench_run_seed();
+    let stream = stream_id(format!("storage-dedupe-{base_seed}"));
+    let dedupe_key = format!("storage-dedupe-key-{base_seed}");
     runtime
         .block_on(store.append(append_request(
             stream.clone(),
             ExpectedRevision::NoStream,
-            "storage-dedupe-key".to_owned(),
-            3_000,
-            13_000,
+            dedupe_key.clone(),
+            base_seed + 3_000,
+            base_seed + 13_000,
             "StorageOnlyDeduped",
         )))
         .expect("seed dedupe");
@@ -215,9 +220,9 @@ fn storage_only_dedupe(criterion: &mut Criterion) {
                 .block_on(store.append(append_request(
                     stream.clone(),
                     ExpectedRevision::NoStream,
-                    "storage-dedupe-key".to_owned(),
-                    3_100,
-                    13_100,
+                    dedupe_key.clone(),
+                    base_seed + 3_100,
+                    base_seed + 13_100,
                     "StorageOnlyDedupedAgain",
                 )))
                 .expect("duplicate append");
@@ -228,16 +233,15 @@ fn storage_only_dedupe(criterion: &mut Criterion) {
 }
 
 fn storage_only_global_read(criterion: &mut Criterion) {
-    let Some(_) = database_url() else {
-        return;
-    };
     let runtime = Runtime::new().expect("tokio runtime");
     let store = runtime
         .block_on(async { connect_storage_pool().await.map(PostgresEventStore::new) })
         .expect("storage bench pool");
+    let base_seed = bench_run_seed();
     runtime
         .block_on(async {
-            for seed in 4_000_u128..4_020 {
+            for seed in 0_u128..20 {
+                let seed = base_seed + 4_000 + seed;
                 store
                     .append(append_request(
                         stream_id(format!("storage-read-{seed}")),

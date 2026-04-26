@@ -1,0 +1,25 @@
+    Finished `bench` profile [optimized] target(s) in 0.65s
+     Running benches/ring_only.rs (target/release/deps/ring_only-8da2c5e24193545f)
+Gnuplot not found, using plotters backend
+Benchmarking ring_only_publish_poll
+Benchmarking ring_only_publish_poll: Warming up for 3.0000 s
+Benchmarking ring_only_publish_poll: Collecting 10 samples in estimated 5.0000 s (66M iterations)
+Benchmarking ring_only_publish_poll: Analyzing
+ring_only_publish_poll  time:   [75.383 ns 75.781 ns 76.332 ns]
+                        change: [−3.2659% −2.3046% −1.3640%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+Benchmarking ring_only_hot_key_publish_poll
+Benchmarking ring_only_hot_key_publish_poll: Warming up for 3.0000 s
+Benchmarking ring_only_hot_key_publish_poll: Collecting 10 samples in estimated 5.0000 s (63M iterations)
+Benchmarking ring_only_hot_key_publish_poll: Analyzing
+ring_only_hot_key_publish_poll
+                        time:   [77.139 ns 78.051 ns 79.101 ns]
+                        change: [−4.6123% −2.9221% −1.5123%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild
+

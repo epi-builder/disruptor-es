@@ -1,0 +1,39 @@
+    Finished `bench` profile [optimized] target(s) in 0.59s
+     Running benches/storage_only.rs (target/release/deps/storage_only-e9357ea2a0864100)
+Gnuplot not found, using plotters backend
+Benchmarking storage_only_append
+Benchmarking storage_only_append: Warming up for 3.0000 s
+Benchmarking storage_only_append: Collecting 10 samples in estimated 5.1158 s (715 iterations)
+Benchmarking storage_only_append: Analyzing
+storage_only_append     time:   [6.9944 ms 7.0314 ms 7.1007 ms]
+                        change: [−1.6106% +0.4861% +2.6395%] (p = 0.68 > 0.05)
+                        No change in performance detected.
+
+Benchmarking storage_only_occ_conflict
+Benchmarking storage_only_occ_conflict: Warming up for 3.0000 s
+Benchmarking storage_only_occ_conflict: Collecting 10 samples in estimated 5.1537 s (1265 iterations)
+Benchmarking storage_only_occ_conflict: Analyzing
+storage_only_occ_conflict
+                        time:   [3.9657 ms 4.0273 ms 4.0781 ms]
+                        change: [−10.337% −5.2178% −0.9343%] (p = 0.06 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+Benchmarking storage_only_dedupe
+Benchmarking storage_only_dedupe: Warming up for 3.0000 s
+Benchmarking storage_only_dedupe: Collecting 10 samples in estimated 5.1550 s (1540 iterations)
+Benchmarking storage_only_dedupe: Analyzing
+storage_only_dedupe     time:   [3.3180 ms 3.3548 ms 3.3821 ms]
+                        change: [−4.3282% −2.1363% −0.0977%] (p = 0.08 > 0.05)
+                        No change in performance detected.
+
+Benchmarking storage_only_global_read
+Benchmarking storage_only_global_read: Warming up for 3.0000 s
+Benchmarking storage_only_global_read: Collecting 10 samples in estimated 5.0145 s (3190 iterations)
+Benchmarking storage_only_global_read: Analyzing
+storage_only_global_read
+                        time:   [1.5080 ms 1.5347 ms 1.5871 ms]
+                        change: [−2.2174% +0.7857% +3.7057%] (p = 0.63 > 0.05)
+                        No change in performance detected.
+

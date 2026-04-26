@@ -1,0 +1,21 @@
+    Finished `bench` profile [optimized] target(s) in 0.59s
+     Running benches/adapter_only.rs (target/release/deps/adapter_only-3ee23eb02c52ed2b)
+Gnuplot not found, using plotters backend
+Benchmarking adapter_only_decode_envelope_submit
+Benchmarking adapter_only_decode_envelope_submit: Warming up for 3.0000 s
+Benchmarking adapter_only_decode_envelope_submit: Collecting 10 samples in estimated 5.0001 s (2.5M iterations)
+Benchmarking adapter_only_decode_envelope_submit: Analyzing
+adapter_only_decode_envelope_submit
+                        time:   [2.1568 µs 2.1654 µs 2.1746 µs]
+                        change: [+1.2982% +1.8765% +2.5007%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+
+Benchmarking adapter_only_burst_overload
+Benchmarking adapter_only_burst_overload: Warming up for 3.0000 s
+Benchmarking adapter_only_burst_overload: Collecting 10 samples in estimated 5.0000 s (1.1M iterations)
+Benchmarking adapter_only_burst_overload: Analyzing
+adapter_only_burst_overload
+                        time:   [4.3389 µs 4.3510 µs 4.3722 µs]
+                        change: [+3.0880% +3.6573% +4.2062%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+

@@ -13,6 +13,12 @@ case "$MODE" in
 esac
 
 mkdir -p "$OUTPUT_DIR"
+rm -f "$OUTPUT_DIR/live-http-single-hot-key.json"
+
+assert_report_semantics_ready() {
+  rg -q 'ingress_depth_estimated_max' crates/app/src/main.rs
+  rg -q 'workload_purpose' crates/app/src/main.rs
+}
 
 run_text_lane() {
   local output_file="$1"
@@ -51,7 +57,15 @@ if [ "$MODE" = "smoke" ]; then
   run_json_lane "$OUTPUT_DIR/live-http-single-hot-key-diagnostic.json" \
     cargo run -q -p app -- http-stress --profile smoke --workload-shape single-hot-key --warmup-seconds 1 --measure-seconds 2 --concurrency 2 --command-count 8 --shard-count 2 --ingress-capacity 8 --ring-size 16
 else
+  assert_report_semantics_ready
+
   run_json_lane "$OUTPUT_DIR/live-http-unique.json" \
+    cargo run -q -p app -- http-stress --profile baseline --workload-shape unique --warmup-seconds 5 --measure-seconds 30 --concurrency 8 --shard-count 8 --ingress-capacity 256 --ring-size 256
+
+  run_json_lane "$OUTPUT_DIR/live-http-shard-1.json" \
+    cargo run -q -p app -- http-stress --profile baseline --workload-shape unique --warmup-seconds 5 --measure-seconds 30 --concurrency 8 --shard-count 1 --ingress-capacity 256 --ring-size 256
+
+  run_json_lane "$OUTPUT_DIR/live-http-shard-8.json" \
     cargo run -q -p app -- http-stress --profile baseline --workload-shape unique --warmup-seconds 5 --measure-seconds 30 --concurrency 8 --shard-count 8 --ingress-capacity 256 --ring-size 256
 
   run_json_lane "$OUTPUT_DIR/live-http-single-hot-key-diagnostic.json" \
