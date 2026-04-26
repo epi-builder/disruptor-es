@@ -1,9 +1,9 @@
 ---
 phase: 10
 slug: duplicate-safe-process-manager-follow-up-keys
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-20
 ---
 
@@ -38,18 +38,18 @@ created: 2026-04-20
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 10-01-01 | 01 | 1 | DOM-04, INT-04 | T-10-01 | Duplicate same-product order lines emit distinct reserve idempotency keys | app unit | `cargo test -p app duplicate_product_lines_emit_distinct_reserve_keys -- --nocapture` | No W0 | pending |
-| 10-01-02 | 01 | 1 | DOM-05, INT-04 | T-10-02 | Failed duplicate-line reservation releases prior successful duplicate-line reservations with distinct keys | app unit | `cargo test -p app duplicate_product_line_failure_releases_distinct_prior_lines -- --nocapture` | No W0 | pending |
-| 10-01-03 | 01 | 1 | STORE-03, RUNTIME-05 | T-10-03 | Reprocessing the same process-manager event replays committed follow-up outcomes instead of appending new commands | integration-style app unit with real `CommandEngine` and replay-aware store | `cargo test -p app process_manager_replayed_followups_return_original_outcomes -- --nocapture` | Yes | pending |
-| 10-01-04 | 01 | 1 | STORE-03, INT-04 | T-10-01 | Replay-aware multi-line coverage records one replay record per distinct line-aware idempotency key | app unit/integration-style app unit | `cargo test -p app commerce_process_manager -- --nocapture` | Partial W0 | pending |
+| 10-01-01 | 01 | 1 | DOM-04, INT-04 | T-10-01 | Duplicate same-product order lines emit distinct reserve idempotency keys | app unit | `cargo test -p app duplicate_product_lines_emit_distinct_reserve_keys -- --nocapture` | No W0 | passed |
+| 10-01-02 | 01 | 1 | DOM-05, INT-04 | T-10-02 | Failed duplicate-line reservation releases prior successful duplicate-line reservations with distinct keys | app unit | `cargo test -p app duplicate_product_line_failure_releases_distinct_prior_lines -- --nocapture` | No W0 | passed |
+| 10-01-03 | 01 | 1 | STORE-03, RUNTIME-05 | T-10-03 | Reprocessing the same process-manager event replays committed follow-up outcomes instead of appending new commands | integration-style app unit with real `CommandEngine` and replay-aware store | `cargo test -p app process_manager_replayed_followups_return_original_outcomes -- --nocapture` | Yes | passed |
+| 10-01-04 | 01 | 1 | STORE-03, INT-04 | T-10-01 | Replay-aware multi-line coverage records one replay record per distinct line-aware idempotency key | app unit/integration-style app unit | `cargo test -p app commerce_process_manager -- --nocapture` | Partial W0 | passed |
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `crates/app/src/commerce_process_manager.rs` — add `duplicate_product_lines_emit_distinct_reserve_keys`.
-- [ ] `crates/app/src/commerce_process_manager.rs` — add `duplicate_product_line_failure_releases_distinct_prior_lines`.
-- [ ] `crates/app/src/commerce_process_manager.rs` — extend replay-aware store/key assertions if needed so duplicate line replay coverage can prove one replay record per line-aware idempotency key.
+- [x] `crates/app/src/commerce_process_manager.rs` — add `duplicate_product_lines_emit_distinct_reserve_keys`.
+- [x] `crates/app/src/commerce_process_manager.rs` — add `duplicate_product_line_failure_releases_distinct_prior_lines`.
+- [x] `crates/app/src/commerce_process_manager.rs` — extend replay-aware store/key assertions so duplicate line replay coverage proves one replay record per line-aware idempotency key.
 
 ---
 
@@ -71,11 +71,30 @@ All phase behaviors should have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter after validation evidence is complete
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter after validation evidence is complete
 
-**Approval:** pending
+**Approval:** complete
+
+---
+
+## Validation Audit 2026-04-20
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+### Audit Evidence
+
+- `cargo test -p app duplicate_product_lines_emit_distinct_reserve_keys -- --nocapture` ✅
+- `cargo test -p app duplicate_product_line_failure_releases_distinct_prior_lines -- --nocapture` ✅
+- `cargo test -p app process_manager_replayed_followups_return_original_outcomes -- --nocapture` ✅
+- `cargo test -p app commerce_process_manager -- --nocapture` ✅
+- `cargo test -p es-runtime runtime_duplicate -- --nocapture` ✅
+- `cargo test --workspace` ✅

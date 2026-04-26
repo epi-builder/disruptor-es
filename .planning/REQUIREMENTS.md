@@ -7,6 +7,8 @@
 
 Requirements for the initial template release. Each maps to roadmap phases.
 
+Later gap-closure phases may extend runnable-service or archive evidence for requirements that were already satisfied by earlier implementation phases. When that happens, traceability should list both the original satisfying phase and the later closure phase instead of reverting the requirement to pending.
+
 ### Workspace and Contracts
 
 - [x] **CORE-01**: Developer can create and build a Rust 2024 workspace with separate crates for core types, domain kernel, runtime, storage, projection, outbox, example domain, adapters, and app composition.
@@ -18,7 +20,7 @@ Requirements for the initial template release. Each maps to roadmap phases.
 
 - [x] **STORE-01**: Command handling can append domain events to a durable event store with per-stream optimistic concurrency.
 - [x] **STORE-02**: Event store records include event ID, stream ID, stream revision, global position, command ID, causation ID, correlation ID, tenant ID, event type, schema version, payload, metadata, and recorded timestamp.
-- [ ] **STORE-03**: Command deduplication returns the prior committed result for a repeated tenant/idempotency key.
+- [x] **STORE-03**: Command deduplication returns the prior committed result for a repeated tenant/idempotency key.
 - [x] **STORE-04**: Aggregate rehydration can load the latest snapshot and replay subsequent stream events.
 - [x] **STORE-05**: Event store exposes global-position reads for projector and outbox catch-up.
 
@@ -36,7 +38,7 @@ Requirements for the initial template release. Each maps to roadmap phases.
 - [x] **DOM-01**: Example domain includes `User`, `Product`, and `Order` aggregates or entity models with explicit relationships.
 - [x] **DOM-02**: User commands can register, activate/deactivate, and emit replayable user events.
 - [x] **DOM-03**: Product commands can create products, adjust inventory, reserve inventory, and release inventory.
-- [ ] **DOM-04**: Order commands can place, confirm, reject, and cancel orders referencing user and product identifiers.
+- [x] **DOM-04**: Order commands can place, confirm, reject, and cancel orders referencing user and product identifiers.
 - [x] **DOM-05**: Domain invariants prevent invalid orders, negative inventory, duplicate order placement, and operations against inactive users or unavailable products.
 
 ### Projection and Query
@@ -51,24 +53,24 @@ Requirements for the initial template release. Each maps to roadmap phases.
 - [x] **INT-01**: Append transaction can create outbox rows derived from committed domain events.
 - [x] **INT-02**: Outbox dispatcher publishes pending rows through a publisher trait and marks successful rows as published.
 - [x] **INT-03**: Outbox dispatch is retryable and idempotent by source event and topic.
-- [ ] **INT-04**: A process-manager example reacts to order/product events and issues follow-up commands through the same command gateway.
+- [x] **INT-04**: A process-manager example reacts to order/product events and issues follow-up commands through the same command gateway.
 
 ### Adapter and API
 
 - [x] **API-01**: Thin HTTP adapter exposes command endpoints that decode requests, attach metadata, send through bounded ingress, and await command replies.
-- [ ] **API-02**: Adapter code does not mutate aggregate state, projector state, or outbox state directly.
+- [x] **API-02**: Adapter code does not mutate aggregate state, projector state, or outbox state directly.
 - [x] **API-03**: API responses include stream revision, global position, correlation ID, and typed success/error payloads.
-- [ ] **API-04**: Project documentation explains how WebSocket or gRPC gateways should connect without sharing hot business state.
+- [x] **API-04**: Project documentation explains how WebSocket or gRPC gateways should connect without sharing hot business state.
 
 ### Observability and Stress Testing
 
-- [ ] **OBS-01**: Runtime emits structured traces with command ID, correlation ID, causation ID, tenant ID, stream ID, shard ID, and global position when available.
+- [x] **OBS-01**: Runtime emits structured traces with command ID, correlation ID, causation ID, tenant ID, stream ID, shard ID, and global position when available.
 - [x] **OBS-02**: Metrics expose ingress depth, shard queue depth, ring wait, decision latency, append latency, OCC conflicts, dedupe hits, projection lag, outbox lag, and p95/p99 command latency.
 - [x] **TEST-01**: Test suite verifies aggregate replay determinism and domain invariants with generated command sequences or equivalent coverage.
 - [x] **TEST-02**: Integration tests verify event append, OCC conflicts, deduplication, snapshots, projector checkpoints, and outbox dispatch against a real or containerized PostgreSQL database.
-- [ ] **TEST-03**: Benchmark harnesses separately measure ring-only, domain-only, adapter-only, storage-only, single-service integrated, full E2E, projector/outbox, hot-key, burst, and degraded dependency scenarios.
-- [ ] **TEST-04**: A single-service integrated stress test runs the production-shaped composition in one service process and reports throughput, p50/p95/p99 latency, queue depths, append latency, projection lag, outbox lag, reject rate, and CPU/core utilization under realistic traffic.
-- [ ] **DOC-01**: Documentation states hot-path rules, forbidden patterns, service-boundary guidance, and how to create a new domain service from the template.
+- [x] **TEST-03**: Benchmark harnesses separately measure ring-only, domain-only, adapter-only, storage-only, single-service integrated, full E2E, projector/outbox, hot-key, burst, and degraded dependency scenarios.
+- [x] **TEST-04**: A single-service integrated stress test runs the production-shaped composition in one service process and reports throughput, p50/p95/p99 latency, queue depths, append latency, projection lag, outbox lag, reject rate, and CPU/core utilization under realistic traffic.
+- [x] **DOC-01**: Documentation states hot-path rules, forbidden patterns, service-boundary guidance, and how to create a new domain service from the template.
 
 ## v2 Requirements
 
@@ -118,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-04 | Phase 1 | Complete |
 | STORE-01 | Phase 2 | Complete |
 | STORE-02 | Phase 2 | Complete |
-| STORE-03 | Phase 10 | Pending |
+| STORE-03 | Phase 10 | Complete |
 | STORE-04 | Phase 9 | Complete |
 | STORE-05 | Phase 2 | Complete |
 | RUNTIME-01 | Phase 3 | Complete |
@@ -130,7 +132,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOM-01 | Phase 4 | Complete |
 | DOM-02 | Phase 4 | Complete |
 | DOM-03 | Phase 4 | Complete |
-| DOM-04 | Phase 10 | Pending |
+| DOM-04 | Phase 10 | Complete |
 | DOM-05 | Phase 9, Phase 10 | Complete |
 | PROJ-01 | Phase 5 | Complete |
 | PROJ-02 | Phase 5 | Complete |
@@ -139,18 +141,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INT-01 | Phase 6 | Complete |
 | INT-02 | Phase 6 | Complete |
 | INT-03 | Phase 6 | Complete |
-| INT-04 | Phase 10 | Pending |
+| INT-04 | Phase 10 | Complete |
 | API-01 | Phase 8 | Complete |
-| API-02 | Phase 11 | Pending |
+| API-02 | Phase 7, Phase 11 | Complete |
 | API-03 | Phase 8 | Complete |
-| API-04 | Phase 11 | Pending |
-| OBS-01 | Phase 11 | Pending |
-| OBS-02 | Phase 7 | Complete |
+| API-04 | Phase 7, Phase 11 | Complete |
+| OBS-01 | Phase 7, Phase 11 | Complete |
+| OBS-02 | Phase 7, Phase 12 | Complete |
 | TEST-01 | Phase 4 | Complete |
-| TEST-02 | Phase 7 | Complete |
-| TEST-03 | Phase 11 | Pending |
-| TEST-04 | Phase 11 | Pending |
-| DOC-01 | Phase 11 | Pending |
+| TEST-02 | Phase 7, Phase 13 | Complete |
+| TEST-03 | Phase 7, Phase 12 | Complete |
+| TEST-04 | Phase 7, Phase 11, Phase 12 | Complete |
+| DOC-01 | Phase 7, Phase 11 | Complete |
 
 **Coverage:**
 - v1 requirements: 39 total
@@ -159,4 +161,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-16*
-*Last updated: 2026-04-20 after milestone audit gap closure phase creation*
+*Last updated: 2026-04-21 after Phase 11 evidence recovery and runnable-service execution*
