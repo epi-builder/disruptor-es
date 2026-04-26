@@ -346,32 +346,29 @@ if cache_miss && envelope.expected_revision == ExpectedRevision::NoStream {
 |----------|-------|
 | Framework | `cargo test` for automated checks, Criterion benches for layer isolation, `cargo run -p app -- http-stress ...` for live evidence. [VERIFIED: Cargo.toml] [VERIFIED: crates/app/src/main.rs] |
 | Config file | none; workspace conventions come from Cargo targets and Rust test modules. [VERIFIED: Cargo.toml] |
-| Quick run command | `cargo test -p app external_process_http_stress_smoke -- --nocapture` [VERIFIED: crates/app/src/http_stress.rs] |
+| Quick run command | `cargo test -p es-runtime runtime_flow -- --nocapture && cargo test -p app http_stress -- --nocapture` [VERIFIED: crates/es-runtime/tests/runtime_flow.rs] [VERIFIED: crates/app/src/http_stress.rs] |
 | Full suite command | `cargo test --workspace` plus targeted live runs such as `cargo run -q -p app -- http-stress --profile baseline --warmup-seconds 1 --measure-seconds 5 --concurrency 8` [VERIFIED: crates/app/src/main.rs] [VERIFIED: local measurements] |
 
-### Phase Requirements → Test Map
+### Current Plan Task Map
 
-| Req ID | Behavior | Test Type | Automated Command | File Exists? |
-|--------|----------|-----------|-------------------|-------------|
-| RUNTIME-01 | bounded ingress still rejects overload explicitly after optimization | unit/integration | `cargo test -p es-runtime router_gateway -- --nocapture` | ✅ |
-| RUNTIME-02 | shard routing stays stable while shard workers actually run in parallel | integration/perf | `cargo run -q -p app -- http-stress --profile baseline --warmup-seconds 1 --measure-seconds 5 --concurrency 8 --shard-count 1` and same with `--shard-count 8` | ❌ Wave 0 comparison script |
-| RUNTIME-05 | reply remains commit-gated after runtime refactor | integration | `cargo test -p es-runtime runtime_flow -- --nocapture` | ✅ |
-| TEST-03 | ring/runtime/storage/adapter/live lanes are comparable and labeled | benchmark/manual | `cargo bench --bench ring_only`, `cargo bench --bench adapter_only`, `cargo bench --bench storage_only`, `cargo run -q -p app -- stress-smoke`, `cargo run -q -p app -- http-stress ...` | Partial |
-| TEST-04 | live report fields are trustworthy, not silently zeroed | integration/stress | `cargo test -p app external_process_http_stress_smoke -- --nocapture` plus report assertions on non-zero/known-invalid fields where applicable | ❌ Wave 0 |
-| OBS-02 | ring wait, append latency, ingress depth, shard depth, lag, and scrape health surface correctly | integration/stress | `cargo run -q -p app -- http-stress --profile baseline --warmup-seconds 1 --measure-seconds 5 --concurrency 8` | ❌ Wave 0 |
+| Task ID | Plan | Wave | Requirement | Behavior | Test Type | Automated Command |
+|---------|------|------|-------------|----------|-----------|-------------------|
+| 13.1-01-01 | 01 | 1 | RUNTIME-01, RUNTIME-02, RUNTIME-05 | accepted-but-undispatched shutdown paths resolve explicitly instead of stranding replies | integration | `cargo test -p es-runtime accepted_but_undispatched_commands_receive_unavailable_on_shutdown -- --nocapture` |
+| 13.1-01-02 | 01 | 1 | RUNTIME-01, RUNTIME-02, RUNTIME-05 | runtime shutdown drains ingress and waits for in-flight shard work | integration | `cargo test -p es-runtime runtime_flow -- --nocapture` |
+| 13.1-02-01 | 02 | 1 | TEST-04, OBS-02 | report regressions prevent synthetic observed queue-depth claims | unit | `cargo test -p app observed_ingress_depth_is_not_synthesized_from_concurrency -- --nocapture` |
+| 13.1-02-02 | 02 | 1 | TEST-04, OBS-02 | live harness uses observed-versus-estimated metrics fields and diagnostic workload labeling | integration | `cargo test -p app http_stress -- --nocapture` |
+| 13.1-03-01 | 03 | 2 | TEST-03, TEST-04 | storage-only lane produces real benchmark output and renames the repeated-stream lane to a diagnostic artifact | benchmark | `cargo bench --bench storage_only -- --sample-size 10` |
+| 13.1-03-02 | 03 | 2 | TEST-03, TEST-04, OBS-02 | one baseline script run regenerates unique plus shard-count evidence before any non-`inconclusive` ceiling claim | live baseline + docs | `PHASE13_1_COMPARE_MODE=baseline bash scripts/compare-stress-layers.sh` |
 
 ### Sampling Rate
 
-- **Per task commit:** run the most local unit/integration target plus one short `http-stress` comparison when touching runtime or harness code. [ASSUMED]
-- **Per wave merge:** rerun workspace tests plus one in-process stress and one live external-process stress profile. [ASSUMED]
-- **Phase gate:** rerun live HTTP baseline, true hot-key, and one layer-comparison script before `/gsd-verify-work`. [ASSUMED]
+- **Per task commit:** run the task-local `<verify><automated>` command from the active revised plan. [VERIFIED: 13.1 plan set]
+- **Per wave merge:** rerun `cargo test -p es-runtime runtime_flow -- --nocapture` and `cargo test -p app http_stress -- --nocapture` before moving past Wave 1. [ASSUMED]
+- **Phase gate:** rerun `PHASE13_1_COMPARE_MODE=baseline bash scripts/compare-stress-layers.sh` and verify it produced `live-http-unique.json`, `live-http-shard-1.json`, and `live-http-shard-8.json` before `/gsd-verify-work`. [ASSUMED]
 
-### Wave 0 Gaps
+### Wave 0 Status
 
-- [ ] Add a reproducible comparison script or test target that runs ring-only, adapter-only, storage-only, in-process, and live HTTP lanes under one environment label. [VERIFIED: benches/*.rs] [ASSUMED]
-- [ ] Add an automated assertion that `hot-key` traffic actually reuses partition keys. [VERIFIED: crates/app/src/http_stress.rs] [ASSUMED]
-- [ ] Add report-level visibility for metrics scrape success/failure counts and sample counts. [VERIFIED: crates/app/src/http_stress.rs] [ASSUMED]
-- [ ] Add a targeted perf regression check proving `shard_count` changes affect throughput after the runtime refactor. [ASSUMED]
+- [x] Existing test, benchmark, and script entrypoints cover the current six-task revised plan set; no extra Wave 0 scaffolding is required. [VERIFIED: 13.1-01-PLAN.md] [VERIFIED: 13.1-02-PLAN.md] [VERIFIED: 13.1-03-PLAN.md]
 
 ## Security Domain
 
