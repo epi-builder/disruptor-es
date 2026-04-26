@@ -6,15 +6,11 @@ use std::{
     net::{SocketAddr, TcpListener},
     path::PathBuf,
     process::{Child, Command, Stdio},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::{Duration, Instant},
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use anyhow::{Context, anyhow};
-use futures::{StreamExt, stream};
 use hdrhistogram::Histogram;
 use reqwest::{Client, Method, StatusCode};
 use serde::Serialize;
@@ -22,7 +18,10 @@ use sqlx::{PgPool, postgres::PgPoolOptions};
 use sysinfo::System;
 use testcontainers::{ContainerAsync, ImageExt, runners::AsyncRunner};
 use testcontainers_modules::postgres::Postgres;
-use tokio::time::sleep;
+use tokio::{
+    task::JoinSet,
+    time::{Instant, MissedTickBehavior, interval, sleep, timeout},
+};
 use uuid::Uuid;
 
 use crate::stress::{StressReport, StressScenario};
@@ -62,8 +61,33 @@ pub struct CanonicalPlaceOrderRequest {
 }
 
 /// External-process HTTP stress knobs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HttpStressProfile {
+    Smoke,
+    Baseline,
+    Burst,
+    HotKey,
+}
+
+impl HttpStressProfile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Smoke => "smoke",
+            Self::Baseline => "baseline",
+            Self::Burst => "burst",
+            Self::HotKey => "hot-key",
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HttpStressConfig {
+    /// Named profile used to derive default load shape and report metadata.
+    pub profile: HttpStressProfile,
+    /// Warmup duration excluded from the measured report.
+    pub warmup_seconds: u64,
+    /// Measured interval duration.
+    pub measurement_seconds: u64,
     /// Number of HTTP commands to attempt.
     pub command_count: usize,
     /// Maximum concurrent in-flight HTTP requests.
@@ -77,26 +101,76 @@ pub struct HttpStressConfig {
 }
 
 impl HttpStressConfig {
+    pub fn from_profile(profile: HttpStressProfile) -> Self {
+        match profile {
+            HttpStressProfile::Smoke => Self {
+                profile,
+                warmup_seconds: 1,
+                measurement_seconds: 2,
+                concurrency: 2,
+                command_count: 16,
+                shard_count: 2,
+                ingress_capacity: 8,
+                ring_size: 16,
+            },
+            HttpStressProfile::Baseline => Self {
+                profile,
+                warmup_seconds: 5,
+                measurement_seconds: 30,
+                concurrency: 8,
+                command_count: 0,
+                shard_count: 4,
+                ingress_capacity: 256,
+                ring_size: 256,
+            },
+            HttpStressProfile::Burst => Self {
+                profile,
+                warmup_seconds: 3,
+                measurement_seconds: 20,
+                concurrency: 32,
+                command_count: 0,
+                shard_count: 4,
+                ingress_capacity: 128,
+                ring_size: 256,
+            },
+            HttpStressProfile::HotKey => Self {
+                profile,
+                warmup_seconds: 3,
+                measurement_seconds: 20,
+                concurrency: 16,
+                command_count: 0,
+                shard_count: 2,
+                ingress_capacity: 128,
+                ring_size: 128,
+            },
+        }
+    }
+
     /// Small external-process smoke run suitable for tests and local verification.
     pub fn smoke() -> Self {
-        Self {
-            command_count: 4,
-            concurrency: 2,
-            shard_count: 2,
-            ingress_capacity: 8,
-            ring_size: 16,
-        }
+        Self::from_profile(HttpStressProfile::Smoke)
     }
 
     /// Tiny benchmark config so Criterion exercises the lane without long runs.
     pub fn bench() -> Self {
-        Self {
-            command_count: 2,
-            concurrency: 1,
-            shard_count: 2,
-            ingress_capacity: 8,
-            ring_size: 16,
+        let mut config = Self::from_profile(HttpStressProfile::Smoke);
+        config.command_count = 2;
+        config.concurrency = 1;
+        config
+    }
+
+    pub fn validate(&self) -> anyhow::Result<()> {
+        ensure_in_range("warmup_seconds", self.warmup_seconds, 1..=600)?;
+        ensure_in_range("measurement_seconds", self.measurement_seconds, 1..=3600)?;
+        ensure_in_range("concurrency", self.concurrency, 1..=256)?;
+        ensure_in_range("command_count", self.command_count, 0..=2_000_000)?;
+        ensure_in_range("shard_count", self.shard_count, 1..=64)?;
+        ensure_in_range("ingress_capacity", self.ingress_capacity, 1..=65_536)?;
+        ensure_in_range("ring_size", self.ring_size, 2..=65_536)?;
+        if !self.ring_size.is_power_of_two() {
+            return Err(anyhow!("ring_size must be a power of two"));
         }
+        Ok(())
     }
 }
 
@@ -123,10 +197,25 @@ struct MetricSnapshot {
     outbox_lag: i64,
 }
 
+#[derive(Clone, Debug, Default)]
+struct MeasuredState {
+    metrics: MetricSnapshot,
+    cpu_usage_samples: Vec<f32>,
+    cpu_brand: String,
+}
+
 #[derive(Debug)]
 struct RequestOutcome {
     status: StatusCode,
     latency_micros: u64,
+}
+
+#[derive(Debug, Default)]
+struct WindowCounters {
+    commands_submitted: usize,
+    commands_succeeded: usize,
+    commands_rejected: usize,
+    commands_failed: usize,
 }
 
 impl Drop for ExternalProcessHarness {
@@ -232,104 +321,277 @@ pub fn canonical_place_order_request(prefix: &str, index: usize) -> CanonicalPla
 pub async fn run_external_process_http_stress(
     config: HttpStressConfig,
 ) -> anyhow::Result<StressReport> {
+    config.validate()?;
     let harness = ExternalProcessHarness::spawn(&config).await?;
-    let sample = Arc::new(Mutex::new(MetricSnapshot::default()));
-    let stop = Arc::new(AtomicBool::new(false));
+    let measured = Arc::new(Mutex::new(MeasuredState::default()));
     let sampler = spawn_metric_sampler(
         harness.client.clone(),
         harness.prometheus_addr,
-        sample.clone(),
-        stop.clone(),
+        measured.clone(),
+        config.measurement_seconds,
     );
 
-    let started = Instant::now();
+    execute_http_window(
+        &harness,
+        &config,
+        Duration::from_secs(config.warmup_seconds),
+        None,
+        false,
+    )
+    .await?;
+    reset_measured_state(&measured);
+
+    let measurement_started = Instant::now();
     let mut latency = Histogram::<u64>::new(3).context("creating HTTP latency histogram")?;
-    let mut commands_succeeded = 0_usize;
-    let mut commands_rejected = 0_usize;
-    let concurrency = config.concurrency.max(1);
-    let harness_ref = &harness;
-
-    let results = stream::iter(0..config.command_count)
-        .map(|index| {
-            let request = canonical_place_order_request("external-http-stress", index);
-            async move { harness_ref.place_order(&request).await }
-        })
-        .buffer_unordered(concurrency)
-        .collect::<Vec<_>>()
-        .await;
-
-    stop.store(true, Ordering::Relaxed);
+    let counters = execute_http_window(
+        &harness,
+        &config,
+        Duration::from_secs(config.measurement_seconds),
+        Some(&mut latency),
+        true,
+    )
+    .await?;
     let _ = sampler.await;
 
-    for result in results {
-        let outcome = result?;
-        latency.record(outcome.latency_micros)?;
-        match outcome.status {
-            StatusCode::OK => commands_succeeded += 1,
-            StatusCode::TOO_MANY_REQUESTS => commands_rejected += 1,
-            status => {
-                return Err(anyhow!(
-                    "unexpected external-process stress status {status}"
-                ));
-            }
-        }
-    }
-
-    let elapsed = started.elapsed().as_secs_f64().max(0.001);
-    let commands_submitted = config.command_count;
-    let reject_rate = if commands_submitted == 0 {
+    let run_duration_seconds = measurement_started.elapsed().as_secs_f64().max(0.001);
+    let reject_rate = if counters.commands_submitted == 0 {
         0.0
     } else {
-        commands_rejected as f64 / commands_submitted as f64
+        counters.commands_rejected as f64 / counters.commands_submitted as f64
     };
-    let metrics = sample
+    let measured = measured
         .lock()
         .expect("metric sampler mutex poisoned")
         .clone();
-    let mut system = System::new_all();
-    sleep(Duration::from_millis(20)).await;
-    system.refresh_cpu_all();
+    let cpu_utilization_percent = measured.cpu_usage_samples.last().copied().unwrap_or(0.0);
+    let cpu_brand = if measured.cpu_brand.is_empty() {
+        let system = System::new_all();
+        system
+            .cpus()
+            .first()
+            .map(|cpu| cpu.brand().to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    } else {
+        measured.cpu_brand.clone()
+    };
+    let core_count = System::new_all().cpus().len().max(1);
 
     Ok(StressReport {
         scenario: StressScenario::ExternalProcessHttp,
-        commands_submitted,
-        commands_succeeded,
-        commands_rejected,
-        throughput_per_second: commands_succeeded as f64 / elapsed,
+        commands_submitted: counters.commands_submitted,
+        commands_succeeded: counters.commands_succeeded,
+        commands_rejected: counters.commands_rejected,
+        commands_failed: counters.commands_failed,
+        throughput_per_second: counters.commands_succeeded as f64 / run_duration_seconds,
         p50_micros: percentile(&latency, 50.0),
         p95_micros: percentile(&latency, 95.0),
         p99_micros: percentile(&latency, 99.0),
         max_micros: latency.max(),
-        ingress_depth_max: metrics
+        ingress_depth_max: measured
+            .metrics
             .ingress_depth_max
-            .max(concurrency.min(commands_submitted)),
-        shard_depth_max: metrics.shard_depth_max,
-        append_latency_p95_micros: metrics.append_latency_p95_micros,
-        projection_lag: metrics.projection_lag,
-        outbox_lag: metrics.outbox_lag,
+            .max(config.concurrency.min(counters.commands_submitted)),
+        shard_depth_max: measured.metrics.shard_depth_max,
+        append_latency_p95_micros: measured.metrics.append_latency_p95_micros,
+        projection_lag: measured.metrics.projection_lag,
+        outbox_lag: measured.metrics.outbox_lag,
         reject_rate,
-        cpu_utilization_percent: system.global_cpu_usage(),
-        core_count: system.cpus().len().max(1),
+        cpu_utilization_percent,
+        core_count,
+        profile_name: config.profile.as_str().to_string(),
+        warmup_seconds: config.warmup_seconds,
+        measurement_seconds: config.measurement_seconds,
+        run_duration_seconds,
+        concurrency: config.concurrency,
+        deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
+        drain_timeout_seconds: 5,
+        host_os: std::env::consts::OS,
+        host_arch: std::env::consts::ARCH,
+        cpu_brand,
+        cpu_usage_samples: measured.cpu_usage_samples,
+    })
+}
+
+async fn execute_http_window(
+    harness: &ExternalProcessHarness,
+    config: &HttpStressConfig,
+    duration: Duration,
+    mut latency: Option<&mut Histogram<u64>>,
+    enforce_drain_policy: bool,
+) -> anyhow::Result<WindowCounters> {
+    let mut counters = WindowCounters::default();
+    let mut in_flight = JoinSet::new();
+    let mut next_index = 0_usize;
+    let deadline = Instant::now() + duration;
+    let mut submit_tick = interval(Duration::from_millis(1));
+    submit_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let max_commands = if config.command_count == 0 {
+        usize::MAX
+    } else {
+        config.command_count
+    };
+
+    loop {
+        while in_flight.len() < config.concurrency
+            && next_index < max_commands
+            && Instant::now() < deadline
+        {
+            submit_tick.tick().await;
+            if Instant::now() >= deadline {
+                break;
+            }
+
+            let request = canonical_place_order_request("external-http-stress", next_index);
+            let client = harness.client.clone();
+            let listen_addr = harness.listen_addr;
+            in_flight.spawn(async move {
+                place_order_with_client(client, listen_addr, request).await
+            });
+            counters.commands_submitted += 1;
+            next_index += 1;
+        }
+
+        if in_flight.is_empty() {
+            if Instant::now() >= deadline || next_index >= max_commands {
+                break;
+            }
+            submit_tick.tick().await;
+            continue;
+        }
+
+        if Instant::now() >= deadline {
+            break;
+        }
+
+        if let Some(result) = in_flight.join_next().await {
+            record_join_result(result, &mut counters, &mut latency)?;
+        }
+    }
+
+    if !enforce_drain_policy {
+        while let Some(result) = in_flight.join_next().await {
+            record_join_result(result, &mut counters, &mut latency)?;
+        }
+        return Ok(counters);
+    }
+
+    let drain_timeout = Duration::from_secs(5);
+    let drain_started = Instant::now();
+    while !in_flight.is_empty() && drain_started.elapsed() < drain_timeout {
+        let remaining = drain_timeout.saturating_sub(drain_started.elapsed());
+        match timeout(remaining, in_flight.join_next()).await {
+            Ok(Some(result)) => record_join_result(result, &mut counters, &mut latency)?,
+            Ok(None) => break,
+            Err(_) => break,
+        }
+    }
+
+    counters.commands_failed += in_flight.len();
+    in_flight.abort_all();
+    while in_flight.join_next().await.is_some() {}
+
+    Ok(counters)
+}
+
+fn record_join_result(
+    result: Result<anyhow::Result<RequestOutcome>, tokio::task::JoinError>,
+    counters: &mut WindowCounters,
+    latency: &mut Option<&mut Histogram<u64>>,
+) -> anyhow::Result<()> {
+    let outcome = result.context("joining external-process HTTP request task")??;
+    if let Some(histogram) = latency.as_deref_mut() {
+        histogram.record(outcome.latency_micros)?;
+    }
+    match outcome.status {
+        StatusCode::OK => counters.commands_succeeded += 1,
+        StatusCode::TOO_MANY_REQUESTS => counters.commands_rejected += 1,
+        status => return Err(anyhow!("unexpected external-process stress status {status}")),
+    }
+    Ok(())
+}
+
+fn reset_measured_state(measured: &Arc<Mutex<MeasuredState>>) {
+    let mut state = measured.lock().expect("metric sampler mutex poisoned");
+    *state = MeasuredState::default();
+}
+
+async fn place_order_with_client(
+    client: Client,
+    listen_addr: SocketAddr,
+    request: CanonicalPlaceOrderRequest,
+) -> anyhow::Result<RequestOutcome> {
+    let started = Instant::now();
+    let response = http_request(
+        &client,
+        listen_addr,
+        Method::POST,
+        "/commands/orders/place",
+        Some(&request),
+    )
+    .await?;
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .context("reading external-process stress response body")?;
+
+    if status == StatusCode::OK {
+        let payload: serde_json::Value =
+            serde_json::from_str(&body).context("decoding success response JSON")?;
+        if payload["reply"]["type"] != "placed" {
+            return Err(anyhow!("unexpected success reply payload: {body}"));
+        }
+    } else if status != StatusCode::TOO_MANY_REQUESTS {
+        return Err(anyhow!("unexpected HTTP status {status}: {body}"));
+    }
+
+    Ok(RequestOutcome {
+        status,
+        latency_micros: micros(started.elapsed()),
     })
 }
 
 fn spawn_metric_sampler(
     client: Client,
     prometheus_addr: SocketAddr,
-    sample: Arc<Mutex<MetricSnapshot>>,
-    stop: Arc<AtomicBool>,
+    measured: Arc<Mutex<MeasuredState>>,
+    measurement_seconds: u64,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        while !stop.load(Ordering::Relaxed) {
+        let mut ticker = interval(Duration::from_millis(250));
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let deadline = Instant::now() + Duration::from_secs(measurement_seconds.max(1) + 10);
+        let mut system = System::new_all();
+
+        while Instant::now() < deadline {
+            ticker.tick().await;
             if let Ok(snapshot) = scrape_metrics(&client, prometheus_addr).await {
-                let mut state = sample.lock().expect("metric sampler mutex poisoned");
-                state.ingress_depth_max = state.ingress_depth_max.max(snapshot.ingress_depth_max);
-                state.shard_depth_max = state.shard_depth_max.max(snapshot.shard_depth_max);
-                state.append_latency_p95_micros = snapshot.append_latency_p95_micros;
-                state.projection_lag = state.projection_lag.max(snapshot.projection_lag);
-                state.outbox_lag = state.outbox_lag.max(snapshot.outbox_lag);
+                let mut state = measured.lock().expect("metric sampler mutex poisoned");
+                state.metrics.ingress_depth_max = state
+                    .metrics
+                    .ingress_depth_max
+                    .max(snapshot.ingress_depth_max);
+                state.metrics.shard_depth_max =
+                    state.metrics.shard_depth_max.max(snapshot.shard_depth_max);
+                state.metrics.append_latency_p95_micros = snapshot.append_latency_p95_micros;
+                state.metrics.projection_lag =
+                    state.metrics.projection_lag.max(snapshot.projection_lag);
+                state.metrics.outbox_lag = state.metrics.outbox_lag.max(snapshot.outbox_lag);
             }
-            sleep(Duration::from_millis(25)).await;
+
+            system.refresh_cpu_usage();
+            let usage = system.global_cpu_usage();
+            if !usage.is_nan() {
+                let mut state = measured.lock().expect("metric sampler mutex poisoned");
+                state.cpu_usage_samples.push(usage);
+                if state.cpu_brand.is_empty() {
+                    state.cpu_brand = system
+                        .cpus()
+                        .first()
+                        .map(|cpu| cpu.brand().to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+                }
+            }
         }
     })
 }
@@ -604,6 +866,25 @@ fn percentile(histogram: &Histogram<u64>, quantile: f64) -> u64 {
 
 fn micros(duration: Duration) -> u64 {
     duration.as_micros().min(u128::from(u64::MAX)) as u64
+}
+
+fn ensure_in_range<T>(
+    field: &str,
+    value: T,
+    range: std::ops::RangeInclusive<T>,
+) -> anyhow::Result<()>
+where
+    T: Copy + Ord + std::fmt::Display,
+{
+    if range.contains(&value) {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "{field} must be in {}..={}",
+            range.start(),
+            range.end()
+        ))
+    }
 }
 
 #[cfg(test)]

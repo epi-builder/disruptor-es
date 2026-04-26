@@ -27,6 +27,7 @@ use example_commerce::{
     Quantity, Sku, UserId,
 };
 use hdrhistogram::Histogram;
+use serde::{Serialize, Serializer};
 use serde_json::json;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use sysinfo::System;
@@ -50,6 +51,15 @@ pub enum StressScenario {
     Burst,
     /// Degraded dependency shape that records rejected commands instead of panicking.
     DegradedDependency,
+}
+
+impl Serialize for StressScenario {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
 }
 
 /// Stress runner input knobs.
@@ -126,7 +136,7 @@ impl StressConfig {
 }
 
 /// Stress report emitted by the smoke runner and CLI.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct StressReport {
     /// Scenario that produced this report.
     pub scenario: StressScenario,
@@ -136,6 +146,8 @@ pub struct StressReport {
     pub commands_succeeded: usize,
     /// Commands rejected at bounded ingress or by runtime errors.
     pub commands_rejected: usize,
+    /// Commands that remained incomplete after the bounded drain policy.
+    pub commands_failed: usize,
     /// Successful command throughput.
     pub throughput_per_second: f64,
     /// Command latency p50 in microseconds.
@@ -162,6 +174,28 @@ pub struct StressReport {
     pub cpu_utilization_percent: f32,
     /// Logical core count reported by the host.
     pub core_count: usize,
+    /// Stable profile label when the run uses a named preset.
+    pub profile_name: String,
+    /// Warmup interval excluded from measured counters.
+    pub warmup_seconds: u64,
+    /// Intended measured interval duration.
+    pub measurement_seconds: u64,
+    /// Actual measured interval represented by the report.
+    pub run_duration_seconds: f64,
+    /// Measured-window submitter concurrency.
+    pub concurrency: usize,
+    /// Comparable deadline policy label.
+    pub deadline_policy: String,
+    /// Bounded drain timeout after the measured deadline.
+    pub drain_timeout_seconds: u64,
+    /// Host operating system identifier.
+    pub host_os: &'static str,
+    /// Host architecture identifier.
+    pub host_arch: &'static str,
+    /// CPU brand sampled during the measured window.
+    pub cpu_brand: String,
+    /// Repeated CPU usage samples captured during the measured window.
+    pub cpu_usage_samples: Vec<f32>,
 }
 
 struct PostgresHarness {
@@ -348,6 +382,7 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
         commands_submitted,
         commands_succeeded,
         commands_rejected,
+        commands_failed: 0,
         throughput_per_second,
         p50_micros: percentile(&latency, 50.0),
         p95_micros: percentile(&latency, 95.0),
@@ -361,6 +396,21 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
         reject_rate,
         cpu_utilization_percent: system.global_cpu_usage(),
         core_count: system.cpus().len().max(1),
+        profile_name: config.scenario.as_str().to_string(),
+        warmup_seconds: 0,
+        measurement_seconds: elapsed.max(1.0).round() as u64,
+        run_duration_seconds: elapsed,
+        concurrency: config.concurrency,
+        deadline_policy: "complete-finite-batch".to_string(),
+        drain_timeout_seconds: 0,
+        host_os: std::env::consts::OS,
+        host_arch: std::env::consts::ARCH,
+        cpu_brand: system
+            .cpus()
+            .first()
+            .map(|cpu| cpu.brand().to_string())
+            .unwrap_or_else(|| "unknown".to_string()),
+        cpu_usage_samples: vec![system.global_cpu_usage()],
     })
 }
 
