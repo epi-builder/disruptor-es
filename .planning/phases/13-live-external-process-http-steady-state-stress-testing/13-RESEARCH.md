@@ -277,22 +277,21 @@ let cpu = system.global_cpu_usage();
 | A4 | Phase 13 does not need a new external library beyond the existing workspace stack. | Standard Stack | Low; current gaps are orchestration and reporting, not missing dependencies. |
 | A5 | Excluding distributed load generation from this phase remains correct. | User Constraints | Low; roadmap scope is local live-service evidence. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **How should the measured window treat in-flight requests at the deadline?**
-   - What we know: the current lane submits a fixed batch and waits for all completions. [VERIFIED: crates/app/src/http_stress.rs]
-   - What's unclear: whether steady-state mode should drain all in-flight work, drain with timeout, or hard-stop at the deadline.
-   - Recommendation: choose one explicit policy in planning and include it in the JSON report so runs remain comparable. [ASSUMED]
+   - Resolution: stop submitting new requests exactly at the measured-window deadline, then drain in-flight requests for up to 5 seconds. Any work still incomplete after the drain timeout is counted as `commands_failed`. [RESOLVED: 13-01-PLAN.md Task 13-01-02]
+   - Why: this preserves steady-state comparability without silently stretching the measured window indefinitely or discarding already-issued work with no accounting. [ASSUMED]
+   - Report semantics: expose `deadline_policy = "drain_with_timeout"` and `drain_timeout_seconds = 5` in the report so consumers can interpret throughput and error counts correctly. [RESOLVED: 13-01-PLAN.md Task 13-01-02]
 
 2. **Should CPU be reported as average, max, or both?**
-   - What we know: success criteria require CPU/core count, and sysinfo supports repeated sampling. [VERIFIED: user prompt] [CITED: https://docs.rs/sysinfo/latest/sysinfo/index.html]
-   - What's unclear: the operator-facing summary preference for this repo.
-   - Recommendation: record both `cpu_utilization_avg_percent` and `cpu_utilization_max_percent` internally, then decide during planning whether both belong in the public report. [ASSUMED]
+   - Resolution: keep the public report keyed to the existing required `cpu_utilization_percent` and `core_count` fields while capturing repeated `cpu_usage_samples` during the measured window for auditability. [RESOLVED: 13-01-PLAN.md Task 13-01-02]
+   - Why: this satisfies roadmap/report requirements without expanding the canonical report contract further in the same phase, while still preserving enough sampled evidence to revisit aggregation later if needed. [ASSUMED]
+   - Operator guidance: docs should explain that CPU figures come from repeated measured-window sampling rather than one trailing post-run snapshot. [RESOLVED: 13-02-PLAN.md Task 13-02-03]
 
 3. **Should the existing Criterion bench be rewritten with `iter_custom`, or left as a tiny smoke bench and de-emphasized in docs?**
-   - What we know: Criterion explicitly supports `iter_custom` for separate-process timing, and the current bench reruns the full harness each iteration. [CITED: https://bheisler.github.io/criterion.rs/book/user_guide/timing_loops.html] [VERIFIED: benches/external_process_http.rs]
-   - What's unclear: whether Phase 13 wants any bench refactor beyond doc clarification.
-   - Recommendation: keep the live lane authoritative and treat any Criterion change as secondary unless planning sees a cheap win. [ASSUMED]
+   - Resolution: keep Criterion as a secondary smoke-only lane in Phase 13, reusing the shared `Smoke` profile/config path, and make the `app http-stress` JSON lane the authoritative steady-state evidence source. [RESOLVED: 13-02-PLAN.md Tasks 13-02-02 and 13-02-03]
+   - Why: this is the cheapest change that preserves existing benchmark coverage while preventing Criterion’s iteration semantics from being mistaken for the steady-state live-service measurement method. [CITED: https://bheisler.github.io/criterion.rs/book/user_guide/timing_loops.html] [CITED: https://criterion-rs.github.io/book/user_guide/command_line_output.html]
 
 ## Environment Availability
 
