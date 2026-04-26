@@ -164,10 +164,18 @@ pub struct StressReport {
     pub shard_depth_max: usize,
     /// Append-path latency p95 in microseconds.
     pub append_latency_p95_micros: u64,
+    /// Ring wait p95 in microseconds.
+    pub ring_wait_p95_micros: u64,
     /// Projection lag sampled outside the command success gate.
     pub projection_lag: i64,
     /// Outbox lag sampled outside the command success gate.
     pub outbox_lag: i64,
+    /// Successful Prometheus scrape count recorded during the measured window.
+    pub metrics_scrape_successes: u64,
+    /// Failed Prometheus scrape count recorded during the measured window.
+    pub metrics_scrape_failures: u64,
+    /// Total scrape attempts recorded during the measured window.
+    pub metrics_sample_count: u64,
     /// Rejected command ratio.
     pub reject_rate: f64,
     /// System CPU utilization percentage sampled during the run.
@@ -176,6 +184,10 @@ pub struct StressReport {
     pub core_count: usize,
     /// Stable profile label when the run uses a named preset.
     pub profile_name: String,
+    /// Workload-shape label used to generate the request stream.
+    pub workload_shape: String,
+    /// Optional hot-set size when workload-shape is `hot-set`.
+    pub hot_set_size: Option<usize>,
     /// Warmup interval excluded from measured counters.
     pub warmup_seconds: u64,
     /// Intended measured interval duration.
@@ -391,12 +403,18 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
         ingress_depth_max,
         shard_depth_max,
         append_latency_p95_micros: percentile(&append_latency, 95.0),
+        ring_wait_p95_micros: 0,
         projection_lag,
         outbox_lag,
+        metrics_scrape_successes: 0,
+        metrics_scrape_failures: 0,
+        metrics_sample_count: 0,
         reject_rate,
         cpu_utilization_percent: system.global_cpu_usage(),
         core_count: system.cpus().len().max(1),
         profile_name: config.scenario.as_str().to_string(),
+        workload_shape: "unique".to_string(),
+        hot_set_size: None,
         warmup_seconds: 0,
         measurement_seconds: elapsed.max(1.0).round() as u64,
         run_duration_seconds: elapsed,

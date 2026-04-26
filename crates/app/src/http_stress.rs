@@ -96,6 +96,17 @@ pub enum HttpWorkloadShape {
     SingleHotKey,
 }
 
+impl HttpWorkloadShape {
+    /// Stable label used in reports and CLI-facing output.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unique => "unique",
+            Self::HotSet(_) => "hot-set",
+            Self::SingleHotKey => "single-hot-key",
+        }
+    }
+}
+
 /// External-process HTTP stress knobs with bounded steady-state controls.
 #[derive(Clone, Debug)]
 pub struct HttpStressConfig {
@@ -246,6 +257,7 @@ struct MetricSnapshot {
     ingress_depth_max: usize,
     shard_depth_max: usize,
     append_latency_p95_micros: u64,
+    ring_wait_p95_micros: u64,
     projection_lag: i64,
     outbox_lag: i64,
 }
@@ -253,6 +265,9 @@ struct MetricSnapshot {
 #[derive(Clone, Debug, Default)]
 struct MeasuredState {
     metrics: MetricSnapshot,
+    metrics_scrape_successes: u64,
+    metrics_scrape_failures: u64,
+    metrics_sample_count: u64,
     cpu_usage_samples: Vec<f32>,
     cpu_brand: String,
 }
@@ -449,12 +464,18 @@ pub async fn run_external_process_http_stress(
             .max(config.concurrency.min(counters.commands_submitted)),
         shard_depth_max: measured.metrics.shard_depth_max,
         append_latency_p95_micros: measured.metrics.append_latency_p95_micros,
+        ring_wait_p95_micros: measured.metrics.ring_wait_p95_micros,
         projection_lag: measured.metrics.projection_lag,
         outbox_lag: measured.metrics.outbox_lag,
+        metrics_scrape_successes: measured.metrics_scrape_successes,
+        metrics_scrape_failures: measured.metrics_scrape_failures,
+        metrics_sample_count: measured.metrics_sample_count,
         reject_rate,
         cpu_utilization_percent,
         core_count,
         profile_name: config.profile.as_str().to_string(),
+        workload_shape: config.workload_shape.as_str().to_string(),
+        hot_set_size: config.hot_set_size,
         warmup_seconds: config.warmup_seconds,
         measurement_seconds: config.measurement_seconds,
         run_duration_seconds,
@@ -617,24 +638,18 @@ fn spawn_metric_sampler(
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let deadline = Instant::now() + Duration::from_secs(measurement_seconds.max(1));
         let mut system = System::new_all();
+        let ring_wait_baseline = append_latency_baseline.clone();
 
         while Instant::now() < deadline {
             ticker.tick().await;
-            if let Ok(snapshot) =
-                scrape_metrics(&client, prometheus_addr, append_latency_baseline.as_deref()).await
-            {
-                let mut state = measured.lock().expect("metric sampler mutex poisoned");
-                state.metrics.ingress_depth_max = state
-                    .metrics
-                    .ingress_depth_max
-                    .max(snapshot.ingress_depth_max);
-                state.metrics.shard_depth_max =
-                    state.metrics.shard_depth_max.max(snapshot.shard_depth_max);
-                state.metrics.append_latency_p95_micros = snapshot.append_latency_p95_micros;
-                state.metrics.projection_lag =
-                    state.metrics.projection_lag.max(snapshot.projection_lag);
-                state.metrics.outbox_lag = state.metrics.outbox_lag.max(snapshot.outbox_lag);
-            }
+            let snapshot = scrape_metrics(
+                &client,
+                prometheus_addr,
+                append_latency_baseline.as_deref(),
+                ring_wait_baseline.as_deref(),
+            )
+            .await;
+            record_metrics_scrape_result(&measured, snapshot);
 
             system.refresh_cpu_usage();
             let usage = system.global_cpu_usage();
@@ -657,6 +672,7 @@ async fn scrape_metrics(
     client: &Client,
     prometheus_addr: SocketAddr,
     append_latency_baseline: Option<&str>,
+    ring_wait_baseline: Option<&str>,
 ) -> anyhow::Result<MetricSnapshot> {
     let body = scrape_metrics_body(client, prometheus_addr).await?;
 
@@ -678,9 +694,36 @@ async fn scrape_metrics(
                 )
             })
             .unwrap_or(0),
+        ring_wait_p95_micros: ring_wait_baseline
+            .and_then(|baseline| histogram_p95_delta_micros(baseline, &body, "es_ring_wait_seconds", None))
+            .unwrap_or(0),
         projection_lag,
         outbox_lag,
     })
+}
+
+fn record_metrics_scrape_result(
+    measured: &Arc<Mutex<MeasuredState>>,
+    snapshot: anyhow::Result<MetricSnapshot>,
+) {
+    let mut state = measured.lock().expect("metric sampler mutex poisoned");
+    match snapshot {
+        Ok(snapshot) => {
+            state.metrics_scrape_successes += 1;
+            state.metrics_sample_count += 1;
+            state.metrics.ingress_depth_max =
+                state.metrics.ingress_depth_max.max(snapshot.ingress_depth_max);
+            state.metrics.shard_depth_max = state.metrics.shard_depth_max.max(snapshot.shard_depth_max);
+            state.metrics.append_latency_p95_micros = snapshot.append_latency_p95_micros;
+            state.metrics.ring_wait_p95_micros = snapshot.ring_wait_p95_micros;
+            state.metrics.projection_lag = state.metrics.projection_lag.max(snapshot.projection_lag);
+            state.metrics.outbox_lag = state.metrics.outbox_lag.max(snapshot.outbox_lag);
+        }
+        Err(_) => {
+            state.metrics_scrape_failures += 1;
+            state.metrics_sample_count += 1;
+        }
+    }
 }
 
 async fn scrape_metrics_body(
@@ -1216,10 +1259,16 @@ es_append_latency_seconds_count{outcome="committed"} 30
         assert!(report.p50_micros <= report.p95_micros);
         assert!(report.p95_micros <= report.p99_micros);
         assert!(report.p99_micros <= report.max_micros);
+        assert_eq!(
+            report.metrics_sample_count,
+            report.metrics_scrape_successes + report.metrics_scrape_failures
+        );
         assert!(report.projection_lag >= 0);
         assert!(report.outbox_lag >= 0);
         assert!((0.0..=1.0).contains(&report.reject_rate));
         assert_eq!("smoke", report.profile_name);
+        assert_eq!("unique", report.workload_shape);
+        assert_eq!(None, report.hot_set_size);
         assert!(report.run_duration_seconds > 0.0);
         assert_eq!(2, report.concurrency);
         assert_eq!(
@@ -1253,12 +1302,18 @@ es_append_latency_seconds_count{outcome="committed"} 30
             ingress_depth_max: 1,
             shard_depth_max: 1,
             append_latency_p95_micros: 1,
+            ring_wait_p95_micros: 1,
             projection_lag: 0,
             outbox_lag: 0,
+            metrics_scrape_successes: 1,
+            metrics_scrape_failures: 0,
+            metrics_sample_count: 1,
             reject_rate: 0.0,
             cpu_utilization_percent: 0.0,
             core_count: 1,
             profile_name: "smoke".to_string(),
+            workload_shape: "unique".to_string(),
+            hot_set_size: None,
             warmup_seconds: 1,
             measurement_seconds: 2,
             run_duration_seconds: 2.0,

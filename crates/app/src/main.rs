@@ -19,12 +19,18 @@ fn stress_report_json(report: &app::stress::StressReport) -> serde_json::Value {
         "ingress_depth_max": report.ingress_depth_max,
         "shard_depth_max": report.shard_depth_max,
         "append_latency_p95_micros": report.append_latency_p95_micros,
+        "ring_wait_p95_micros": report.ring_wait_p95_micros,
         "projection_lag": report.projection_lag,
         "outbox_lag": report.outbox_lag,
+        "metrics_scrape_successes": report.metrics_scrape_successes,
+        "metrics_scrape_failures": report.metrics_scrape_failures,
+        "metrics_sample_count": report.metrics_sample_count,
         "reject_rate": report.reject_rate,
         "cpu_utilization_percent": report.cpu_utilization_percent,
         "core_count": report.core_count,
         "profile_name": report.profile_name,
+        "workload_shape": report.workload_shape,
+        "hot_set_size": report.hot_set_size,
         "warmup_seconds": report.warmup_seconds,
         "measurement_seconds": report.measurement_seconds,
         "run_duration_seconds": report.run_duration_seconds,
@@ -235,12 +241,18 @@ mod tests {
             ingress_depth_max: 2,
             shard_depth_max: 1,
             append_latency_p95_micros: 50,
+            ring_wait_p95_micros: 60,
             projection_lag: 0,
             outbox_lag: 0,
+            metrics_scrape_successes: 7,
+            metrics_scrape_failures: 1,
+            metrics_sample_count: 8,
             reject_rate: 0.25,
             cpu_utilization_percent: 11.0,
             core_count: 8,
             profile_name: "smoke".to_string(),
+            workload_shape: "hot-set".to_string(),
+            hot_set_size: Some(4),
             warmup_seconds: 1,
             measurement_seconds: 2,
             run_duration_seconds: 2.0,
@@ -256,10 +268,16 @@ mod tests {
         let json = stress_report_json(&report);
 
         assert_eq!("smoke", json["profile_name"]);
+        assert_eq!("hot-set", json["workload_shape"]);
+        assert_eq!(4, json["hot_set_size"]);
         assert_eq!(1, json["warmup_seconds"]);
         assert_eq!(2, json["measurement_seconds"]);
         assert_eq!(2.0, json["run_duration_seconds"]);
         assert_eq!(2, json["concurrency"]);
+        assert_eq!(60, json["ring_wait_p95_micros"]);
+        assert_eq!(7, json["metrics_scrape_successes"]);
+        assert_eq!(1, json["metrics_scrape_failures"]);
+        assert_eq!(8, json["metrics_sample_count"]);
         assert_eq!(
             "stop-new-requests-then-drain-in-flight",
             json["deadline_policy"]
