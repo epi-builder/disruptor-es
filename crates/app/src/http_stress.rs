@@ -644,6 +644,14 @@ fn app_binary() -> anyhow::Result<PathBuf> {
     }
 
     let current_exe = env::current_exe().context("locating current executable for app binary")?;
+    if current_exe
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "app")
+    {
+        return Ok(current_exe);
+    }
+
     let debug_dir = current_exe
         .parent()
         .and_then(|deps| deps.parent())

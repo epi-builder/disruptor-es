@@ -1,35 +1,106 @@
 //! Thin binary shell for runnable service and stress-smoke entrypoints.
 
+use anyhow::{Context, anyhow, bail};
+
 const HTTP_STRESS_USAGE: &str = "usage: app serve | app stress-smoke | app http-stress [--profile smoke|baseline|burst|hot-key] [--warmup-seconds <u64>] [--measure-seconds <u64>] [--concurrency <usize>] [--command-count <usize>] [--shard-count <usize>] [--ingress-capacity <usize>] [--ring-size <usize>]";
 
+fn stress_report_json(report: &app::stress::StressReport) -> serde_json::Value {
+    serde_json::json!({
+        "scenario": report.scenario.as_str(),
+        "commands_submitted": report.commands_submitted,
+        "commands_succeeded": report.commands_succeeded,
+        "commands_rejected": report.commands_rejected,
+        "commands_failed": report.commands_failed,
+        "throughput_per_second": report.throughput_per_second,
+        "p50_micros": report.p50_micros,
+        "p95_micros": report.p95_micros,
+        "p99_micros": report.p99_micros,
+        "max_micros": report.max_micros,
+        "ingress_depth_max": report.ingress_depth_max,
+        "shard_depth_max": report.shard_depth_max,
+        "append_latency_p95_micros": report.append_latency_p95_micros,
+        "projection_lag": report.projection_lag,
+        "outbox_lag": report.outbox_lag,
+        "reject_rate": report.reject_rate,
+        "cpu_utilization_percent": report.cpu_utilization_percent,
+        "core_count": report.core_count,
+        "profile_name": report.profile_name,
+        "warmup_seconds": report.warmup_seconds,
+        "measurement_seconds": report.measurement_seconds,
+        "run_duration_seconds": report.run_duration_seconds,
+        "concurrency": report.concurrency,
+        "deadline_policy": report.deadline_policy,
+        "drain_timeout_seconds": report.drain_timeout_seconds,
+        "host_os": report.host_os,
+        "host_arch": report.host_arch,
+        "cpu_brand": report.cpu_brand,
+        "cpu_usage_samples": report.cpu_usage_samples,
+    })
+}
+
 fn print_stress_report(report: &app::stress::StressReport) {
-    println!(
-        "{}",
-        serde_json::json!({
-            "scenario": report.scenario.as_str(),
-            "commands_submitted": report.commands_submitted,
-            "commands_succeeded": report.commands_succeeded,
-            "commands_rejected": report.commands_rejected,
-            "throughput_per_second": report.throughput_per_second,
-            "p50_micros": report.p50_micros,
-            "p95_micros": report.p95_micros,
-            "p99_micros": report.p99_micros,
-            "ingress_depth_max": report.ingress_depth_max,
-            "shard_depth_max": report.shard_depth_max,
-            "append_latency_p95_micros": report.append_latency_p95_micros,
-            "projection_lag": report.projection_lag,
-            "outbox_lag": report.outbox_lag,
-            "reject_rate": report.reject_rate,
-            "cpu_utilization_percent": report.cpu_utilization_percent,
-            "core_count": report.core_count,
-        })
-    );
+    println!("{}", stress_report_json(report));
+}
+
+fn parse_profile(value: &str) -> anyhow::Result<app::http_stress::HttpStressProfile> {
+    match value {
+        "smoke" => Ok(app::http_stress::HttpStressProfile::Smoke),
+        "baseline" => Ok(app::http_stress::HttpStressProfile::Baseline),
+        "burst" => Ok(app::http_stress::HttpStressProfile::Burst),
+        "hot-key" => Ok(app::http_stress::HttpStressProfile::HotKey),
+        _ => bail!("invalid value for --profile: {value}\n{HTTP_STRESS_USAGE}"),
+    }
+}
+
+fn parse_usize_flag(flag: &str, value: &str) -> anyhow::Result<usize> {
+    value
+        .parse::<usize>()
+        .with_context(|| format!("invalid value for {flag}: {value}\n{HTTP_STRESS_USAGE}"))
+}
+
+fn parse_u64_flag(flag: &str, value: &str) -> anyhow::Result<u64> {
+    value
+        .parse::<u64>()
+        .with_context(|| format!("invalid value for {flag}: {value}\n{HTTP_STRESS_USAGE}"))
+}
+
+fn parse_http_stress_args<I, S>(args: I) -> anyhow::Result<app::http_stress::HttpStressConfig>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut remaining = args.into_iter();
+    let mut config = app::http_stress::HttpStressConfig::smoke();
+
+    while let Some(flag) = remaining.next() {
+        let flag = flag.as_ref();
+        let raw_value = remaining
+            .next()
+            .ok_or_else(|| anyhow!("missing value for {flag}\n{HTTP_STRESS_USAGE}"))?;
+        let value = raw_value.as_ref();
+
+        match flag {
+            "--profile" => {
+                config = app::http_stress::HttpStressConfig::from_profile(parse_profile(value)?);
+            }
+            "--warmup-seconds" => config.warmup_seconds = parse_u64_flag(flag, value)?,
+            "--measure-seconds" => config.measurement_seconds = parse_u64_flag(flag, value)?,
+            "--concurrency" => config.concurrency = parse_usize_flag(flag, value)?,
+            "--command-count" => config.command_count = parse_usize_flag(flag, value)?,
+            "--shard-count" => config.shard_count = parse_usize_flag(flag, value)?,
+            "--ingress-capacity" => config.ingress_capacity = parse_usize_flag(flag, value)?,
+            "--ring-size" => config.ring_size = parse_usize_flag(flag, value)?,
+            _ => bail!("unknown flag: {flag}\n{HTTP_STRESS_USAGE}"),
+        }
+    }
+
+    config.validate()?;
+    Ok(config)
 }
 
 #[cfg(test)]
 mod tests {
     use app::{
-        http_stress::HttpStressProfile,
         stress::{StressReport, StressScenario},
     };
 
@@ -142,7 +213,10 @@ mod tests {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    match std::env::args().nth(1).as_deref() {
+    let mut args = std::env::args();
+    let _ = args.next();
+
+    match args.next().as_deref() {
         Some("serve") => app::serve::run_from_env().await,
         Some("stress-smoke") => {
             let report =
@@ -151,15 +225,13 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Some("http-stress") => {
-            let report = app::http_stress::run_external_process_http_stress(
-                app::http_stress::HttpStressConfig::smoke(),
-            )
-            .await?;
+            let config = parse_http_stress_args(args)?;
+            let report = app::http_stress::run_external_process_http_stress(config).await?;
             print_stress_report(&report);
             Ok(())
         }
         _ => {
-            println!("usage: app serve | app stress-smoke | app http-stress");
+            println!("{HTTP_STRESS_USAGE}");
             Ok(())
         }
     }
