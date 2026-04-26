@@ -964,6 +964,21 @@ mod tests {
         }
     }
 
+    #[test]
+    fn http_stress_bench_config_reuses_smoke_profile_defaults() {
+        let smoke = HttpStressConfig::from_profile(HttpStressProfile::Smoke);
+        let bench = HttpStressConfig::bench();
+
+        assert_eq!(smoke.profile, bench.profile);
+        assert_eq!(smoke.warmup_seconds, bench.warmup_seconds);
+        assert_eq!(smoke.measurement_seconds, bench.measurement_seconds);
+        assert_eq!(smoke.command_count, bench.command_count);
+        assert_eq!(smoke.concurrency, bench.concurrency);
+        assert_eq!(smoke.shard_count, bench.shard_count);
+        assert_eq!(smoke.ingress_capacity, bench.ingress_capacity);
+        assert_eq!(smoke.ring_size, bench.ring_size);
+    }
+
     #[tokio::test]
     async fn external_process_http_stress_smoke() -> anyhow::Result<()> {
         let report = run_external_process_http_stress(HttpStressConfig::smoke()).await?;
