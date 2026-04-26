@@ -256,10 +256,12 @@ Plans:
   4. Updated stress output includes before/after or baseline/comparison evidence with throughput, p50/p95/p99/max latency, reject/error counts, queue depth, append latency, and relevant resource metadata.
   5. Documentation explains the remaining performance ceiling and separates disruptor/ring capability from full-service throughput limits such as durable PostgreSQL append, HTTP overhead, or configured backpressure.
 **Depends on:** Phase 13
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 13.1 to break down)
+- [ ] 13.1-01-PLAN.md — Refactor the runtime to run one worker per shard and add a safe `ExpectedRevision::NoStream` cold-cache fast path.
+- [ ] 13.1-02-PLAN.md — Fix the live HTTP harness so it can saturate offered load, model true hot-key traffic, and report trustworthy scrape diagnostics.
+- [ ] 13.1-03-PLAN.md — Add one repeatable layer-comparison script and update docs that explain the resulting throughput ceiling.
 
 ### Phase 14: Milestone Debt Closure and Archive Sign-Off
 
