@@ -238,9 +238,10 @@ Plans:
   3. Reports include sustained throughput, p50/p95/p99/max latency, success/error/reject counts, reject rate, append latency, ingress/shard depth, projection lag, outbox lag, CPU/core count, run duration, concurrency, and environment metadata.
   4. The stress lane supports at least smoke, baseline, burst, and hot-key style profiles without conflating them with Criterion microbenchmarks.
   5. Documentation explains how to interpret steady-state live HTTP results separately from Phase 12 external-process smoke benchmarks and in-process integrated stress.
-**Plans**: 0 plans
+**Plans**: 2 plans
 Plans:
-- [ ] TBD (run /gsd-plan-phase 13 to break down)
+- [ ] 13-01-PLAN.md — Add bounded steady-state live HTTP runner semantics with warmup/measurement separation and measured-window reporting.
+- [ ] 13-02-PLAN.md — Add configurable `app http-stress` CLI, keep Criterion secondary, and document Phase 13 steady-state interpretation.
 
 ### Phase 14: Milestone Debt Closure and Archive Sign-Off
 
