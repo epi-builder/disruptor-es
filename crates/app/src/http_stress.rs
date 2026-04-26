@@ -1060,9 +1060,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        HttpStressConfig, HttpStressProfile, HttpWorkloadShape, MeasuredState,
+        HttpStressConfig, HttpStressProfile, HttpWorkloadShape, MeasuredState, MetricSnapshot,
         canonical_place_order_request, histogram_p95_delta_micros, record_metrics_scrape_result,
-        request_identity_for_index, run_external_process_http_stress,
+        request_identity_for_index, run_external_process_http_stress, stress_report_from_measured,
     };
     use crate::stress::StressScenario;
     use std::sync::{Arc, Mutex};
@@ -1116,6 +1116,31 @@ mod tests {
         assert_eq!(0, state.metrics_scrape_successes);
         assert_eq!(1, state.metrics_scrape_failures);
         assert_eq!(1, state.metrics_sample_count);
+    }
+
+    #[test]
+    fn observed_ingress_depth_is_not_synthesized_from_concurrency() {
+        let config = HttpStressConfig::from_profile(HttpStressProfile::Smoke);
+        let measured = MeasuredState {
+            metrics: MetricSnapshot {
+                ingress_depth_max: 0,
+                shard_depth_max: 3,
+                append_latency_p95_micros: 55,
+                ring_wait_p95_micros: 34,
+                projection_lag: 2,
+                outbox_lag: 1,
+            },
+            metrics_scrape_successes: 0,
+            metrics_scrape_failures: 2,
+            metrics_sample_count: 2,
+            cpu_usage_samples: vec![10.0],
+            cpu_brand: "test-cpu".to_string(),
+        };
+
+        let report = stress_report_from_measured(&config, &measured, 2.0, 7, 5, 1, 1, 3);
+
+        assert_eq!(None, report.ingress_depth_max);
+        assert_eq!(Some(2), report.ingress_depth_estimated_max);
     }
 
     #[test]
@@ -1299,12 +1324,13 @@ es_append_latency_seconds_count{outcome="committed"} 30
             p95_micros: 1,
             p99_micros: 1,
             max_micros: 1,
-            ingress_depth_max: 1,
-            shard_depth_max: 1,
-            append_latency_p95_micros: 1,
-            ring_wait_p95_micros: 1,
-            projection_lag: 0,
-            outbox_lag: 0,
+            ingress_depth_max: Some(1),
+            ingress_depth_estimated_max: None,
+            shard_depth_max: Some(1),
+            append_latency_p95_micros: Some(1),
+            ring_wait_p95_micros: Some(1),
+            projection_lag: Some(0),
+            outbox_lag: Some(0),
             metrics_scrape_successes: 1,
             metrics_scrape_failures: 0,
             metrics_sample_count: 1,
@@ -1313,6 +1339,7 @@ es_append_latency_seconds_count{outcome="committed"} 30
             core_count: 1,
             profile_name: "smoke".to_string(),
             workload_shape: "unique".to_string(),
+            workload_purpose: "success-throughput".to_string(),
             hot_set_size: None,
             warmup_seconds: 1,
             measurement_seconds: 2,

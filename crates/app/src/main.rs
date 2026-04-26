@@ -238,12 +238,13 @@ mod tests {
             p95_micros: 20,
             p99_micros: 30,
             max_micros: 40,
-            ingress_depth_max: 2,
-            shard_depth_max: 1,
-            append_latency_p95_micros: 50,
-            ring_wait_p95_micros: 60,
-            projection_lag: 0,
-            outbox_lag: 0,
+            ingress_depth_max: Some(2),
+            ingress_depth_estimated_max: None,
+            shard_depth_max: Some(1),
+            append_latency_p95_micros: Some(50),
+            ring_wait_p95_micros: Some(60),
+            projection_lag: Some(0),
+            outbox_lag: Some(0),
             metrics_scrape_successes: 7,
             metrics_scrape_failures: 1,
             metrics_sample_count: 8,
@@ -252,6 +253,7 @@ mod tests {
             core_count: 8,
             profile_name: "smoke".to_string(),
             workload_shape: "hot-set".to_string(),
+            workload_purpose: "repeat-stream-diagnostic".to_string(),
             hot_set_size: Some(4),
             warmup_seconds: 1,
             measurement_seconds: 2,
@@ -291,6 +293,64 @@ mod tests {
             2,
             json["cpu_usage_samples"].as_array().expect("array").len()
         );
+    }
+
+    #[test]
+    fn stress_report_json_separates_estimated_ingress_depth() {
+        let report = StressReport {
+            scenario: StressScenario::ExternalProcessHttp,
+            commands_submitted: 16,
+            commands_succeeded: 12,
+            commands_rejected: 3,
+            commands_failed: 1,
+            throughput_per_second: 6.0,
+            p50_micros: 10,
+            p95_micros: 20,
+            p99_micros: 30,
+            max_micros: 40,
+            ingress_depth_max: None,
+            ingress_depth_estimated_max: Some(8),
+            shard_depth_max: None,
+            append_latency_p95_micros: None,
+            ring_wait_p95_micros: None,
+            projection_lag: None,
+            outbox_lag: None,
+            metrics_scrape_successes: 0,
+            metrics_scrape_failures: 1,
+            metrics_sample_count: 1,
+            reject_rate: 0.25,
+            cpu_utilization_percent: 11.0,
+            core_count: 8,
+            profile_name: "smoke".to_string(),
+            workload_shape: "hot-set".to_string(),
+            workload_purpose: "repeat-stream-diagnostic".to_string(),
+            hot_set_size: Some(4),
+            warmup_seconds: 1,
+            measurement_seconds: 2,
+            run_duration_seconds: 2.0,
+            concurrency: 8,
+            deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
+            drain_timeout_seconds: 5,
+            host_os: "macos",
+            host_arch: "aarch64",
+            cpu_brand: "test-cpu".to_string(),
+            cpu_usage_samples: vec![10.0, 11.0],
+        };
+
+        let json = stress_report_json(&report);
+
+        assert!(json["ingress_depth_max"].is_null());
+        assert_eq!(8, json["ingress_depth_estimated_max"]);
+    }
+
+    #[test]
+    fn repeated_stream_shapes_are_marked_diagnostic_only() {
+        let hot_set = app::stress::workload_purpose_for_shape(app::http_stress::HttpWorkloadShape::HotSet(8));
+        let single_hot_key =
+            app::stress::workload_purpose_for_shape(app::http_stress::HttpWorkloadShape::SingleHotKey);
+
+        assert_eq!("repeat-stream-diagnostic", hot_set);
+        assert_eq!("repeat-stream-diagnostic", single_hot_key);
     }
 
     #[test]
