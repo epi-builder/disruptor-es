@@ -21,17 +21,39 @@ Layer benchmarks isolate one cost center at a time:
 
 These benchmarks are diagnostic. Use them to identify which layer changed after a code or schema edit. They are not a replacement for single-service integrated stress.
 
-## Single-Service Integrated Stress
+## In-Process Integrated Stress
 
-Single-service integrated stress includes adapter DTO work, bounded ingress, runtime execution, append behavior, projection lag, and outbox lag in one process.
+In-process integrated stress includes adapter DTO work, bounded ingress, runtime execution, append behavior, projection lag, and outbox lag in one process.
 
-The `app stress-smoke` path drives the production-shaped composition: bounded `CommandGateway`, `CommandEngine`, shard execution, PostgreSQL event store, projection store, outbox store, and lag sampling. Command success is counted from durable command replies after append. Projection and outbox lag are sampled after command replies so they remain visible without becoming command success gates.
+The `app stress-smoke` path drives the production-shaped composition in-process: bounded `CommandGateway`, `CommandEngine`, shard execution, PostgreSQL event store, projection store, outbox store, and lag sampling. Command success is counted from durable command replies after append. Projection and outbox lag are sampled after command replies so they remain visible without becoming command success gates.
 
-Integrated stress is the right local signal for template shape, queue pressure, reject behavior, and whether single-owner hot state plus durable append still fit together under realistic load.
+In-process integrated stress is the right local signal for template shape, queue pressure, reject behavior, and whether single-owner hot state plus durable append still fit together under realistic load.
+
+## External-Process HTTP Stress And Benchmark
+
+External-process HTTP measurements launch the real `app serve` binary, then submit canonical order commands over HTTP from outside that process. This is the archive-facing lane for client plus service-process overhead.
+
+Use:
+
+- `cargo run -p app -- http-stress`
+- `cargo bench --bench external_process_http -- --sample-size 10`
+
+These runs are intentionally separate from `app stress-smoke`. The external-process lane reuses the same required report fields and adds real HTTP client, process boundary, socket, and server bootstrap overhead. Record `throughput_per_second`, `p50_micros`, `p95_micros`, `p99_micros`, `ingress_depth_max`, `shard_depth_max`, `append_latency_p95_micros`, `projection_lag`, `outbox_lag`, `reject_rate`, `cpu_utilization_percent`, and `core_count` alongside host, commit, and configuration metadata.
+
+## Runnable HTTP Service vs. In-Process Stress
+
+`app serve` is now the official executable HTTP service path. It boots the real `adapter_http::router(HttpState)` surface, exposes `/healthz`, and is the process Phase 12 should drive for external-process smoke, E2E, stress, and benchmark work.
+
+`app stress-smoke` is still valuable, but it is **not** the same thing as `app serve`:
+
+- `app serve` = long-lived HTTP server process used for readiness probes and real-process client traffic
+- `app stress-smoke` = in-process integrated harness used to measure production-shaped composition without external HTTP client/process overhead
+
+Keep these labels explicit in reports so in-process results are not presented as external-process HTTP end-to-end measurements.
 
 ## Required Report Fields
 
-Every integrated stress report should include these fields:
+Every in-process integrated or external-process HTTP stress report should include these fields:
 
 - `throughput_per_second`
 - `p50_micros`

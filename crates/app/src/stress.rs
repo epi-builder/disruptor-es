@@ -40,8 +40,10 @@ use uuid::Uuid;
 pub enum StressScenario {
     /// Bounded runtime, event-store append, projection, and outbox composition in one process.
     SingleServiceIntegrated,
-    /// Full in-process path including projection and outbox sampling after command replies.
-    FullE2eInProcess,
+    /// In-process integrated path including projection and outbox sampling after command replies.
+    InProcessIntegrated,
+    /// External-process HTTP traffic sent through the real `app serve` binary boundary.
+    ExternalProcessHttp,
     /// Hot-key-shaped traffic using a narrow tenant/key spread.
     HotKey,
     /// Burst traffic that can overrun bounded ingress and record rejects.
@@ -504,10 +506,18 @@ fn metadata(tenant_id: TenantId) -> CommandMetadata {
 fn scenario_name(scenario: StressScenario) -> &'static str {
     match scenario {
         StressScenario::SingleServiceIntegrated => "single-service",
-        StressScenario::FullE2eInProcess => "full-e2e",
+        StressScenario::InProcessIntegrated => "in-process-integrated",
+        StressScenario::ExternalProcessHttp => "external-process-http",
         StressScenario::HotKey => "hot-key",
         StressScenario::Burst => "burst",
         StressScenario::DegradedDependency => "degraded-dependency",
+    }
+}
+
+impl StressScenario {
+    /// Stable scenario label for CLI and report output.
+    pub fn as_str(self) -> &'static str {
+        scenario_name(self)
     }
 }
 
@@ -685,14 +695,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn full_e2e_in_process_stress_smoke() -> anyhow::Result<()> {
+    async fn in_process_integrated_stress_smoke() -> anyhow::Result<()> {
         let report = run_single_service_stress(StressConfig {
-            scenario: StressScenario::FullE2eInProcess,
+            scenario: StressScenario::InProcessIntegrated,
             ..StressConfig::smoke()
         })
         .await?;
 
-        assert_eq!(StressScenario::FullE2eInProcess, report.scenario);
+        assert_eq!(StressScenario::InProcessIntegrated, report.scenario);
         assert!(report.commands_submitted > 0);
         Ok(())
     }

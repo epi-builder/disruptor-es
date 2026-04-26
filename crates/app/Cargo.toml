@@ -6,9 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+adapter-http = { path = "../adapter-http" }
 anyhow.workspace = true
+axum.workspace = true
 hdrhistogram.workspace = true
 es-core = { path = "../es-core" }
+es-kernel = { path = "../es-kernel" }
 es-outbox = { path = "../es-outbox" }
 es-projection = { path = "../es-projection" }
 es-runtime = { path = "../es-runtime" }
@@ -20,6 +23,7 @@ metrics-exporter-prometheus.workspace = true
 opentelemetry.workspace = true
 opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
@@ -32,9 +36,6 @@ tracing.workspace = true
 tracing-opentelemetry.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
-
-[dev-dependencies]
-adapter-http = { path = "../adapter-http" }
 
 [lints]
 workspace = true

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-04-19T22:30:39.035Z"
-last_activity: 2026-04-19 -- Phase 10 planning complete
+status: planning
+stopped_at: Ready to plan 13-live-external-process-http-steady-state-stress-testing
+last_updated: "2026-04-26T00:00:00+09:00"
+last_activity: 2026-04-26 -- Phase 13/14 planning order reconciled
 progress:
-  total_phases: 11
-  completed_phases: 9
-  total_plans: 36
-  completed_plans: 35
-  percent: 97
+  total_phases: 14
+  completed_phases: 12
+  total_plans: 42
+  completed_plans: 40
+  percent: 86
 ---
 
 # Project State
@@ -21,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-19)
 
 **Core value:** Provide a reusable, production-shaped Rust service template where committed events are the source of truth and `disruptor-rs` is used only as the in-process ordered execution engine.
-**Current focus:** Phase 10 — duplicate-safe-process-manager-follow-up-keys
+**Current focus:** Phase 13 — live-external-process-http-steady-state-stress-testing
 
 ## Current Position
 
-Phase: 10
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-19 -- Phase 10 planning complete
+Phase: 13 (live-external-process-http-steady-state-stress-testing) — PLANNING
+Plan: 0 of 0
+Status: Not planned yet
+Last activity: 2026-04-26 -- Phase 13/14 planning order reconciled
 
-Progress: [██████████] 100%
+Progress: [█████████░] 86%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 35
+- Total plans completed: 40
 - Average duration: N/A
 - Total execution time: 0.0 hours
 
@@ -53,6 +53,11 @@ Progress: [██████████] 100%
 | 07 | 7 | - | - |
 | 08 | 3 | - | - |
 | 09 | 1 | - | - |
+| 10 | 1 | - | - |
+| 11 | 2 | - | - |
+| 12 | 2 | - | - |
+| 13 | 0 | - | - |
+| 14 | 2 | - | - |
 
 **Recent Trend:**
 
@@ -82,6 +87,7 @@ Progress: [██████████] 100%
 | Phase 08-runtime-duplicate-command-replay P02 | 10min 5s | 2 tasks | 10 files |
 | Phase 08-runtime-duplicate-command-replay P03 | 10min 35s | 3 tasks | 7 files |
 | Phase 09-tenant-scoped-runtime-aggregate-cache P01 | 6min 29s | 3 tasks | 6 files |
+| Phase 12 P01 | session | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -153,16 +159,26 @@ Recent decisions affecting current work:
 - [Phase 08-runtime-duplicate-command-replay]: Phase 08 validation is recorded as requirement-level sampling because each plan contributes cross-cutting replay coverage.
 - [Phase 09-tenant-scoped-runtime-aggregate-cache]: Aggregate cache identity is a first-class AggregateCacheKey containing TenantId and StreamId. — Matches existing typed DedupeKey pattern and prevents stream-only cache hits from bypassing tenant-scoped rehydration.
 - [Phase 09-tenant-scoped-runtime-aggregate-cache]: ShardState constructs one AggregateCacheKey after duplicate replay misses and reuses it for cache hit, rehydration fill, and committed cache replacement. — Preserves Phase 8 duplicate replay ordering while keeping cache identity stable throughout a handoff.
+- [Phase 10-duplicate-safe-process-manager-follow-up-keys]: Process-manager reserve/release follow-up keys include manager name, source event ID, action, zero-based line index, and product ID. — Distinguishes duplicate same-product order lines without changing command payloads or coalescing semantics.
+- [Phase 10-duplicate-safe-process-manager-follow-up-keys]: Replay-aware process-manager tests persist replay records per exact idempotency key. — Duplicate-line retries now replay two original reserve outcomes while keeping order confirm replay at one append.
 
 ### Pending Todos
 
 - Milestone gap closure routing:
-  - Phase 09 completed tenant-scoped aggregate cache keys for non-duplicate commands that share a stream ID across tenants.
-  - Phase 10 remains pending for process-manager reserve/release idempotency keys with duplicate product lines.
+  - Phase 10 completed line-aware process-manager reserve/release idempotency keys and duplicate-line retry replay coverage.
+  - Phase 11 completed archive evidence recovery plus the official runnable HTTP service path and smoke coverage.
+  - Phase 12 completed canonical external-process HTTP E2E/stress/benchmark coverage.
+  - Phase 13 will add steady-state live HTTP stress testing that excludes startup/container overhead from performance estimates.
+  - Phase 14 will close milestone-critical validation and hardening work before archive sign-off.
+
+### Roadmap Evolution
+
+- Live External-Process HTTP Steady-State Stress Testing was added, then reordered to Phase 13 so it runs before milestone debt closure.
+- Milestone Debt Closure and Archive Sign-Off moved to Phase 14 as the final v1 archive gate.
 
 ### Blockers/Concerns
 
-None yet.
+Milestone closure now depends on Phases 11-14; no milestone-critical gap may remain as accepted debt at archive time.
 
 ## Quick Tasks Completed
 
@@ -170,6 +186,7 @@ None yet.
 |------|------------|---------|
 | 2026-04-18 | 260418-state-progress-reconciliation | Reconciled STATE.md progress, stopped_at, and session continuity after Phase 05 completion. |
 | 2026-04-18 | 260418-1pp-update-requirements-documentation-to-mar | Reconciled Phase 1 CORE requirement status in REQUIREMENTS.md with completed Phase 1 project and roadmap records. |
+| 2026-04-26 | 260426-phase-13-14-reorder | Reordered Phase 13/14 so live steady-state HTTP stress precedes final archive sign-off. |
 
 ## Deferred Items
 
@@ -181,6 +198,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-19T21:17:05.817Z
-Stopped at: Completed 09-01-PLAN.md
-Resume file: None
+Last session: 2026-04-26T00:00:00+09:00
+Stopped at: Ready to plan 13-live-external-process-http-steady-state-stress-testing
+Resume file: .planning/phases/13-live-external-process-http-steady-state-stress-testing

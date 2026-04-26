@@ -12,6 +12,8 @@ This roadmap delivers a Rust service template where committed events are the sou
 
 Decimal phases appear between their surrounding integers in numeric order.
 
+**Milestone closure policy:** milestone-critical gaps do not become accepted debt. If runnable HTTP composition, external-process HTTP verification, validation hygiene, or domain hardening turns out to be required for v1 acceptance, the roadmap expands with additional phases or reopens earlier phase artifacts until the gap is actually closed.
+
 - [x] **Phase 1: Workspace and Typed Kernel Contracts** - Developers can build the Rust workspace and define deterministic typed aggregate contracts. Completed 2026-04-16.
 - [x] **Phase 2: Durable Event Store Source of Truth** - Commands can persist committed events, metadata, dedupe records, snapshots, and global reads through the event store boundary. Completed 2026-04-17.
 - [x] **Phase 3: Local Command Runtime and Disruptor Execution** - Adapter requests flow through bounded local shards that own hot state and reply only after durable append. Completed 2026-04-17.
@@ -21,8 +23,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Adapters, Observability, Stress, and Template Guidance** - Thin APIs, metrics, integration tests, single-service stress tests, benchmarks, and documentation make the template credible. Completed 2026-04-19.
 - [x] **Phase 8: Runtime Duplicate Command Replay** - Duplicate command retries are replayed from runtime/store idempotency before aggregate decision so API and process-manager retries return the original committed result. Completed 2026-04-19.
 - [x] **Phase 9: Tenant-Scoped Runtime Aggregate Cache** - Shard-local aggregate cache entries include tenant identity so runtime hot state cannot bleed across tenant-scoped event-store streams. Completed 2026-04-19.
-- [ ] **Phase 10: Duplicate-Safe Process Manager Follow-Up Keys** - Process-manager reserve/release follow-up commands use collision-safe idempotency keys for duplicate product lines while preserving retry replay.
-- [ ] **Phase 11: v1 Archive Hygiene and HTTP E2E Debt** - Resolve accepted audit debt around runnable HTTP composition, HTTP-inclusive stress coverage, stale requirements traceability, validation hygiene, and advisory domain hardening.
+- [x] **Phase 10: Duplicate-Safe Process Manager Follow-Up Keys** - Process-manager reserve/release follow-up commands use collision-safe idempotency keys for duplicate product lines while preserving retry replay. Completed 2026-04-20.
+- [x] **Phase 11: Evidence Recovery and Runnable HTTP Service** - Restore the archive evidence chain, add the official `app serve` runtime entrypoint, and document how the real HTTP composition is started and smoke-tested. Completed 2026-04-21.
+- [x] **Phase 12: External-Process HTTP E2E, Stress, and Benchmark Closure** - Replace shortcut “full E2E” paths with external-process HTTP workloads that exercise the real serving path for end-to-end tests, stress runs, and benchmark baselines. (completed 2026-04-25)
+- [ ] **Phase 13: Live External-Process HTTP Steady-State Stress Testing** - Add a long-lived `app serve` HTTP stress lane that separates startup cost from steady-state request latency and throughput so live-service performance can be estimated from sustained load.
+- [ ] **Phase 14: Milestone Debt Closure and Archive Sign-Off** - Close every remaining milestone-critical validation and hardening gap, reopen earlier phase artifacts when needed, and rerun the final audit before v1 archive.
 
 ## Phase Details
 
@@ -188,25 +193,77 @@ Plans:
   4. App-level process-manager tests cover duplicate product lines and replayed follow-up processing.
 **Plans**: 1 plan
 Plans:
-- [ ] 10-01-PLAN.md — Add line-aware reserve/release follow-up keys and duplicate-line retry replay coverage.
+- [x] 10-01-PLAN.md — Add line-aware reserve/release follow-up keys and duplicate-line retry replay coverage.
 
-### Phase 11: v1 Archive Hygiene and HTTP E2E Debt
-**Goal**: Clean up non-blocking milestone audit debt so v1 can be archived with clear runnable service guidance, HTTP-inclusive stress coverage, current requirement traceability, validation hygiene, and advisory domain hardening.
+### Phase 11: Evidence Recovery and Runnable HTTP Service
+**Goal**: Rebuild the milestone evidence chain and make the HTTP adapter composition actually runnable so later external-process tests, stress runs, and benchmarks target an official `app serve` path instead of a route-only stub.
 **Depends on**: Phase 10
-**Requirements**: API-02, API-04, OBS-01, TEST-03, TEST-04, DOC-01
-**Gap Closure**: Addresses tech debt noted in `.planning/v1.0-MILESTONE-AUDIT.md` after the correctness blockers are closed.
+**Requirements**: API-02, API-04, OBS-01, DOC-01, TEST-04
+**Gap Closure**: Closes the missing Phase 10 verification artifact, stale archive traceability, and missing runnable HTTP server entrypoint from `.planning/v1.0-MILESTONE-AUDIT.md`.
 **Success Criteria** (what must be TRUE):
-  1. The app crate exposes a runnable HTTP service entrypoint or explicitly documents the accepted reason it remains out of scope.
-  2. Full E2E stress coverage exercises HTTP DTO decode, router, and error mapping, or records an explicit accepted-debt decision.
-  3. `REQUIREMENTS.md` checkboxes and traceability reflect current verification evidence for adapter boundaries, gateway docs, observability, benchmark coverage, and template documentation.
-  4. Validation hygiene for partial Nyquist phases is resolved or explicitly routed to accepted follow-up work.
-  5. Advisory aggregate lifecycle command ID hardening is implemented or recorded as accepted debt with rationale.
-**Plans**: TBD
+  1. Phase 10 gains a formal `10-VERIFICATION.md` artifact and the milestone evidence chain is consistent across roadmap, state, validation, verification, and summaries.
+  2. `REQUIREMENTS.md` traceability and checkboxes are reconciled with verified Phase 7/10 evidence for API-02, API-04, OBS-01, TEST-03, TEST-04, and DOC-01.
+  3. The app crate exposes an official `serve` entrypoint that starts the real HTTP router with bind/config wiring suitable for smoke tests and later external-process workloads.
+  4. Smoke coverage proves the server can be started and reached through the documented HTTP path without bypassing adapter composition.
+  5. Documentation explains how to launch, verify, and reuse the runnable HTTP path for later E2E, stress, and benchmark phases.
+**Plans**: 2 plans
+Plans:
+- [x] 11-01-PLAN.md — Restore the evidence chain by adding the missing Phase 10 verification artifact and reconciling archive traceability across REQUIREMENTS, ROADMAP, STATE, and milestone audit references.
+- [x] 11-02-PLAN.md — Add the official `app serve` entrypoint, startup/config wiring, smoke verification, and runnable-service documentation for the real HTTP adapter path.
+
+### Phase 12: External-Process HTTP E2E, Stress, and Benchmark Closure
+**Goal**: Prove the actual serving path under external-process HTTP workloads so end-to-end tests, stress scenarios, and benchmark baselines measure the executable service rather than in-process shortcuts.
+**Depends on**: Phase 11
+**Requirements**: API-01, API-03, TEST-03, TEST-04, OBS-02
+**Gap Closure**: Replaces the misleading `FullE2eInProcess` shortcut with external-process HTTP coverage that exercises DTO decode, router wiring, error mapping, and service-process overhead.
+**Success Criteria** (what must be TRUE):
+  1. Canonical E2E and stress workloads launch the real service process and drive it through an HTTP client instead of direct `CommandEnvelope` submission.
+  2. The previous in-process shortcut path is renamed, demoted, or removed so archive evidence no longer treats it as the representative full-E2E scenario.
+  3. External-process coverage measures throughput, p50/p95/p99 latency, queue depth, append latency, reject rate, and other required stress fields against the runnable HTTP path.
+  4. Benchmark artifacts clearly distinguish in-process component microbenchmarks from external-process HTTP end-to-end baselines.
+  5. Documentation explains how to run the external-process E2E/stress harness and how its results differ from single-process integrated and ring-only measurements.
+**Plans**: 2 plans
+Plans:
+- [x] 12-01-PLAN.md — Build the external-process HTTP harness and canonical request scenarios for E2E verification through the real `app serve` entrypoint.
+- [x] 12-02-PLAN.md — Replace misleading full-E2E naming, add external-process stress/benchmark coverage, and document how to interpret the resulting measurements.
+
+### Phase 13: Live External-Process HTTP Steady-State Stress Testing
+**Goal**: Add a live-service HTTP stress lane that starts `app serve` once, warms it up, drives sustained external HTTP load for a configurable duration/concurrency profile, and reports steady-state throughput, latency percentiles, error/reject rates, and resource/lag signals without including startup/container setup time in the measured loop.
+**Depends on**: Phase 12
+**Requirements**: TEST-03, TEST-04, OBS-02
+**Gap Closure**: Closes the measurement gap where Phase 12 external-process benchmark numbers include container startup and service boot overhead, making them useful as smoke evidence but misleading as live steady-state performance estimates.
+**Success Criteria** (what must be TRUE):
+  1. Developer can run a documented external-process HTTP stress command that keeps one `app serve` process alive across warmup and measurement windows.
+  2. The measured interval excludes PostgreSQL container startup, service process boot, migration, readiness probing, and benchmark harness compilation.
+  3. Reports include sustained throughput, p50/p95/p99/max latency, success/error/reject counts, reject rate, append latency, ingress/shard depth, projection lag, outbox lag, CPU/core count, run duration, concurrency, and environment metadata.
+  4. The stress lane supports at least smoke, baseline, burst, and hot-key style profiles without conflating them with Criterion microbenchmarks.
+  5. Documentation explains how to interpret steady-state live HTTP results separately from Phase 12 external-process smoke benchmarks and in-process integrated stress.
+**Plans**: 0 plans
+Plans:
+- [ ] TBD (run /gsd-plan-phase 13 to break down)
+
+### Phase 14: Milestone Debt Closure and Archive Sign-Off
+
+**Goal:** Finish every remaining milestone-critical validation and hardening task, even when that requires reopening prior phase artifacts, so v1 archive happens with no known goal-critical debt still parked outside the closure path.
+**Requirements**: STORE-03, RUNTIME-05, DOM-04, DOM-05, INT-04, TEST-02
+**Gap Closure**: Resolves partial Nyquist validation and any milestone-critical commerce lifecycle hardening still standing after the HTTP/evidence work is done.
+**Depends on:** Phase 13
+**Success Criteria** (what must be TRUE):
+  1. Partial Nyquist phases 02, 04, 06, and 07 are fully closed by new validation evidence or by reopening and repairing their underlying phase artifacts.
+  2. Commerce lifecycle command-ID hardening is implemented wherever milestone acceptance still depends on it, or the underlying risk is disproven by targeted verification so no open milestone debt remains.
+  3. Any earlier phase documents or code paths that must be revisited for milestone closure are updated in-place rather than deferred as accepted debt.
+  4. A refreshed milestone audit shows no archive blockers across runnable HTTP composition, external-process HTTP coverage, evidence traceability, validation hygiene, lifecycle hardening, or live steady-state HTTP performance evidence.
+  5. The roadmap, requirements, state, and phase artifacts all agree that v1 is archive-ready.
+**Plans:** 2 plans
+
+Plans:
+- [ ] 14-01-PLAN.md — Close partial Nyquist validation for Phases 02, 04, 06, and 07, reopening prior phase artifacts when validation gaps expose unfinished milestone work.
+- [ ] 14-02-PLAN.md — Implement or conclusively verify commerce lifecycle command-ID hardening, rerun the milestone audit, and record archive sign-off with zero milestone-critical accepted debt.
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -219,5 +276,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Adapters, Observability, Stress, and Template Guidance | 7/7 | Complete | 2026-04-19 |
 | 8. Runtime Duplicate Command Replay | 3/3 | Complete | 2026-04-19 |
 | 9. Tenant-Scoped Runtime Aggregate Cache | 1/1 | Complete | 2026-04-19 |
-| 10. Duplicate-Safe Process Manager Follow-Up Keys | 0/TBD | Pending | - |
-| 11. v1 Archive Hygiene and HTTP E2E Debt | 0/TBD | Pending | - |
+| 10. Duplicate-Safe Process Manager Follow-Up Keys | 1/1 | Complete | 2026-04-20 |
+| 11. Evidence Recovery and Runnable HTTP Service | 2/2 | Complete | 2026-04-21 |
+| 12. External-Process HTTP E2E, Stress, and Benchmark Closure | 2/2 | Complete   | 2026-04-25 |
+| 13. Live External-Process HTTP Steady-State Stress Testing | 0/0 | Pending | - |
+| 14. Milestone Debt Closure and Archive Sign-Off | 0/2 | Pending | - |

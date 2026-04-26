@@ -1,21 +1,10 @@
-//! Composition binary shell for later service wiring.
+//! Thin binary shell for runnable service and stress-smoke entrypoints.
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let Some(command) = std::env::args().nth(1) else {
-        println!("usage: app stress-smoke");
-        return Ok(());
-    };
-
-    if command != "stress-smoke" {
-        println!("usage: app stress-smoke");
-        return Ok(());
-    }
-
-    let report = app::stress::run_single_service_stress(app::stress::StressConfig::smoke()).await?;
+fn print_stress_report(report: &app::stress::StressReport) {
     println!(
         "{}",
         serde_json::json!({
+            "scenario": report.scenario.as_str(),
             "commands_submitted": report.commands_submitted,
             "commands_succeeded": report.commands_succeeded,
             "commands_rejected": report.commands_rejected,
@@ -33,6 +22,29 @@ async fn main() -> anyhow::Result<()> {
             "core_count": report.core_count,
         })
     );
+}
 
-    Ok(())
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    match std::env::args().nth(1).as_deref() {
+        Some("serve") => app::serve::run_from_env().await,
+        Some("stress-smoke") => {
+            let report =
+                app::stress::run_single_service_stress(app::stress::StressConfig::smoke()).await?;
+            print_stress_report(&report);
+            Ok(())
+        }
+        Some("http-stress") => {
+            let report = app::http_stress::run_external_process_http_stress(
+                app::http_stress::HttpStressConfig::smoke(),
+            )
+            .await?;
+            print_stress_report(&report);
+            Ok(())
+        }
+        _ => {
+            println!("usage: app serve | app stress-smoke | app http-stress");
+            Ok(())
+        }
+    }
 }

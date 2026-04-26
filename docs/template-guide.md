@@ -40,6 +40,80 @@ Follow `crates/adapter-http/src/commerce.rs`: request DTOs flatten common comman
 
 HTTP handlers should fail fast on invalid request data, overload, unavailable runtime, domain errors, and conflicts. The HTTP adapter owns JSON shape and status mapping; it does not own business state.
 
+## Run The Official Service
+
+The canonical runnable HTTP path is now:
+
+```bash
+cargo run -p app -- serve
+```
+
+By default the service listens on `127.0.0.1:3000`. Set `DATABASE_URL` before starting it, and override the listener or engine sizing through env vars when needed:
+
+```bash
+export DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+export APP_LISTEN_ADDR=127.0.0.1:3000
+cargo run -p app -- serve
+```
+
+The serve path is intentionally thin:
+
+1. initialize app observability
+2. connect PostgreSQL and run migrations
+3. build Postgres-backed `CommandEngine<Order|Product|User>` instances
+4. hand only `CommandGateway` clones into `adapter_http::HttpState`
+5. serve the official `adapter_http::router(state)` surface
+
+That keeps the adapter boundary intact: the binary owns composition and lifecycle, while the HTTP adapter still owns DTO decode, `CommandEnvelope` creation, gateway submission, and JSON success/error mapping.
+
+### Readiness / Smoke Probe
+
+Use the stable readiness endpoint for smoke checks and later external-process harnesses:
+
+```bash
+curl -sf http://127.0.0.1:3000/healthz
+```
+
+A minimal command-path smoke after readiness is:
+
+```bash
+curl -sf http://127.0.0.1:3000/commands/orders/place \
+  -H 'content-type: application/json' \
+  -d '{
+    "tenant_id": "tenant-a",
+    "idempotency_key": "smoke-place-1",
+    "order_id": "order-smoke-1",
+    "user_id": "user-smoke-1",
+    "user_active": true,
+    "lines": [{
+      "product_id": "product-smoke-1",
+      "sku": "SKU-SMOKE-1",
+      "quantity": 1,
+      "product_available": true
+    }]
+  }'
+```
+
+`app serve` is the executable service path for smoke and later external-process work. `app stress-smoke` is still useful, but it remains an in-process integrated harness rather than the canonical long-lived HTTP server process.
+
+## Run External-Process HTTP Coverage
+
+Phase 12 adds three distinct external-process lanes on top of `app serve`:
+
+- readiness smoke: `cargo test -p app serve_smoke -- --nocapture`
+- canonical E2E contracts: `cargo test -p app external_process_http -- --nocapture`
+- external-process stress: `cargo run -p app -- http-stress`
+- external-process benchmark: `cargo bench --bench external_process_http -- --sample-size 10`
+
+Keep the boundaries explicit when recording results:
+
+- `app serve` = long-lived service process
+- `serve_smoke` = narrow readiness plus one happy-path command probe
+- `app stress-smoke` = in-process integrated stress without external client/process overhead
+- `app http-stress` and `external_process_http` bench = external-process HTTP client/service baseline
+
+External-process stress and benchmark output must carry the same required report fields used in other archive-facing stress reports: `throughput_per_second`, `p95_micros`, `projection_lag`, `outbox_lag`, `reject_rate`, `cpu_utilization_percent`, and related percentile/depth fields described in [docs/stress-results.md](/Users/epikem/dev/projects/disruptor-es/docs/stress-results.md:1).
+
 ## WebSocket Gateway
 
 WebSocket and gRPC gateways should be thin ingress clients of CommandGateway plus read-model query APIs; they must not share hot aggregate state.
