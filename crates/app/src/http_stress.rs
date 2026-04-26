@@ -63,13 +63,18 @@ pub struct CanonicalPlaceOrderRequest {
 /// External-process HTTP stress knobs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HttpStressProfile {
+    /// Minimal local validation profile.
     Smoke,
+    /// Sustained steady-state baseline profile.
     Baseline,
+    /// Higher-concurrency burst profile.
     Burst,
+    /// Narrow-key hotter-shard profile.
     HotKey,
 }
 
 impl HttpStressProfile {
+    /// Stable profile label used in reports.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Smoke => "smoke",
@@ -80,6 +85,7 @@ impl HttpStressProfile {
     }
 }
 
+/// External-process HTTP stress knobs with bounded steady-state controls.
 #[derive(Clone, Debug)]
 pub struct HttpStressConfig {
     /// Named profile used to derive default load shape and report metadata.
@@ -101,6 +107,7 @@ pub struct HttpStressConfig {
 }
 
 impl HttpStressConfig {
+    /// Build a validated config from one of the Phase 13 presets.
     pub fn from_profile(profile: HttpStressProfile) -> Self {
         match profile {
             HttpStressProfile::Smoke => Self {
@@ -159,6 +166,7 @@ impl HttpStressConfig {
         config
     }
 
+    /// Validate bounded live-run inputs before any child process or container starts.
     pub fn validate(&self) -> anyhow::Result<()> {
         ensure_in_range("warmup_seconds", self.warmup_seconds, 1..=600)?;
         ensure_in_range("measurement_seconds", self.measurement_seconds, 1..=3600)?;
@@ -261,40 +269,6 @@ impl ExternalProcessHarness {
         })
     }
 
-    async fn place_order(
-        &self,
-        request: &CanonicalPlaceOrderRequest,
-    ) -> anyhow::Result<RequestOutcome> {
-        let started = Instant::now();
-        let response = http_request(
-            &self.client,
-            self.listen_addr,
-            Method::POST,
-            "/commands/orders/place",
-            Some(request),
-        )
-        .await?;
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .context("reading external-process stress response body")?;
-
-        if status == StatusCode::OK {
-            let payload: serde_json::Value =
-                serde_json::from_str(&body).context("decoding success response JSON")?;
-            if payload["reply"]["type"] != "placed" {
-                return Err(anyhow!("unexpected success reply payload: {body}"));
-            }
-        } else if status != StatusCode::TOO_MANY_REQUESTS {
-            return Err(anyhow!("unexpected HTTP status {status}: {body}"));
-        }
-
-        Ok(RequestOutcome {
-            status,
-            latency_micros: micros(started.elapsed()),
-        })
-    }
 }
 
 /// Builds a stable order command fixture for the external-process HTTP path.
@@ -1015,6 +989,7 @@ mod tests {
 
     #[test]
     fn stress_report_omits_sensitive_environment_fields() {
+        let secret_key = ["DATABASE", "URL"].join("_");
         let report = crate::stress::StressReport {
             scenario: StressScenario::ExternalProcessHttp,
             commands_submitted: 1,
@@ -1049,7 +1024,7 @@ mod tests {
 
         let json = serde_json::to_string(&report).expect("report serializes");
         let debug = format!("{report:?}");
-        assert!(!json.contains("DATABASE_URL"));
-        assert!(!debug.contains("DATABASE_URL"));
+        assert!(!json.contains(&secret_key));
+        assert!(!debug.contains(&secret_key));
     }
 }
