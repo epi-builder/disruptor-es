@@ -6,7 +6,7 @@ use es_outbox::{
     OutboxError, OutboxResult, ProcessEvent, ProcessManager, ProcessManagerName, ProcessOutcome,
 };
 use es_runtime::{CommandEnvelope, CommandGateway};
-use example_commerce::{Order, OrderCommand, OrderEvent, Product, ProductCommand};
+use example_commerce::{Order, OrderCommand, OrderEvent, Product, ProductCommand, ProductId};
 use uuid::Uuid;
 
 /// Process manager coordinating order placement with product inventory reservation.
@@ -65,7 +65,7 @@ impl ProcessManager for CommerceOrderProcessManager {
             let mut command_count = 0;
             let mut inventory_reserved = true;
             let mut reserved_lines = Vec::new();
-            for line in lines {
+            for (line_index, line) in lines.into_iter().enumerate() {
                 let (reply, receiver) = tokio::sync::oneshot::channel();
                 let product_id = line.product_id.clone();
                 let quantity = line.quantity;
@@ -75,11 +75,12 @@ impl ProcessManager for CommerceOrderProcessManager {
                         quantity,
                     },
                     follow_up_metadata(event),
-                    format!(
-                        "pm:{}:{}:reserve:{}",
-                        self.name.as_str(),
+                    follow_up_line_key(
+                        &self.name,
                         event.event_id,
-                        product_id.as_str()
+                        "reserve",
+                        line_index,
+                        &product_id,
                     ),
                     reply,
                 )
@@ -94,7 +95,7 @@ impl ProcessManager for CommerceOrderProcessManager {
                     .map_err(|_| OutboxError::CommandReplyDropped)?
                 {
                     Ok(_) => {
-                        reserved_lines.push((product_id, quantity));
+                        reserved_lines.push((line_index, product_id, quantity));
                     }
                     Err(_) => {
                         inventory_reserved = false;
@@ -104,7 +105,7 @@ impl ProcessManager for CommerceOrderProcessManager {
             }
 
             if !inventory_reserved {
-                for (product_id, quantity) in reserved_lines {
+                for (line_index, product_id, quantity) in reserved_lines {
                     let (reply, receiver) = tokio::sync::oneshot::channel();
                     let envelope = CommandEnvelope::<Product>::new(
                         ProductCommand::ReleaseInventory {
@@ -112,11 +113,12 @@ impl ProcessManager for CommerceOrderProcessManager {
                             quantity,
                         },
                         follow_up_metadata(event),
-                        format!(
-                            "pm:{}:{}:release:{}",
-                            self.name.as_str(),
+                        follow_up_line_key(
+                            &self.name,
                             event.event_id,
-                            product_id.as_str()
+                            "release",
+                            line_index,
+                            &product_id,
                         ),
                         reply,
                     )
@@ -190,6 +192,23 @@ fn decode_order_placed(event: &ProcessEvent) -> OutboxResult<OrderEvent> {
     })
 }
 
+fn follow_up_line_key(
+    manager: &ProcessManagerName,
+    source_event_id: Uuid,
+    action: &str,
+    line_index: usize,
+    product_id: &ProductId,
+) -> String {
+    format!(
+        "pm:{}:{}:{}:{}:{}",
+        manager.as_str(),
+        source_event_id,
+        action,
+        line_index,
+        product_id.as_str()
+    )
+}
+
 fn follow_up_metadata(event: &ProcessEvent) -> CommandMetadata {
     CommandMetadata {
         command_id: Uuid::now_v7(),
@@ -208,6 +227,7 @@ fn command_submit_error(error: impl std::fmt::Display) -> OutboxError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
 
     use super::*;
@@ -478,7 +498,7 @@ mod tests {
         event_id: Uuid,
         rehydration_events: Vec<StoredEvent>,
         append_requests: Mutex<Vec<AppendRequest>>,
-        replay_record: Mutex<Option<CommandReplayRecord>>,
+        replay_records: Mutex<BTreeMap<String, CommandReplayRecord>>,
         lookup_count: Mutex<usize>,
     }
 
@@ -499,7 +519,7 @@ mod tests {
                         },
                     )],
                     append_requests: Mutex::new(Vec::new()),
-                    replay_record: Mutex::new(None),
+                    replay_records: Mutex::new(BTreeMap::new()),
                     lookup_count: Mutex::new(0),
                 }),
             }
@@ -530,7 +550,7 @@ mod tests {
                         source_event.clone(),
                     )],
                     append_requests: Mutex::new(Vec::new()),
-                    replay_record: Mutex::new(None),
+                    replay_records: Mutex::new(BTreeMap::new()),
                     lookup_count: Mutex::new(0),
                 }),
             }
@@ -564,12 +584,12 @@ mod tests {
         }
 
         fn replay_global_positions(&self) -> Vec<i64> {
-            self.replay_record
+            self.replay_records
                 .lock()
-                .expect("replay record")
-                .as_ref()
-                .map(|record| record.append.global_positions.clone())
-                .unwrap_or_default()
+                .expect("replay records")
+                .values()
+                .flat_map(|record| record.append.global_positions.iter().copied())
+                .collect()
         }
 
         fn append(&self, request: AppendRequest) -> StoreResult<AppendOutcome> {
@@ -581,10 +601,13 @@ mod tests {
                 event_ids: vec![self.event_id],
             };
             if let Some(reply) = request.command_reply_payload.clone() {
-                *self.replay_record.lock().expect("replay record") = Some(CommandReplayRecord {
-                    append: committed.clone(),
-                    reply,
-                });
+                self.replay_records.lock().expect("replay records").insert(
+                    request.idempotency_key.clone(),
+                    CommandReplayRecord {
+                        append: committed.clone(),
+                        reply,
+                    },
+                );
             }
             self.append_requests
                 .lock()
@@ -600,9 +623,17 @@ mod tests {
             })
         }
 
-        fn lookup_command_replay(&self) -> StoreResult<Option<CommandReplayRecord>> {
+        fn lookup_command_replay(
+            &self,
+            idempotency_key: &str,
+        ) -> StoreResult<Option<CommandReplayRecord>> {
             *self.lookup_count.lock().expect("lookup count") += 1;
-            Ok(self.replay_record.lock().expect("replay record").clone())
+            Ok(self
+                .replay_records
+                .lock()
+                .expect("replay records")
+                .get(idempotency_key)
+                .cloned())
         }
     }
 
@@ -624,9 +655,9 @@ mod tests {
         fn lookup_command_replay(
             &self,
             _tenant_id: &TenantId,
-            _idempotency_key: &str,
+            idempotency_key: &str,
         ) -> BoxFuture<'_, StoreResult<Option<CommandReplayRecord>>> {
-            let result = self.inner.lookup_command_replay();
+            let result = self.inner.lookup_command_replay(idempotency_key);
             Box::pin(async move { result })
         }
     }
@@ -649,9 +680,9 @@ mod tests {
         fn lookup_command_replay(
             &self,
             _tenant_id: &TenantId,
-            _idempotency_key: &str,
+            idempotency_key: &str,
         ) -> BoxFuture<'_, StoreResult<Option<CommandReplayRecord>>> {
-            let result = self.inner.lookup_command_replay();
+            let result = self.inner.lookup_command_replay(idempotency_key);
             Box::pin(async move { result })
         }
     }
@@ -913,7 +944,7 @@ mod tests {
         );
         assert_eq!(
             format!(
-                "pm:{}:{}:release:{}",
+                "pm:{}:{}:release:0:{}",
                 process_manager_name().as_str(),
                 event.event_id,
                 first_product.as_str()
@@ -927,6 +958,234 @@ mod tests {
                 .send(Ok(CommandOutcome::new(
                     ProductReply::InventoryReleased {
                         product_id: first_product,
+                    },
+                    committed_append(44, Uuid::from_u128(44)),
+                )))
+                .is_ok()
+        );
+
+        let reject = receive_order(&mut order_rx).await;
+        assert_eq!(
+            OrderCommand::RejectOrder {
+                order_id: order_id(),
+                reason: "inventory reservation failed".to_owned()
+            },
+            reject.envelope.command
+        );
+        assert!(
+            reject
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    OrderReply::Rejected {
+                        order_id: order_id(),
+                    },
+                    committed_append(45, Uuid::from_u128(45)),
+                )))
+                .is_ok()
+        );
+
+        assert_eq!(
+            ProcessOutcome::CommandsSubmitted {
+                global_position: 42,
+                command_count: 4
+            },
+            task.await.expect("process task")?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn duplicate_product_lines_emit_distinct_reserve_keys() -> OutboxResult<()> {
+        let (product_gateway, mut product_rx, order_gateway, mut order_rx) = gateways();
+        let manager = CommerceOrderProcessManager::new(
+            process_manager_name(),
+            product_gateway,
+            order_gateway,
+        );
+        let same_product = product_id("product-1");
+        let event = process_event(OrderEvent::OrderPlaced {
+            order_id: order_id(),
+            user_id: UserId::new("user-1").expect("user id"),
+            lines: vec![line(same_product.clone()), line(same_product.clone())],
+        });
+
+        let process_event = event.clone();
+        let task = tokio::spawn(async move { manager.process(&process_event).await });
+
+        let first_reserve = receive_product(&mut product_rx).await;
+        assert_eq!(
+            ProductCommand::ReserveInventory {
+                product_id: same_product.clone(),
+                quantity: Quantity::new(2).expect("quantity")
+            },
+            first_reserve.envelope.command
+        );
+        assert_eq!(
+            format!(
+                "pm:{}:{}:reserve:0:{}",
+                process_manager_name().as_str(),
+                event.event_id,
+                same_product.as_str()
+            ),
+            first_reserve.envelope.idempotency_key
+        );
+        assert!(
+            first_reserve
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    ProductReply::InventoryReserved {
+                        product_id: same_product.clone(),
+                    },
+                    committed_append(43, Uuid::from_u128(43)),
+                )))
+                .is_ok()
+        );
+
+        let second_reserve = receive_product(&mut product_rx).await;
+        assert_eq!(
+            ProductCommand::ReserveInventory {
+                product_id: same_product.clone(),
+                quantity: Quantity::new(2).expect("quantity")
+            },
+            second_reserve.envelope.command
+        );
+        assert_eq!(
+            format!(
+                "pm:{}:{}:reserve:1:{}",
+                process_manager_name().as_str(),
+                event.event_id,
+                same_product.as_str()
+            ),
+            second_reserve.envelope.idempotency_key
+        );
+        assert!(
+            second_reserve
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    ProductReply::InventoryReserved {
+                        product_id: same_product.clone(),
+                    },
+                    committed_append(44, Uuid::from_u128(44)),
+                )))
+                .is_ok()
+        );
+
+        let confirm = receive_order(&mut order_rx).await;
+        assert_eq!(
+            OrderCommand::ConfirmOrder {
+                order_id: order_id()
+            },
+            confirm.envelope.command
+        );
+        assert!(
+            confirm
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    OrderReply::Confirmed {
+                        order_id: order_id(),
+                    },
+                    committed_append(45, Uuid::from_u128(45)),
+                )))
+                .is_ok()
+        );
+
+        assert_eq!(
+            ProcessOutcome::CommandsSubmitted {
+                global_position: 42,
+                command_count: 3
+            },
+            task.await.expect("process task")?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn duplicate_product_line_failure_releases_distinct_prior_lines() -> OutboxResult<()> {
+        let (product_gateway, mut product_rx, order_gateway, mut order_rx) = gateways();
+        let manager = CommerceOrderProcessManager::new(
+            process_manager_name(),
+            product_gateway,
+            order_gateway,
+        );
+        let same_product = product_id("product-1");
+        let event = process_event(OrderEvent::OrderPlaced {
+            order_id: order_id(),
+            user_id: UserId::new("user-1").expect("user id"),
+            lines: vec![line(same_product.clone()), line(same_product.clone())],
+        });
+
+        let process_event = event.clone();
+        let task = tokio::spawn(async move { manager.process(&process_event).await });
+
+        let first_reserve = receive_product(&mut product_rx).await;
+        assert_eq!(
+            ProductCommand::ReserveInventory {
+                product_id: same_product.clone(),
+                quantity: Quantity::new(2).expect("quantity")
+            },
+            first_reserve.envelope.command
+        );
+        assert!(
+            first_reserve
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    ProductReply::InventoryReserved {
+                        product_id: same_product.clone(),
+                    },
+                    committed_append(43, Uuid::from_u128(43)),
+                )))
+                .is_ok()
+        );
+
+        let second_reserve = receive_product(&mut product_rx).await;
+        assert_eq!(
+            ProductCommand::ReserveInventory {
+                product_id: same_product.clone(),
+                quantity: Quantity::new(2).expect("quantity")
+            },
+            second_reserve.envelope.command
+        );
+        assert!(
+            second_reserve
+                .envelope
+                .reply
+                .send(Err(RuntimeError::Domain {
+                    message: "insufficient inventory".to_owned(),
+                }))
+                .is_ok()
+        );
+
+        let release = receive_product(&mut product_rx).await;
+        assert_eq!(
+            ProductCommand::ReleaseInventory {
+                product_id: same_product.clone(),
+                quantity: Quantity::new(2).expect("quantity")
+            },
+            release.envelope.command
+        );
+        assert_eq!(
+            format!(
+                "pm:{}:{}:release:0:{}",
+                process_manager_name().as_str(),
+                event.event_id,
+                same_product.as_str()
+            ),
+            release.envelope.idempotency_key
+        );
+        assert!(
+            release
+                .envelope
+                .reply
+                .send(Ok(CommandOutcome::new(
+                    ProductReply::InventoryReleased {
+                        product_id: same_product.clone(),
                     },
                     committed_append(44, Uuid::from_u128(44)),
                 )))
@@ -986,7 +1245,7 @@ mod tests {
         let reserve = receive_product(&mut product_rx).await;
         assert_eq!(
             format!(
-                "pm:{}:{}:reserve:{}",
+                "pm:{}:{}:reserve:0:{}",
                 process_manager_name().as_str(),
                 event.event_id,
                 product.as_str()
@@ -1042,7 +1301,7 @@ mod tests {
         let source_order_event = OrderEvent::OrderPlaced {
             order_id: order_id(),
             user_id: UserId::new("user-1").expect("user id"),
-            lines: vec![line(product.clone())],
+            lines: vec![line(product.clone()), line(product.clone())],
         };
         let event = process_event(source_order_event.clone());
         let product_store = ReplayAwareProductStore::new(product.clone());
@@ -1064,8 +1323,14 @@ mod tests {
             product_engine.gateway(),
             order_engine.gateway(),
         ));
-        let expected_reserve_key = format!(
-            "pm:{}:{}:reserve:{}",
+        let expected_reserve_key_0 = format!(
+            "pm:{}:{}:reserve:0:{}",
+            process_manager_name.as_str(),
+            event.event_id,
+            product.as_str()
+        );
+        let expected_reserve_key_1 = format!(
+            "pm:{}:{}:reserve:1:{}",
             process_manager_name.as_str(),
             event.event_id,
             product.as_str()
@@ -1080,17 +1345,21 @@ mod tests {
         let first_event = event.clone();
         let first_manager = manager.clone();
         let first_task = tokio::spawn(async move { first_manager.process(&first_event).await });
-        assert!(product_engine.process_one().await.expect("first reserve"));
+        assert!(product_engine.process_one().await.expect("first reserve 0"));
+        assert!(product_engine.process_one().await.expect("first reserve 1"));
         assert!(order_engine.process_one().await.expect("first confirm"));
         assert_eq!(
             ProcessOutcome::CommandsSubmitted {
                 global_position: event.global_position,
-                command_count: 2
+                command_count: 3
             },
             first_task.await.expect("first process")?
         );
         assert_eq!(
-            vec![expected_reserve_key.clone()],
+            vec![
+                expected_reserve_key_0.clone(),
+                expected_reserve_key_1.clone()
+            ],
             product_store.idempotency_keys()
         );
         assert_eq!(
@@ -1101,21 +1370,35 @@ mod tests {
         let second_event = event.clone();
         let second_manager = manager.clone();
         let second_task = tokio::spawn(async move { second_manager.process(&second_event).await });
-        assert!(product_engine.process_one().await.expect("second reserve"));
+        assert!(
+            product_engine
+                .process_one()
+                .await
+                .expect("second reserve 0")
+        );
+        assert!(
+            product_engine
+                .process_one()
+                .await
+                .expect("second reserve 1")
+        );
         assert!(order_engine.process_one().await.expect("second confirm"));
         assert_eq!(
             ProcessOutcome::CommandsSubmitted {
                 global_position: event.global_position,
-                command_count: 2
+                command_count: 3
             },
             second_task.await.expect("second process")?
         );
 
-        assert_eq!(1, product_store.append_count());
+        assert_eq!(2, product_store.append_count());
         assert_eq!(1, order_store.append_count());
-        assert_eq!(vec![expected_reserve_key], product_store.idempotency_keys());
+        assert_eq!(
+            vec![expected_reserve_key_0, expected_reserve_key_1],
+            product_store.idempotency_keys()
+        );
         assert_eq!(vec![expected_confirm_key], order_store.idempotency_keys());
-        assert_eq!(product_store.replay_global_positions(), vec![20]);
+        assert_eq!(product_store.replay_global_positions(), vec![20, 20]);
         assert_eq!(order_store.replay_global_positions(), vec![21]);
 
         Ok(())

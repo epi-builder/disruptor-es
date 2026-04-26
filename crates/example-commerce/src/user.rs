@@ -1,13 +1,14 @@
 use crate::UserId;
 use es_core::{CommandMetadata, ExpectedRevision, PartitionKey, StreamId};
 use es_kernel::{Aggregate, Decision};
+use serde::{Deserialize, Serialize};
 
 /// User aggregate marker.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct User;
 
 /// User lifecycle status.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum UserStatus {
     /// User has not been registered.
     #[default]
@@ -19,7 +20,7 @@ pub enum UserStatus {
 }
 
 /// User aggregate state.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct UserState {
     /// Registered user identity, if any.
     pub user_id: Option<UserId>,
@@ -45,7 +46,7 @@ pub enum UserCommand {
 }
 
 /// Events emitted by the user aggregate.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(missing_docs)]
 #[rustfmt::skip]
 pub enum UserEvent {
@@ -58,7 +59,7 @@ pub enum UserEvent {
 }
 
 /// Replies returned by user commands.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum UserReply {
     /// Registration succeeded.
     Registered {

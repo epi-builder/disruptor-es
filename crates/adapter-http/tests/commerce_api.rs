@@ -28,6 +28,35 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[tokio::test]
+async fn healthz_returns_ok() {
+    let (order_gateway, _order_rx) =
+        CommandGateway::<Order>::new(PartitionRouter::new(1).expect("router"), 1)
+            .expect("order gateway");
+    let (product_gateway, _product_rx) =
+        CommandGateway::new(PartitionRouter::new(1).expect("router"), 1).expect("product gateway");
+    let (user_gateway, _user_rx) =
+        CommandGateway::new(PartitionRouter::new(1).expect("router"), 1).expect("user gateway");
+
+    let app = router(HttpState {
+        order_gateway,
+        product_gateway,
+        user_gateway,
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/healthz")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("health response");
+    assert_eq!(StatusCode::OK, response.status());
+    assert_eq!("ok", body_string(response.into_body()).await);
+}
+
+#[tokio::test]
 async fn commerce_api_place_order_submits_command_and_returns_response_contract() {
     let (order_gateway, mut order_rx) =
         CommandGateway::<Order>::new(PartitionRouter::new(4).expect("router"), 8)

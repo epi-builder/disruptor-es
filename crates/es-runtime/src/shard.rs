@@ -9,8 +9,8 @@ use tracing::info_span;
 
 use crate::{
     AggregateCache, AggregateCacheKey, CommandEnvelope, CommandOutcome, DedupeCache, DedupeKey,
-    DedupeRecord, DisruptorPath, RoutedCommand, RuntimeError, RuntimeEventCodec,
-    RuntimeEventStore, RuntimeResult, ShardId,
+    DedupeRecord, DisruptorPath, RoutedCommand, RuntimeError, RuntimeEventCodec, RuntimeEventStore,
+    RuntimeResult, ShardId,
 };
 
 /// Command envelope released from the disruptor path for shard processing.
@@ -232,7 +232,8 @@ impl<A: Aggregate> ShardState<A> {
             .await
             {
                 Ok(rehydrated) => {
-                    self.cache.commit_state(cache_key.clone(), rehydrated.clone());
+                    self.cache
+                        .commit_state(cache_key.clone(), rehydrated.clone());
                     rehydrated
                 }
                 Err(error) => {

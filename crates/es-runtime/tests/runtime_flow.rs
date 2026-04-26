@@ -562,9 +562,7 @@ async fn reply_is_sent_after_append_commit() {
 
     assert_eq!(
         Some(&CounterState { value: 3 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -601,9 +599,7 @@ async fn conflict_does_not_mutate_cache() {
     assert_eq!(0, state.dedupe().len());
     assert_eq!(
         Some(&CounterState { value: 10 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -629,9 +625,7 @@ async fn domain_error_does_not_append_or_mutate_cache() {
     assert_eq!(0, state.dedupe().len());
     assert_eq!(
         Some(&CounterState { value: 10 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -657,9 +651,7 @@ async fn codec_error_does_not_append_or_mutate_cache() {
     assert_eq!(0, state.dedupe().len());
     assert_eq!(
         Some(&CounterState { value: 10 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -715,9 +707,7 @@ async fn cache_miss_rehydrates_before_decide() {
     assert_eq!(8, outcome.reply);
     assert_eq!(
         Some(&CounterState { value: 8 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -751,7 +741,14 @@ async fn same_stream_different_tenant_rehydrates_independently() {
             .await
             .expect("tenant a processed")
     );
-    assert_eq!(3, tenant_a_receiver.await.expect("reply").expect("success").reply);
+    assert_eq!(
+        3,
+        tenant_a_receiver
+            .await
+            .expect("reply")
+            .expect("success")
+            .reply
+    );
 
     let (tenant_b, tenant_b_receiver) = envelope_for("tenant-b", "counter-1", "idem-b", 2);
     record_handoff(&mut state, tenant_b);
@@ -761,7 +758,14 @@ async fn same_stream_different_tenant_rehydrates_independently() {
             .await
             .expect("tenant b processed")
     );
-    assert_eq!(2, tenant_b_receiver.await.expect("reply").expect("success").reply);
+    assert_eq!(
+        2,
+        tenant_b_receiver
+            .await
+            .expect("reply")
+            .expect("success")
+            .reply
+    );
 
     assert_eq!(
         vec![
@@ -808,7 +812,14 @@ async fn same_stream_different_tenant_preserves_domain_state() {
             .await
             .expect("tenant a processed")
     );
-    assert_eq!(8, tenant_a_receiver.await.expect("reply").expect("success").reply);
+    assert_eq!(
+        8,
+        tenant_a_receiver
+            .await
+            .expect("reply")
+            .expect("success")
+            .reply
+    );
 
     let (tenant_b, tenant_b_receiver) = envelope_for("tenant-b", "counter-1", "idem-b", 2);
     record_handoff(&mut state, tenant_b);
@@ -818,7 +829,14 @@ async fn same_stream_different_tenant_preserves_domain_state() {
             .await
             .expect("tenant b processed")
     );
-    assert_eq!(42, tenant_b_receiver.await.expect("reply").expect("success").reply);
+    assert_eq!(
+        42,
+        tenant_b_receiver
+            .await
+            .expect("reply")
+            .expect("success")
+            .reply
+    );
     assert_ne!(
         Some(&CounterState { value: 10 }),
         state.cache().get(&cache_key_for("tenant-b", "counter-1"))
@@ -854,9 +872,7 @@ async fn runtime_duplicate_cache_hit_skips_decide_and_append() {
     assert_eq!(0, store.lookup_count());
     assert_eq!(
         Some(&CounterState { value: 10 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -888,9 +904,7 @@ async fn duplicate_replay_returns_original_reply_after_state_mutation() {
     assert_eq!(0, store.appended_len());
     assert_eq!(
         Some(&CounterState { value: 50 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -944,9 +958,7 @@ async fn duplicate_append_returns_successful_command_outcome() {
     assert_eq!(vec![1], outcome.append.global_positions);
     assert_eq!(
         Some(&CounterState { value: 0 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
     assert_eq!(1, state.dedupe().len());
 }
@@ -979,9 +991,7 @@ async fn duplicate_append_branch_uses_stored_replay_not_fresh_decision_reply() {
     assert_eq!(2, store.lookup_count());
     assert_eq!(
         Some(&CounterState { value: 40 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
@@ -1014,17 +1024,13 @@ async fn duplicate_after_warmed_cache_refreshes_from_durable_rehydration() {
     assert_eq!(13, outcome.reply);
     assert_eq!(
         Some(&CounterState { value: 25 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
     assert_eq!(
-        vec![
-            (
-                tenant_id_for("tenant-a"),
-                StreamId::new("counter-1").expect("stream id")
-            ),
-        ],
+        vec![(
+            tenant_id_for("tenant-a"),
+            StreamId::new("counter-1").expect("stream id")
+        ),],
         store.rehydration_calls()
     );
 }
@@ -1049,9 +1055,7 @@ async fn reply_drop_after_append_still_advances_cache_and_dedupe() {
     assert_eq!(1, state.dedupe().len());
     assert_eq!(
         Some(&CounterState { value: 3 }),
-        state
-            .cache()
-            .get(&cache_key_for("tenant-a", "counter-1"))
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
 }
 
