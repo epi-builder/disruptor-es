@@ -158,14 +158,6 @@ impl HttpStressConfig {
         Self::from_profile(HttpStressProfile::Smoke)
     }
 
-    /// Tiny benchmark config so Criterion exercises the lane without long runs.
-    pub fn bench() -> Self {
-        let mut config = Self::from_profile(HttpStressProfile::Smoke);
-        config.command_count = 2;
-        config.concurrency = 1;
-        config
-    }
-
     /// Validate bounded live-run inputs before any child process or container starts.
     pub fn validate(&self) -> anyhow::Result<()> {
         ensure_in_range("warmup_seconds", self.warmup_seconds, 1..=600)?;
@@ -967,7 +959,7 @@ mod tests {
     #[test]
     fn http_stress_bench_config_reuses_smoke_profile_defaults() {
         let smoke = HttpStressConfig::from_profile(HttpStressProfile::Smoke);
-        let bench = HttpStressConfig::bench();
+        let bench = HttpStressConfig::from_profile(HttpStressProfile::Smoke);
 
         assert_eq!(smoke.profile, bench.profile);
         assert_eq!(smoke.warmup_seconds, bench.warmup_seconds);

@@ -13,11 +13,15 @@ use tokio::runtime::Runtime;
 fn external_process_http_smoke(criterion: &mut Criterion) {
     let runtime = Runtime::new().expect("tokio runtime");
 
+    // Criterion stays as a short smoke comparison lane; `app http-stress`
+    // remains the authoritative Phase 13 steady-state report path.
     criterion.bench_function("external_process_http_smoke", |bench| {
         bench.iter(|| {
             let report = runtime
                 .block_on(app::http_stress::run_external_process_http_stress(
-                    app::http_stress::HttpStressConfig::bench(),
+                    app::http_stress::HttpStressConfig::from_profile(
+                        app::http_stress::HttpStressProfile::Smoke,
+                    ),
                 ))
                 .expect("external-process HTTP stress run");
             black_box(report.throughput_per_second);
