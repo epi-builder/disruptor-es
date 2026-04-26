@@ -100,9 +100,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use app::{
-        stress::{StressReport, StressScenario},
-    };
+    use app::stress::{StressReport, StressScenario};
 
     use super::{HTTP_STRESS_USAGE, parse_http_stress_args, stress_report_json};
 
@@ -191,13 +189,19 @@ mod tests {
         assert_eq!(2, json["measurement_seconds"]);
         assert_eq!(2.0, json["run_duration_seconds"]);
         assert_eq!(2, json["concurrency"]);
-        assert_eq!("stop-new-requests-then-drain-in-flight", json["deadline_policy"]);
+        assert_eq!(
+            "stop-new-requests-then-drain-in-flight",
+            json["deadline_policy"]
+        );
         assert_eq!(5, json["drain_timeout_seconds"]);
         assert_eq!(1, json["commands_failed"]);
         assert_eq!("macos", json["host_os"]);
         assert_eq!("aarch64", json["host_arch"]);
         assert_eq!("test-cpu", json["cpu_brand"]);
-        assert_eq!(2, json["cpu_usage_samples"].as_array().expect("array").len());
+        assert_eq!(
+            2,
+            json["cpu_usage_samples"].as_array().expect("array").len()
+        );
     }
 
     #[test]
