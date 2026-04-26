@@ -50,6 +50,8 @@ struct CounterCodec {
 
 struct CounterAggregate;
 
+struct NoStreamCounterAggregate;
+
 impl Aggregate for CounterAggregate {
     type State = CounterState;
     type Command = CounterCommand;
@@ -99,6 +101,38 @@ impl Aggregate for CounterAggregate {
                 state.value += amount;
             }
         }
+    }
+}
+
+impl Aggregate for NoStreamCounterAggregate {
+    type State = CounterState;
+    type Command = CounterCommand;
+    type Event = CounterEvent;
+    type Reply = i64;
+    type Error = &'static str;
+
+    fn stream_id(command: &Self::Command) -> StreamId {
+        CounterAggregate::stream_id(command)
+    }
+
+    fn partition_key(command: &Self::Command) -> es_core::PartitionKey {
+        CounterAggregate::partition_key(command)
+    }
+
+    fn expected_revision(_command: &Self::Command) -> ExpectedRevision {
+        ExpectedRevision::NoStream
+    }
+
+    fn decide(
+        state: &Self::State,
+        command: Self::Command,
+        metadata: &CommandMetadata,
+    ) -> Result<Decision<Self::Event, Self::Reply>, Self::Error> {
+        CounterAggregate::decide(state, command, metadata)
+    }
+
+    fn apply(state: &mut Self::State, event: &Self::Event) {
+        CounterAggregate::apply(state, event);
     }
 }
 
@@ -180,11 +214,43 @@ impl RuntimeEventCodec<CounterAggregate> for CounterCodec {
     }
 }
 
+impl RuntimeEventCodec<NoStreamCounterAggregate> for CounterCodec {
+    fn encode(
+        &self,
+        event: &CounterEvent,
+        metadata: &CommandMetadata,
+    ) -> es_runtime::RuntimeResult<NewEvent> {
+        <Self as RuntimeEventCodec<CounterAggregate>>::encode(self, event, metadata)
+    }
+
+    fn decode(&self, stored: &StoredEvent) -> es_runtime::RuntimeResult<CounterEvent> {
+        <Self as RuntimeEventCodec<CounterAggregate>>::decode(self, stored)
+    }
+
+    fn decode_snapshot(
+        &self,
+        snapshot: &SnapshotRecord,
+    ) -> es_runtime::RuntimeResult<CounterState> {
+        <Self as RuntimeEventCodec<CounterAggregate>>::decode_snapshot(self, snapshot)
+    }
+
+    fn encode_reply(&self, reply: &i64) -> es_runtime::RuntimeResult<CommandReplyPayload> {
+        <Self as RuntimeEventCodec<CounterAggregate>>::encode_reply(self, reply)
+    }
+
+    fn decode_reply(&self, payload: &CommandReplyPayload) -> es_runtime::RuntimeResult<i64> {
+        <Self as RuntimeEventCodec<CounterAggregate>>::decode_reply(self, payload)
+    }
+}
+
 #[test]
 fn command_replay_contract_round_trips_counter_reply() {
     let codec = CounterCodec::default();
-    let payload = codec.encode_reply(&42).expect("encoded reply");
-    let decoded = codec.decode_reply(&payload).expect("decoded reply");
+    let payload = <CounterCodec as RuntimeEventCodec<CounterAggregate>>::encode_reply(&codec, &42)
+        .expect("encoded reply");
+    let decoded: i64 =
+        <CounterCodec as RuntimeEventCodec<CounterAggregate>>::decode_reply(&codec, &payload)
+            .expect("decoded reply");
 
     assert_eq!(42, decoded);
 }
@@ -203,7 +269,7 @@ struct FakeStoreInner {
     rehydration_calls: Mutex<Vec<(TenantId, StreamId)>>,
     tenant_rehydration: Mutex<VecDeque<((TenantId, StreamId), RehydrationBatch)>>,
     rehydration_error: Mutex<Option<StoreError>>,
-    append_gate: Mutex<Option<oneshot::Receiver<()>>>,
+    append_gates: Mutex<VecDeque<oneshot::Receiver<()>>>,
     append_started: Notify,
 }
 
@@ -230,7 +296,7 @@ impl FakeStore {
                 rehydration_calls: Mutex::new(Vec::new()),
                 tenant_rehydration: Mutex::new(VecDeque::new()),
                 rehydration_error: Mutex::new(None),
-                append_gate: Mutex::new(None),
+                append_gates: Mutex::new(VecDeque::new()),
                 append_started: Notify::new(),
             }),
         }
@@ -238,8 +304,21 @@ impl FakeStore {
 
     fn with_delayed_commit(receiver: oneshot::Receiver<()>) -> Self {
         let store = Self::committed();
-        *store.inner.append_gate.lock().expect("append gate") = Some(receiver);
         store
+            .inner
+            .append_gates
+            .lock()
+            .expect("append gates")
+            .push_back(receiver);
+        store
+    }
+
+    fn push_append_gate(&self, receiver: oneshot::Receiver<()>) {
+        self.inner
+            .append_gates
+            .lock()
+            .expect("append gates")
+            .push_back(receiver);
     }
 
     fn set_rehydration(&self, rehydration: RehydrationBatch) {
@@ -305,7 +384,12 @@ impl RuntimeEventStore for FakeStore {
         &self,
         request: AppendRequest,
     ) -> BoxFuture<'_, es_store_postgres::StoreResult<AppendOutcome>> {
-        let receiver = self.inner.append_gate.lock().expect("append gate").take();
+        let receiver = self
+            .inner
+            .append_gates
+            .lock()
+            .expect("append gates")
+            .pop_front();
         self.inner
             .append_requests
             .lock()
@@ -465,6 +549,27 @@ fn rejecting_envelope() -> (
     (envelope, receiver)
 }
 
+fn no_stream_envelope(
+    amount: i64,
+) -> (
+    CommandEnvelope<NoStreamCounterAggregate>,
+    oneshot::Receiver<es_runtime::RuntimeResult<es_runtime::CommandOutcome<i64>>>,
+) {
+    let (reply, receiver) = oneshot::channel();
+    let envelope = CommandEnvelope::<NoStreamCounterAggregate>::new(
+        CounterCommand::Add {
+            stream_id: "counter-1",
+            amount,
+        },
+        metadata(),
+        "idem-no-stream",
+        reply,
+    )
+    .expect("command envelope");
+
+    (envelope, receiver)
+}
+
 fn record_handoff(
     state: &mut ShardState<CounterAggregate>,
     envelope: CommandEnvelope<CounterAggregate>,
@@ -564,6 +669,134 @@ async fn reply_is_sent_after_append_commit() {
         Some(&CounterState { value: 3 }),
         state.cache().get(&cache_key_for("tenant-a", "counter-1"))
     );
+}
+
+#[tokio::test]
+async fn reply_stays_blocked_until_append_gate_opens() {
+    let (release_append, wait_for_release) = oneshot::channel();
+    let store = FakeStore::with_delayed_commit(wait_for_release);
+    let codec = CounterCodec::default();
+    let mut state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    let (envelope, receiver) = envelope(5);
+    record_handoff(&mut state, envelope);
+
+    let store_for_task = store.clone();
+    let task = tokio::spawn(async move {
+        state
+            .process_next_handoff(&store_for_task, &codec)
+            .await
+            .expect("processed");
+        state
+    });
+
+    store.wait_for_append_start().await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), receiver)
+            .await
+            .is_err(),
+        "reply resolved before append gate opened"
+    );
+
+    release_append.send(()).expect("release append");
+    let state = task.await.expect("task joined");
+    assert_eq!(
+        Some(&CounterState { value: 5 }),
+        state.cache().get(&cache_key_for("tenant-a", "counter-1"))
+    );
+}
+
+#[tokio::test]
+async fn no_stream_cache_miss_skips_rehydration_before_append() {
+    let store = FakeStore::committed();
+    let codec = CounterCodec::default();
+    let mut no_stream_state = ShardState::<NoStreamCounterAggregate>::new(ShardId::new(0));
+    let (no_stream_envelope, no_stream_receiver) = no_stream_envelope(7);
+    no_stream_state.record_released_handoff(0, no_stream_envelope);
+
+    assert!(
+        no_stream_state
+            .process_next_handoff(&store, &codec)
+            .await
+            .expect("processed")
+    );
+    no_stream_receiver.await.expect("reply").expect("success");
+    assert_eq!(0, store.rehydration_calls().len());
+
+    let fallback_store = FakeStore::committed();
+    let mut regular_state = ShardState::<CounterAggregate>::new(ShardId::new(0));
+    let (regular_envelope, regular_receiver) = envelope(3);
+    record_handoff(&mut regular_state, regular_envelope);
+
+    assert!(
+        regular_state
+            .process_next_handoff(&fallback_store, &codec)
+            .await
+            .expect("processed")
+    );
+    regular_receiver.await.expect("reply").expect("success");
+    assert!(
+        !fallback_store.rehydration_calls().is_empty(),
+        "ExpectedRevision::Any should still rehydrate on a cache miss"
+    );
+}
+
+#[tokio::test]
+async fn parallel_shard_workers_process_distinct_routes_concurrently() {
+    let (release_first, wait_first) = oneshot::channel();
+    let (release_second, wait_second) = oneshot::channel();
+    let store = FakeStore::with_delayed_commit(wait_first);
+    store.push_append_gate(wait_second);
+    store
+        .inner
+        .append_outcomes
+        .lock()
+        .expect("append outcomes")
+        .push_back(Ok(AppendOutcome::Committed(committed_append(2))));
+
+    let codec = CounterCodec::default();
+    let config = CommandEngineConfig::new(2, 8, 8).expect("config");
+    let mut engine = CommandEngine::<CounterAggregate, _, _>::new(config, store.clone(), codec)
+        .expect("engine");
+
+    let (first_envelope, first_reply) = envelope_for("tenant-a", "counter-1", "idem-1", 1);
+    let (second_envelope, second_reply) = envelope_for("tenant-a", "counter-2", "idem-2", 2);
+    let first_gateway = engine.gateway();
+    let second_gateway = first_gateway.clone();
+    first_gateway.try_submit(first_envelope).expect("submit first");
+    second_gateway
+        .try_submit(second_envelope)
+        .expect("submit second");
+
+    let engine_task = tokio::spawn(async move {
+        let first = engine.process_one().await.expect("first process");
+        let second = engine.process_one().await.expect("second process");
+        (engine, first, second)
+    });
+
+    store.wait_for_append_start().await;
+    tokio::time::sleep(Duration::from_millis(20)).await;
+
+    assert_eq!(
+        2,
+        store.appended_len(),
+        "both shard routes should reach append_started before replies release"
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), first_reply)
+            .await
+            .is_err()
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), second_reply)
+            .await
+            .is_err()
+    );
+
+    release_first.send(()).expect("release first");
+    release_second.send(()).expect("release second");
+    let (_engine, first_processed, second_processed) = engine_task.await.expect("join");
+    assert!(first_processed);
+    assert!(second_processed);
 }
 
 #[tokio::test]
