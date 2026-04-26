@@ -1,8 +1,7 @@
 //! Storage-only PostgreSQL microbenchmarks.
 //!
-//! These scenarios measure explicit event-store operations against the
-//! developer-provided `DATABASE_URL`. They never fall back to in-memory storage
-//! or report ring/runtime throughput.
+//! These scenarios measure explicit event-store operations against PostgreSQL.
+//! They never fall back to in-memory storage or report ring/runtime throughput.
 
 #![allow(missing_docs)]
 
@@ -14,26 +13,63 @@ use es_store_postgres::{AppendOutcome, AppendRequest, NewEvent, PostgresEventSto
 use serde_json::json;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use time::OffsetDateTime;
+use tokio::sync::OnceCell;
 use tokio::runtime::Runtime;
+use testcontainers::{ContainerAsync, ImageExt, runners::AsyncRunner};
+use testcontainers_modules::postgres::Postgres;
 use uuid::Uuid;
+
+static STORAGE_BENCH_HARNESS: OnceCell<StorageBenchHarness> = OnceCell::const_new();
+
+struct StorageBenchHarness {
+    _container: Option<ContainerAsync<Postgres>>,
+    pool: PgPool,
+}
 
 fn database_url() -> Option<String> {
     match env::var("DATABASE_URL") {
         Ok(url) if !url.is_empty() => Some(url),
-        _ => {
-            eprintln!("storage_only requires DATABASE_URL");
-            None
-        }
+        _ => None,
     }
 }
 
 async fn connect_storage_pool() -> anyhow::Result<PgPool> {
-    let Some(database_url) = database_url() else {
-        anyhow::bail!("storage_only requires DATABASE_URL");
-    };
+    let harness = STORAGE_BENCH_HARNESS
+        .get_or_try_init(StorageBenchHarness::connect_or_spawn)
+        .await?;
+    Ok(harness.pool.clone())
+}
+
+impl StorageBenchHarness {
+    async fn connect_or_spawn() -> anyhow::Result<Self> {
+        match database_url() {
+            Some(database_url) => {
+                let pool = connect_pool(&database_url).await?;
+                Ok(Self {
+                    _container: None,
+                    pool,
+                })
+            }
+            None => {
+                let container = Postgres::default().with_tag("18").start().await?;
+                let port = container.get_host_port_ipv4(5432).await?;
+                let database_url = format!(
+                    "postgres://postgres:postgres@127.0.0.1:{port}/postgres?sslmode=disable"
+                );
+                let pool = connect_pool(&database_url).await?;
+                Ok(Self {
+                    _container: Some(container),
+                    pool,
+                })
+            }
+        }
+    }
+}
+
+async fn connect_pool(database_url: &str) -> anyhow::Result<PgPool> {
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&database_url)
+        .connect(database_url)
         .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
     Ok(pool)
@@ -235,3 +271,21 @@ criterion_group!(
     storage_only_global_read
 );
 criterion_main!(storage_only);
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn storage_only_source_uses_connect_or_spawn_fallback() {
+        let source = include_str!("storage_only.rs");
+        assert!(source.contains("connect_or_spawn"));
+        assert!(!source.contains("storage_only requires DATABASE_URL"));
+    }
+
+    #[test]
+    fn comparison_script_uses_diagnostic_hot_key_artifact_and_storage_validation() {
+        let script = include_str!("../scripts/compare-stress-layers.sh");
+        assert!(script.contains("live-http-single-hot-key-diagnostic.json"));
+        assert!(script.contains("storage_only_append"));
+        assert!(script.contains("storage-only benchmark output missing"));
+    }
+}
