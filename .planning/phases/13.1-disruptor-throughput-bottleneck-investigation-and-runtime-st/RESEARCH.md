@@ -302,22 +302,22 @@ if cache_miss && envelope.expected_revision == ExpectedRevision::NoStream {
 | A2 | `shard_depth_max=0` and `append_latency_p95_micros=0` in live runs are caused by instrumentation/reporting issues rather than genuinely empty queues and zero-cost appends. | Summary / Common Pitfalls | Low; the values are implausible under observed throughput, but the exact root cause still needs implementation-time confirmation. |
 | A3 | Switching sampler timing from `Skip` to a more diagnosis-friendly policy such as `Delay` will improve report interpretability without harming throughput conclusions. | Code Examples / Common Pitfalls | Low; this affects measurement cadence more than system correctness. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should Phase 13.1 optimize only the order engine path or generalize the runtime fix across all aggregate engines?**
    - What we know: `serve.rs` constructs the same `CommandEngine` topology for order, product, and user. [VERIFIED: crates/app/src/serve.rs]
-   - What's unclear: the current live HTTP workload exercises order placement only, so only the order path has direct performance evidence. [VERIFIED: crates/app/src/http_stress.rs]
-   - Recommendation: implement the shard-worker architecture once in `es-runtime`, not as an order-only fork. [ASSUMED]
+   - Previously unclear: the current live HTTP workload exercises order placement only, so only the order path has direct performance evidence. [VERIFIED: crates/app/src/http_stress.rs]
+   - RESOLVED: implement the shard-worker architecture once in `es-runtime`, not as an order-only fork. Plan 13.1-01 applies the topology change to the generic runtime and updates `serve.rs` wiring for order, product, and user engines.
 
 2. **Should live HTTP stress include projector/outbox work in the same service process?**
    - What we know: the current `serve` composition starts HTTP plus command engines, but not projector or outbox worker loops. [VERIFIED: crates/app/src/serve.rs]
-   - What's unclear: whether Phase 13.1 wants full command+projection+outbox service throughput or only command-path throughput plus lag observability. [VERIFIED: user prompt]
-   - Recommendation: keep Phase 13.1 focused on command-path bottlenecks, but explicitly document that current live HTTP numbers exclude active projector/outbox side effects. [ASSUMED]
+   - Previously unclear: whether Phase 13.1 wants full command+projection+outbox service throughput or only command-path throughput plus lag observability. [VERIFIED: user prompt]
+   - RESOLVED: keep Phase 13.1 focused on command-path bottlenecks, but explicitly document that current live HTTP numbers exclude active projector/outbox side effects. Plan 13.1-03 documents projector/outbox pressure as a separate lane, not part of the command-path live HTTP ceiling.
 
 3. **What exact hot-key semantics should the repo standardize?**
    - What we know: the current live preset does not reuse keys. [VERIFIED: crates/app/src/http_stress.rs] [VERIFIED: crates/example-commerce/src/order.rs]
-   - What's unclear: whether “hot-key” should mean one stream, one tenant plus finite stream set, or one product/order correlation pattern. [VERIFIED: user prompt]
-   - Recommendation: standardize at least `Unique`, `HotSet(N)`, and `SingleHotKey` workload modes in both in-process and external-process lanes. [ASSUMED]
+   - Previously unclear: whether “hot-key” should mean one stream, one tenant plus finite stream set, or one product/order correlation pattern. [VERIFIED: user prompt]
+   - RESOLVED: standardize `Unique`, `HotSet(N)`, and `SingleHotKey` workload modes in the external-process live HTTP lane and document them in the comparison workflow. Plan 13.1-02 owns the CLI/config model and Plan 13.1-03 owns operator documentation.
 
 ## Environment Availability
 
