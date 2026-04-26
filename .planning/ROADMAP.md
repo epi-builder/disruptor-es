@@ -256,11 +256,11 @@ Plans:
   4. Updated stress output includes before/after or baseline/comparison evidence with throughput, p50/p95/p99/max latency, reject/error counts, queue depth, append latency, and relevant resource metadata.
   5. Documentation explains the remaining performance ceiling and separates disruptor/ring capability from full-service throughput limits such as durable PostgreSQL append, HTTP overhead, or configured backpressure.
 **Depends on:** Phase 13
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
-- [ ] 13.1-01-PLAN.md — Refactor the runtime to run one worker per shard and add a safe `ExpectedRevision::NoStream` cold-cache fast path.
-- [ ] 13.1-02-PLAN.md — Fix the live HTTP harness so it can saturate offered load, model true hot-key traffic, and report trustworthy scrape diagnostics.
+- [x] 13.1-01-PLAN.md — Refactor the runtime to run one worker per shard and add a safe `ExpectedRevision::NoStream` cold-cache fast path.
+- [x] 13.1-02-PLAN.md — Fix the live HTTP harness so it can saturate offered load, model true hot-key traffic, and report trustworthy scrape diagnostics.
 - [ ] 13.1-03-PLAN.md — Add one repeatable layer-comparison script and update docs that explain the resulting throughput ceiling.
 
 ### Phase 14: Milestone Debt Closure and Archive Sign-Off
@@ -301,5 +301,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 11. Evidence Recovery and Runnable HTTP Service | 2/2 | Complete | 2026-04-21 |
 | 12. External-Process HTTP E2E, Stress, and Benchmark Closure | 2/2 | Complete   | 2026-04-25 |
 | 13. Live External-Process HTTP Steady-State Stress Testing | 2/2 | Complete    | 2026-04-26 |
-| 13.1. Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization | 0/0 | Pending | - |
+| 13.1. Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization | 2/3 | In Progress|  |
 | 14. Milestone Debt Closure and Archive Sign-Off | 0/2 | Pending | - |
