@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-19)
 
 **Core value:** Provide a reusable, production-shaped Rust service template where committed events are the source of truth and `disruptor-rs` is used only as the in-process ordered execution engine.
-**Current focus:** Phase 13.1 — disruptor-throughput-bottleneck-investigation-and-runtime-st
+**Current focus:** Phase 14 — milestone-debt-closure-and-archive-sign-off
 
 ## Current Position
 
@@ -30,7 +30,7 @@ Plan: Not started
 Status: Ready to plan Phase 14
 Last activity: 2026-04-26
 
-Progress: [█████████░] 86%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
