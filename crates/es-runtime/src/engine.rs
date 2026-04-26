@@ -139,10 +139,19 @@ where
     /// Runs the dispatcher loop until shutdown is requested or ingress closes.
     pub async fn run(mut self, shutdown: Arc<Notify>) -> RuntimeResult<()>
     {
+        let mut shutting_down = false;
+
         loop {
+            if shutting_down {
+                self.receiver.close();
+                self.drain_undispatched();
+                break;
+            }
+
             tokio::select! {
-                _ = shutdown.notified() => {
-                    break;
+                biased;
+                _ = shutdown.notified(), if !shutting_down => {
+                    shutting_down = true;
                 }
                 routed = self.receiver.recv() => {
                     let Some(routed) = routed else {
@@ -162,6 +171,12 @@ where
         }
 
         Ok(())
+    }
+
+    fn drain_undispatched(&mut self) {
+        while let Ok(routed) = self.receiver.try_recv() {
+            let _ = routed.envelope.reply.send(Err(RuntimeError::Unavailable));
+        }
     }
 
     async fn dispatch_routed(&self, routed: RoutedCommand<A>) -> RuntimeResult<()>
