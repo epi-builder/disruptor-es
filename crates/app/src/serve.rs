@@ -107,9 +107,9 @@ pub async fn run(config: ServeConfig) -> anyhow::Result<()> {
     });
 
     let shutdown = Arc::new(Notify::new());
-    let order_task = spawn_engine_loop("order", order_engine, shutdown.clone());
-    let product_task = spawn_engine_loop("product", product_engine, shutdown.clone());
-    let user_task = spawn_engine_loop("user", user_engine, shutdown.clone());
+    let order_task = spawn_engine("order", order_engine, shutdown.clone());
+    let product_task = spawn_engine("product", product_engine, shutdown.clone());
+    let user_task = spawn_engine("user", user_engine, shutdown.clone());
 
     let listener = TcpListener::bind(config.listen_addr)
         .await
@@ -139,9 +139,9 @@ async fn shutdown_signal() {
     }
 }
 
-fn spawn_engine_loop<A, S, C>(
+fn spawn_engine<A, S, C>(
     name: &'static str,
-    mut engine: CommandEngine<A, S, C>,
+    engine: CommandEngine<A, S, C>,
     shutdown: Arc<Notify>,
 ) -> JoinHandle<anyhow::Result<()>>
 where
@@ -155,19 +155,10 @@ where
     C: RuntimeEventCodec<A> + Send + 'static,
 {
     tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                _ = shutdown.notified() => {
-                    tracing::info!(aggregate = name, "stopping command engine loop");
-                    break;
-                }
-                result = engine.process_one() => {
-                    result.with_context(|| format!("processing {name} command"))?;
-                }
-            }
-        }
-
-        Ok(())
+        engine
+            .run(shutdown)
+            .await
+            .with_context(|| format!("running {name} command engine"))
     })
 }
 
