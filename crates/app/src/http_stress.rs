@@ -935,10 +935,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        HttpStressConfig, HttpStressProfile, canonical_place_order_request,
-        histogram_p95_delta_micros, run_external_process_http_stress,
+        HttpStressConfig, HttpStressProfile, HttpWorkloadShape, MeasuredState,
+        canonical_place_order_request, histogram_p95_delta_micros, record_metrics_scrape_result,
+        request_identity_for_index, run_external_process_http_stress,
     };
     use crate::stress::StressScenario;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn canonical_request_fixtures_are_stable_and_typed() {
@@ -948,6 +950,53 @@ mod tests {
         assert_eq!("fixture-order-3", request.order_id);
         assert_eq!("fixture-user-3", request.user_id);
         assert_eq!(1, request.lines.len());
+    }
+
+    #[test]
+    fn hot_key_profile_reuses_one_partition_key() {
+        let config = HttpStressConfig::from_profile(HttpStressProfile::HotKey);
+        let first = request_identity_for_index("hot", 0, config.workload_shape, config.hot_set_size);
+        let second =
+            request_identity_for_index("hot", 11, config.workload_shape, config.hot_set_size);
+
+        assert_eq!(HttpWorkloadShape::SingleHotKey, config.workload_shape);
+        assert_eq!(first.order_id, second.order_id);
+        assert_eq!(first.user_id, second.user_id);
+        assert_eq!(first.product_id, second.product_id);
+        assert_eq!(first.sku, second.sku);
+    }
+
+    #[test]
+    fn hot_set_shape_reuses_bounded_key_set() {
+        let first = request_identity_for_index("hot-set", 0, HttpWorkloadShape::HotSet(8), Some(8));
+        let wrapped =
+            request_identity_for_index("hot-set", 8, HttpWorkloadShape::HotSet(8), Some(8));
+        let distinct =
+            request_identity_for_index("hot-set", 9, HttpWorkloadShape::HotSet(8), Some(8));
+
+        assert_eq!(first.order_id, wrapped.order_id);
+        assert_eq!(first.user_id, wrapped.user_id);
+        assert_eq!(first.product_id, wrapped.product_id);
+        assert_eq!(first.sku, wrapped.sku);
+        assert_ne!(first.order_id, distinct.order_id);
+    }
+
+    #[test]
+    fn metrics_scrape_failures_are_counted() {
+        let measured = Arc::new(Mutex::new(MeasuredState::default()));
+
+        record_metrics_scrape_result(&measured, Err(anyhow::anyhow!("scrape failed")));
+
+        let state = measured.lock().expect("metric sampler mutex poisoned");
+        assert_eq!(0, state.metrics_scrape_successes);
+        assert_eq!(1, state.metrics_scrape_failures);
+        assert_eq!(1, state.metrics_sample_count);
+    }
+
+    #[test]
+    fn execute_http_window_does_not_use_fixed_one_millisecond_submit_tick() {
+        let source = include_str!("http_stress.rs");
+        assert!(!source.contains("interval(Duration::from_millis(1))"));
     }
 
     #[test]
@@ -987,6 +1036,7 @@ mod tests {
         assert_eq!(2, hot_key.shard_count);
         assert_eq!(128, hot_key.ingress_capacity);
         assert_eq!(128, hot_key.ring_size);
+        assert_eq!(HttpWorkloadShape::SingleHotKey, hot_key.workload_shape);
     }
 
     #[test]

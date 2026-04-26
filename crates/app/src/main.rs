@@ -149,6 +149,39 @@ mod tests {
     }
 
     #[test]
+    fn http_stress_cli_accepts_hot_set_workload_shape() {
+        let config = parse_http_stress_args([
+            "--profile",
+            "smoke",
+            "--workload-shape",
+            "hot-set",
+            "--hot-set-size",
+            "8",
+        ])
+        .expect("cli args parse");
+
+        assert_eq!(app::http_stress::HttpWorkloadShape::HotSet(8), config.workload_shape);
+        assert_eq!(Some(8), config.hot_set_size);
+    }
+
+    #[test]
+    fn http_stress_cli_accepts_single_hot_key_workload_shape() {
+        let config = parse_http_stress_args([
+            "--profile",
+            "smoke",
+            "--workload-shape",
+            "single-hot-key",
+        ])
+        .expect("cli args parse");
+
+        assert_eq!(
+            app::http_stress::HttpWorkloadShape::SingleHotKey,
+            config.workload_shape
+        );
+        assert_eq!(None, config.hot_set_size);
+    }
+
+    #[test]
     fn http_stress_report_includes_phase13_json_fields() {
         let report = StressReport {
             scenario: StressScenario::ExternalProcessHttp,
