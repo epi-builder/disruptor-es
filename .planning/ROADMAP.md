@@ -26,7 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 10: Duplicate-Safe Process Manager Follow-Up Keys** - Process-manager reserve/release follow-up commands use collision-safe idempotency keys for duplicate product lines while preserving retry replay. Completed 2026-04-20.
 - [x] **Phase 11: Evidence Recovery and Runnable HTTP Service** - Restore the archive evidence chain, add the official `app serve` runtime entrypoint, and document how the real HTTP composition is started and smoke-tested. Completed 2026-04-21.
 - [x] **Phase 12: External-Process HTTP E2E, Stress, and Benchmark Closure** - Replace shortcut “full E2E” paths with external-process HTTP workloads that exercise the real serving path for end-to-end tests, stress runs, and benchmark baselines. (completed 2026-04-25)
-- [ ] **Phase 13: Live External-Process HTTP Steady-State Stress Testing** - Add a long-lived `app serve` HTTP stress lane that separates startup cost from steady-state request latency and throughput so live-service performance can be estimated from sustained load.
+- [x] **Phase 13: Live External-Process HTTP Steady-State Stress Testing** - Add a long-lived `app serve` HTTP stress lane that separates startup cost from steady-state request latency and throughput so live-service performance can be estimated from sustained load. (completed 2026-04-26)
 - [ ] **Phase 14: Milestone Debt Closure and Archive Sign-Off** - Close every remaining milestone-critical validation and hardening gap, reopen earlier phase artifacts when needed, and rerun the final audit before v1 archive.
 
 ## Phase Details
@@ -240,8 +240,8 @@ Plans:
   5. Documentation explains how to interpret steady-state live HTTP results separately from Phase 12 external-process smoke benchmarks and in-process integrated stress.
 **Plans**: 2 plans
 Plans:
-- [ ] 13-01-PLAN.md — Add bounded steady-state live HTTP runner semantics with warmup/measurement separation and measured-window reporting.
-- [ ] 13-02-PLAN.md — Add configurable `app http-stress` CLI, keep Criterion secondary, and document Phase 13 steady-state interpretation.
+- [x] 13-01-PLAN.md — Add bounded steady-state live HTTP runner semantics with warmup/measurement separation and measured-window reporting.
+- [x] 13-02-PLAN.md — Add configurable `app http-stress` CLI, keep Criterion secondary, and document Phase 13 steady-state interpretation.
 
 ### Phase 14: Milestone Debt Closure and Archive Sign-Off
 
@@ -280,5 +280,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 10. Duplicate-Safe Process Manager Follow-Up Keys | 1/1 | Complete | 2026-04-20 |
 | 11. Evidence Recovery and Runnable HTTP Service | 2/2 | Complete | 2026-04-21 |
 | 12. External-Process HTTP E2E, Stress, and Benchmark Closure | 2/2 | Complete   | 2026-04-25 |
-| 13. Live External-Process HTTP Steady-State Stress Testing | 0/0 | Pending | - |
+| 13. Live External-Process HTTP Steady-State Stress Testing | 2/2 | Complete    | 2026-04-26 |
 | 14. Milestone Debt Closure and Archive Sign-Off | 0/2 | Pending | - |
