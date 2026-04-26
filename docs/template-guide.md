@@ -98,21 +98,33 @@ curl -sf http://127.0.0.1:3000/commands/orders/place \
 
 ## Run External-Process HTTP Coverage
 
-Phase 12 adds three distinct external-process lanes on top of `app serve`:
+Phase 12 and Phase 13 add distinct external-process lanes on top of `app serve`:
 
 - readiness smoke: `cargo test -p app serve_smoke -- --nocapture`
 - canonical E2E contracts: `cargo test -p app external_process_http -- --nocapture`
-- external-process stress: `cargo run -p app -- http-stress`
+- steady-state live HTTP stress: `cargo run -p app -- http-stress --profile smoke`
 - external-process benchmark: `cargo bench --bench external_process_http -- --sample-size 10`
+
+Exact Phase 13 steady-state commands:
+
+- `cargo run -p app -- http-stress --profile smoke`
+- `cargo run -p app -- http-stress --profile baseline --warmup-seconds 5 --measure-seconds 30 --concurrency 8`
+- `cargo run -p app -- http-stress --profile burst`
+- `cargo run -p app -- http-stress --profile hot-key`
 
 Keep the boundaries explicit when recording results:
 
 - `app serve` = long-lived service process
 - `serve_smoke` = narrow readiness plus one happy-path command probe
 - `app stress-smoke` = in-process integrated stress without external client/process overhead
-- `app http-stress` and `external_process_http` bench = external-process HTTP client/service baseline
+- `app http-stress` = Phase 13 steady-state live HTTP measurement source
+- `external_process_http` bench = short Criterion smoke comparison, not the authoritative Phase 13 steady-state report
 
-External-process stress and benchmark output must carry the same required report fields used in other archive-facing stress reports: `throughput_per_second`, `p95_micros`, `projection_lag`, `outbox_lag`, `reject_rate`, `cpu_utilization_percent`, and related percentile/depth fields described in [docs/stress-results.md](/Users/epikem/dev/projects/disruptor-es/docs/stress-results.md:1).
+For `app http-stress`, the measured window excludes PostgreSQL container startup, migrations, readiness probing, binary compilation, and warmup traffic. The runner starts `app serve` once, stops submitting at the measured deadline, drains in-flight work for up to 5 seconds, and reports those semantics through `deadline_policy` and `drain_timeout_seconds`.
+
+Phase 12 benchmark output may still include build/startup effects and Criterion iteration behavior. Use Phase 13 steady-state JSON when making archive-facing sustained throughput and latency claims.
+
+External-process stress and benchmark output must carry the same required report fields used in other archive-facing stress reports: `throughput_per_second`, `p95_micros`, `projection_lag`, `outbox_lag`, `reject_rate`, `cpu_utilization_percent`, and related percentile/depth fields described in [docs/stress-results.md](/Users/epikem/dev/projects/disruptor-es/docs/stress-results.md:1). Phase 13 steady-state runs also record `profile_name`, `warmup_seconds`, `measurement_seconds`, `run_duration_seconds`, `concurrency`, `deadline_policy`, `drain_timeout_seconds`, and host metadata.
 
 ## WebSocket Gateway
 

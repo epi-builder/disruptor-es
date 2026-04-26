@@ -31,14 +31,60 @@ In-process integrated stress is the right local signal for template shape, queue
 
 ## External-Process HTTP Stress And Benchmark
 
-External-process HTTP measurements launch the real `app serve` binary, then submit canonical order commands over HTTP from outside that process. This is the archive-facing lane for client plus service-process overhead.
+External-process HTTP measurements launch the real `app serve` binary, then submit canonical order commands over HTTP from outside that process. Phase 13 splits this lane into one authoritative steady-state runner and one secondary Criterion smoke wrapper.
+
+### Phase 13 Steady-State Live HTTP
+
+`app http-stress` is the archive-facing steady-state lane for sustained live-service throughput and latency claims. Supported profiles are:
+
+- `smoke`
+- `baseline`
+- `burst`
+- `hot-key`
 
 Use:
 
-- `cargo run -p app -- http-stress`
-- `cargo bench --bench external_process_http -- --sample-size 10`
+- `cargo run -p app -- http-stress --profile smoke`
+- `cargo run -p app -- http-stress --profile baseline --warmup-seconds 5 --measure-seconds 30 --concurrency 8`
+- `cargo run -p app -- http-stress --profile burst`
+- `cargo run -p app -- http-stress --profile hot-key`
 
-These runs are intentionally separate from `app stress-smoke`. The external-process lane reuses the same required report fields and adds real HTTP client, process boundary, socket, and server bootstrap overhead. Record `throughput_per_second`, `p50_micros`, `p95_micros`, `p99_micros`, `ingress_depth_max`, `shard_depth_max`, `append_latency_p95_micros`, `projection_lag`, `outbox_lag`, `reject_rate`, `cpu_utilization_percent`, and `core_count` alongside host, commit, and configuration metadata.
+The runner starts `app serve` once, then performs readiness, warmup, and measurement on that same process. PostgreSQL container startup, migrations, readiness probing, binary compilation, and warmup traffic are outside the measured window. Only the measured window contributes to throughput, latency, reject, lag, and resource counters.
+
+Measured-window deadline semantics are fixed for comparability: the runner stops submitting at the measured deadline, drains in-flight work for up to 5 seconds, and reports that policy through `deadline_policy` and `drain_timeout_seconds`.
+
+Required steady-state output fields:
+
+- `throughput_per_second`
+- `p50_micros`
+- `p95_micros`
+- `p99_micros`
+- `max_micros`
+- `commands_succeeded`
+- `commands_rejected`
+- `commands_failed`
+- `reject_rate`
+- `append_latency_p95_micros`
+- `ingress_depth_max`
+- `shard_depth_max`
+- `projection_lag`
+- `outbox_lag`
+- `cpu_utilization_percent`
+- `core_count`
+- `profile_name`
+- `warmup_seconds`
+- `measurement_seconds`
+- `run_duration_seconds`
+- `concurrency`
+- `deadline_policy`
+- `drain_timeout_seconds`
+- `host_os`
+- `host_arch`
+- `cpu_brand`
+
+### Criterion Smoke / Baseline Comparison
+
+`cargo bench --bench external_process_http -- --sample-size 10` remains available for short smoke or baseline comparisons, but it is not the authoritative Phase 13 steady-state report. Criterion still includes iteration-model behavior, and the older Phase 12 benchmark lane may also surface build or startup effects depending on local state. Use Phase 13 steady-state JSON as the live-service measurement source when recording sustained throughput and latency evidence.
 
 ## Runnable HTTP Service vs. In-Process Stress
 
@@ -68,7 +114,7 @@ Every in-process integrated or external-process HTTP stress report should includ
 - `cpu_utilization_percent`
 - `core_count`
 
-Also record scenario name, command count, concurrency, shard count, ingress capacity, ring size, tenant count, host details, commit hash, and any database or container settings used for the run.
+For Phase 13 steady-state live HTTP runs, also record `profile_name`, `warmup_seconds`, `measurement_seconds`, `run_duration_seconds`, `concurrency`, `deadline_policy`, `drain_timeout_seconds`, `host_os`, `host_arch`, and `cpu_brand` alongside commit hash and any database or container settings used for the run.
 
 ## Reading Projection And Outbox Lag
 
