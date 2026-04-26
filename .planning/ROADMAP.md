@@ -27,6 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 11: Evidence Recovery and Runnable HTTP Service** - Restore the archive evidence chain, add the official `app serve` runtime entrypoint, and document how the real HTTP composition is started and smoke-tested. Completed 2026-04-21.
 - [x] **Phase 12: External-Process HTTP E2E, Stress, and Benchmark Closure** - Replace shortcut “full E2E” paths with external-process HTTP workloads that exercise the real serving path for end-to-end tests, stress runs, and benchmark baselines. (completed 2026-04-25)
 - [x] **Phase 13: Live External-Process HTTP Steady-State Stress Testing** - Add a long-lived `app serve` HTTP stress lane that separates startup cost from steady-state request latency and throughput so live-service performance can be estimated from sustained load. (completed 2026-04-26)
+- [ ] **Phase 13.1: Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization (INSERTED)** - Investigate why Phase 13 measured throughput is far below expected disruptor-style high-throughput behavior, isolate implementation and stress-harness bottlenecks, and improve the runtime or test path before archive sign-off.
 - [ ] **Phase 14: Milestone Debt Closure and Archive Sign-Off** - Close every remaining milestone-critical validation and hardening gap, reopen earlier phase artifacts when needed, and rerun the final audit before v1 archive.
 
 ## Phase Details
@@ -243,12 +244,29 @@ Plans:
 - [x] 13-01-PLAN.md — Add bounded steady-state live HTTP runner semantics with warmup/measurement separation and measured-window reporting.
 - [x] 13-02-PLAN.md — Add configurable `app http-stress` CLI, keep Criterion secondary, and document Phase 13 steady-state interpretation.
 
+### Phase 13.1: Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization (INSERTED)
+
+**Goal:** Phase 13 live HTTP stress results showed unexpectedly low throughput for a runtime that should benefit from disruptor-style ordered execution. Identify whether the bottleneck is in the current runtime implementation, HTTP/stress harness, storage path, shard admission, disruptor integration, projection/outbox side effects, or measurement methodology, then make the highest-confidence improvements before final archive sign-off.
+**Requirements**: RUNTIME-01, RUNTIME-02, RUNTIME-05, TEST-03, TEST-04, OBS-02
+**Gap Closure**: Reopens the performance evidence path after Phase 13 because the measured steady-state throughput is too low to support the template's high-throughput disruptor claim without bottleneck analysis and targeted optimization.
+**Success Criteria** (what must be TRUE):
+  1. Phase 13 stress artifacts are reviewed and the dominant throughput limit is classified by layer: HTTP client/server, adapter admission, command routing, shard queueing, disruptor execution, aggregate decision, event-store append, projection/outbox work, or measurement configuration.
+  2. Ring-only, runtime-only, storage-only, adapter-only, and live HTTP measurements are compared enough to prove where the low throughput is introduced rather than assuming the disruptor path is at fault.
+  3. At least one concrete implementation or harness bottleneck is fixed when evidence shows it is suppressing throughput, or the phase documents why no safe code change is justified yet.
+  4. Updated stress output includes before/after or baseline/comparison evidence with throughput, p50/p95/p99/max latency, reject/error counts, queue depth, append latency, and relevant resource metadata.
+  5. Documentation explains the remaining performance ceiling and separates disruptor/ring capability from full-service throughput limits such as durable PostgreSQL append, HTTP overhead, or configured backpressure.
+**Depends on:** Phase 13
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 13.1 to break down)
+
 ### Phase 14: Milestone Debt Closure and Archive Sign-Off
 
 **Goal:** Finish every remaining milestone-critical validation and hardening task, even when that requires reopening prior phase artifacts, so v1 archive happens with no known goal-critical debt still parked outside the closure path.
 **Requirements**: STORE-03, RUNTIME-05, DOM-04, DOM-05, INT-04, TEST-02
 **Gap Closure**: Resolves partial Nyquist validation and any milestone-critical commerce lifecycle hardening still standing after the HTTP/evidence work is done.
-**Depends on:** Phase 13
+**Depends on:** Phase 13.1
 **Success Criteria** (what must be TRUE):
   1. Partial Nyquist phases 02, 04, 06, and 07 are fully closed by new validation evidence or by reopening and repairing their underlying phase artifacts.
   2. Commerce lifecycle command-ID hardening is implemented wherever milestone acceptance still depends on it, or the underlying risk is disproven by targeted verification so no open milestone debt remains.
@@ -264,7 +282,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 13.1 → 14
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -281,4 +299,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 11. Evidence Recovery and Runnable HTTP Service | 2/2 | Complete | 2026-04-21 |
 | 12. External-Process HTTP E2E, Stress, and Benchmark Closure | 2/2 | Complete   | 2026-04-25 |
 | 13. Live External-Process HTTP Steady-State Stress Testing | 2/2 | Complete    | 2026-04-26 |
+| 13.1. Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization | 0/0 | Pending | - |
 | 14. Milestone Debt Closure and Archive Sign-Off | 0/2 | Pending | - |
