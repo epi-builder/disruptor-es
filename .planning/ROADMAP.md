@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 11: Evidence Recovery and Runnable HTTP Service** - Restore the archive evidence chain, add the official `app serve` runtime entrypoint, and document how the real HTTP composition is started and smoke-tested. Completed 2026-04-21.
 - [x] **Phase 12: External-Process HTTP E2E, Stress, and Benchmark Closure** - Replace shortcut “full E2E” paths with external-process HTTP workloads that exercise the real serving path for end-to-end tests, stress runs, and benchmark baselines. (completed 2026-04-25)
 - [x] **Phase 13: Live External-Process HTTP Steady-State Stress Testing** - Add a long-lived `app serve` HTTP stress lane that separates startup cost from steady-state request latency and throughput so live-service performance can be estimated from sustained load. (completed 2026-04-26)
-- [x] **Phase 13.1: Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization (INSERTED)** - Investigate why Phase 13 measured throughput is far below expected disruptor-style high-throughput behavior, isolate implementation and stress-harness bottlenecks, and improve the runtime or test path before archive sign-off. (completed 2026-04-26)
+- [ ] **Phase 13.1: Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization (INSERTED)** - Investigate why Phase 13 measured throughput is far below expected disruptor-style high-throughput behavior, isolate implementation and stress-harness bottlenecks, and improve the runtime or test path before archive sign-off. (reopened 2026-04-27 for verification gap closure)
 - [ ] **Phase 14: Milestone Debt Closure and Archive Sign-Off** - Close every remaining milestone-critical validation and hardening gap, reopen earlier phase artifacts when needed, and rerun the final audit before v1 archive.
 
 ## Phase Details
@@ -256,12 +256,15 @@ Plans:
   4. Updated stress output includes before/after or baseline/comparison evidence with throughput, p50/p95/p99/max latency, reject/error counts, queue depth, append latency, and relevant resource metadata.
   5. Documentation explains the remaining performance ceiling and separates disruptor/ring capability from full-service throughput limits such as durable PostgreSQL append, HTTP overhead, or configured backpressure.
 **Depends on:** Phase 13
-**Plans:** 3/3 plans complete
+**Plans:** 3/6 plans complete
 
 Plans:
 - [x] 13.1-01-PLAN.md — Refactor the runtime to run one worker per shard and add a safe `ExpectedRevision::NoStream` cold-cache fast path.
 - [x] 13.1-02-PLAN.md — Fix the live HTTP harness so it can saturate offered load, model true hot-key traffic, and report trustworthy scrape diagnostics.
 - [x] 13.1-03-PLAN.md — Add one repeatable layer-comparison script and update docs that explain the resulting throughput ceiling.
+- [ ] 13.1-04-PLAN.md — Fix shutdown semantics so accepted-but-undispatched runtime commands resolve deterministically during `app serve` shutdown.
+- [ ] 13.1-05-PLAN.md — Correct live HTTP report semantics so observed metrics, estimated fallbacks, and repeated-stream diagnostics are explicitly separated.
+- [ ] 13.1-06-PLAN.md — Regenerate storage and baseline comparison evidence under the corrected semantics and document scrape-gated ceiling rules.
 
 ### Phase 14: Milestone Debt Closure and Archive Sign-Off
 
