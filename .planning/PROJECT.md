@@ -24,6 +24,7 @@ Provide a reusable, production-shaped Rust service template where committed even
 - [x] Phase 08 validated runtime duplicate command replay with durable typed reply payloads, shard-local and PostgreSQL idempotency lookup before aggregate decision, HTTP duplicate retry coverage, and process-manager follow-up retry coverage.
 - [x] Phase 09 validated tenant-scoped runtime aggregate cache identity, same-stream cross-tenant rehydration isolation, conflict-safe cache behavior, and duplicate append replay cache refresh/invalidation.
 - [x] Phase 13 validated live external-process HTTP steady-state stress testing with bounded profiles, warmup/measurement separation, measured-window JSON reports, secondary Criterion positioning, and operator guidance.
+- [x] Phase 13.1 validated the throughput bottleneck investigation and gap closure path with per-shard runtime execution, deterministic accepted-command shutdown handling, observed-vs-estimated stress report semantics, self-contained storage benchmarking, regenerated layer-comparison evidence, and scrape-gated `inconclusive` ceiling documentation.
 
 ### Active
 
@@ -109,4 +110,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-26 after Phase 13 completion*
+*Last updated: 2026-04-26 after Phase 13.1 completion*
