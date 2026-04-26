@@ -609,7 +609,8 @@ fn micros(duration: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        HttpStressConfig, canonical_place_order_request, run_external_process_http_stress,
+        HttpStressConfig, HttpStressProfile, canonical_place_order_request,
+        run_external_process_http_stress,
     };
     use crate::stress::StressScenario;
 
@@ -623,6 +624,83 @@ mod tests {
         assert_eq!(1, request.lines.len());
     }
 
+    #[test]
+    fn http_stress_profile_presets_cover_phase13_profiles() {
+        let smoke = HttpStressConfig::from_profile(HttpStressProfile::Smoke);
+        assert_eq!(1, smoke.warmup_seconds);
+        assert_eq!(2, smoke.measurement_seconds);
+        assert_eq!(2, smoke.concurrency);
+        assert_eq!(16, smoke.command_count);
+        assert_eq!(2, smoke.shard_count);
+        assert_eq!(8, smoke.ingress_capacity);
+        assert_eq!(16, smoke.ring_size);
+
+        let baseline = HttpStressConfig::from_profile(HttpStressProfile::Baseline);
+        assert_eq!(5, baseline.warmup_seconds);
+        assert_eq!(30, baseline.measurement_seconds);
+        assert_eq!(8, baseline.concurrency);
+        assert_eq!(0, baseline.command_count);
+        assert_eq!(4, baseline.shard_count);
+        assert_eq!(256, baseline.ingress_capacity);
+        assert_eq!(256, baseline.ring_size);
+
+        let burst = HttpStressConfig::from_profile(HttpStressProfile::Burst);
+        assert_eq!(3, burst.warmup_seconds);
+        assert_eq!(20, burst.measurement_seconds);
+        assert_eq!(32, burst.concurrency);
+        assert_eq!(0, burst.command_count);
+        assert_eq!(4, burst.shard_count);
+        assert_eq!(128, burst.ingress_capacity);
+        assert_eq!(256, burst.ring_size);
+
+        let hot_key = HttpStressConfig::from_profile(HttpStressProfile::HotKey);
+        assert_eq!(3, hot_key.warmup_seconds);
+        assert_eq!(20, hot_key.measurement_seconds);
+        assert_eq!(16, hot_key.concurrency);
+        assert_eq!(0, hot_key.command_count);
+        assert_eq!(2, hot_key.shard_count);
+        assert_eq!(128, hot_key.ingress_capacity);
+        assert_eq!(128, hot_key.ring_size);
+    }
+
+    #[test]
+    fn http_stress_config_validation_rejects_unbounded_inputs() {
+        let cases = [
+            HttpStressConfig {
+                warmup_seconds: 0,
+                ..HttpStressConfig::from_profile(HttpStressProfile::Smoke)
+            },
+            HttpStressConfig {
+                measurement_seconds: 0,
+                ..HttpStressConfig::from_profile(HttpStressProfile::Smoke)
+            },
+            HttpStressConfig {
+                concurrency: 0,
+                ..HttpStressConfig::from_profile(HttpStressProfile::Smoke)
+            },
+            HttpStressConfig {
+                command_count: 2_000_001,
+                ..HttpStressConfig::from_profile(HttpStressProfile::Smoke)
+            },
+            HttpStressConfig {
+                shard_count: 0,
+                ..HttpStressConfig::from_profile(HttpStressProfile::Smoke)
+            },
+            HttpStressConfig {
+                ingress_capacity: 0,
+                ..HttpStressConfig::from_profile(HttpStressProfile::Smoke)
+            },
+            HttpStressConfig {
+                ring_size: 3,
+                ..HttpStressConfig::from_profile(HttpStressProfile::Smoke)
+            },
+        ];
+
+        for config in cases {
+            assert!(config.validate().is_err());
+        }
+    }
+
     #[tokio::test]
     async fn external_process_http_stress_smoke() -> anyhow::Result<()> {
         let report = run_external_process_http_stress(HttpStressConfig::smoke()).await?;
@@ -631,7 +709,7 @@ mod tests {
         assert!(report.commands_submitted > 0);
         assert_eq!(
             report.commands_submitted,
-            report.commands_succeeded + report.commands_rejected
+            report.commands_succeeded + report.commands_rejected + report.commands_failed
         );
         assert!(report.throughput_per_second >= 0.0);
         assert!(report.p50_micros <= report.p95_micros);
@@ -640,8 +718,57 @@ mod tests {
         assert!(report.projection_lag >= 0);
         assert!(report.outbox_lag >= 0);
         assert!((0.0..=1.0).contains(&report.reject_rate));
+        assert_eq!("smoke", report.profile_name);
+        assert!(report.run_duration_seconds > 0.0);
+        assert_eq!(2, report.concurrency);
+        assert_eq!("stop-new-requests-then-drain-in-flight", report.deadline_policy);
+        assert_eq!(5, report.drain_timeout_seconds);
+        assert_eq!(std::env::consts::OS, report.host_os);
+        assert_eq!(std::env::consts::ARCH, report.host_arch);
+        assert!(!report.cpu_brand.is_empty());
+        assert!(!report.cpu_usage_samples.is_empty());
         assert!(report.core_count > 0);
 
         Ok(())
+    }
+
+    #[test]
+    fn stress_report_omits_sensitive_environment_fields() {
+        let report = crate::stress::StressReport {
+            scenario: StressScenario::ExternalProcessHttp,
+            commands_submitted: 1,
+            commands_succeeded: 1,
+            commands_rejected: 0,
+            commands_failed: 0,
+            throughput_per_second: 1.0,
+            p50_micros: 1,
+            p95_micros: 1,
+            p99_micros: 1,
+            max_micros: 1,
+            ingress_depth_max: 1,
+            shard_depth_max: 1,
+            append_latency_p95_micros: 1,
+            projection_lag: 0,
+            outbox_lag: 0,
+            reject_rate: 0.0,
+            cpu_utilization_percent: 0.0,
+            core_count: 1,
+            profile_name: "smoke".to_string(),
+            warmup_seconds: 1,
+            measurement_seconds: 2,
+            run_duration_seconds: 2.0,
+            concurrency: 2,
+            deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
+            drain_timeout_seconds: 5,
+            host_os: std::env::consts::OS,
+            host_arch: std::env::consts::ARCH,
+            cpu_brand: "cpu".to_string(),
+            cpu_usage_samples: vec![0.0],
+        };
+
+        let json = serde_json::to_string(&report).expect("report serializes");
+        let debug = format!("{report:?}");
+        assert!(!json.contains("DATABASE_URL"));
+        assert!(!debug.contains("DATABASE_URL"));
     }
 }
