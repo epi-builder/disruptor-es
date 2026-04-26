@@ -17,6 +17,7 @@ fn stress_report_json(report: &app::stress::StressReport) -> serde_json::Value {
         "p99_micros": report.p99_micros,
         "max_micros": report.max_micros,
         "ingress_depth_max": report.ingress_depth_max,
+        "ingress_depth_estimated_max": report.ingress_depth_estimated_max,
         "shard_depth_max": report.shard_depth_max,
         "append_latency_p95_micros": report.append_latency_p95_micros,
         "ring_wait_p95_micros": report.ring_wait_p95_micros,
@@ -30,6 +31,7 @@ fn stress_report_json(report: &app::stress::StressReport) -> serde_json::Value {
         "core_count": report.core_count,
         "profile_name": report.profile_name,
         "workload_shape": report.workload_shape,
+        "workload_purpose": report.workload_purpose,
         "hot_set_size": report.hot_set_size,
         "warmup_seconds": report.warmup_seconds,
         "measurement_seconds": report.measurement_seconds,
@@ -271,6 +273,7 @@ mod tests {
 
         assert_eq!("smoke", json["profile_name"]);
         assert_eq!("hot-set", json["workload_shape"]);
+        assert_eq!("repeat-stream-diagnostic", json["workload_purpose"]);
         assert_eq!(4, json["hot_set_size"]);
         assert_eq!(1, json["warmup_seconds"]);
         assert_eq!(2, json["measurement_seconds"]);

@@ -158,18 +158,20 @@ pub struct StressReport {
     pub p99_micros: u64,
     /// Command latency max in microseconds.
     pub max_micros: u64,
-    /// Maximum observed ingress depth.
-    pub ingress_depth_max: usize,
-    /// Maximum observed shard depth.
-    pub shard_depth_max: usize,
-    /// Append-path latency p95 in microseconds.
-    pub append_latency_p95_micros: u64,
-    /// Ring wait p95 in microseconds.
-    pub ring_wait_p95_micros: u64,
-    /// Projection lag sampled outside the command success gate.
-    pub projection_lag: i64,
-    /// Outbox lag sampled outside the command success gate.
-    pub outbox_lag: i64,
+    /// Maximum observed ingress depth when the metric source was available.
+    pub ingress_depth_max: Option<usize>,
+    /// Explicit ingress-depth fallback when no metric scrape succeeded.
+    pub ingress_depth_estimated_max: Option<usize>,
+    /// Maximum observed shard depth when the metric source was available.
+    pub shard_depth_max: Option<usize>,
+    /// Append-path latency p95 in microseconds when observed.
+    pub append_latency_p95_micros: Option<u64>,
+    /// Ring wait p95 in microseconds when observed.
+    pub ring_wait_p95_micros: Option<u64>,
+    /// Projection lag sampled outside the command success gate when observed.
+    pub projection_lag: Option<i64>,
+    /// Outbox lag sampled outside the command success gate when observed.
+    pub outbox_lag: Option<i64>,
     /// Successful Prometheus scrape count recorded during the measured window.
     pub metrics_scrape_successes: u64,
     /// Failed Prometheus scrape count recorded during the measured window.
@@ -186,6 +188,8 @@ pub struct StressReport {
     pub profile_name: String,
     /// Workload-shape label used to generate the request stream.
     pub workload_shape: String,
+    /// Machine-readable workload interpretation label.
+    pub workload_purpose: String,
     /// Optional hot-set size when workload-shape is `hot-set`.
     pub hot_set_size: Option<usize>,
     /// Warmup interval excluded from measured counters.
@@ -208,6 +212,15 @@ pub struct StressReport {
     pub cpu_brand: String,
     /// Repeated CPU usage samples captured during the measured window.
     pub cpu_usage_samples: Vec<f32>,
+}
+
+/// Classify whether a workload shape is normal throughput evidence or a repeat-stream diagnostic.
+pub fn workload_purpose_for_shape(workload_shape: crate::http_stress::HttpWorkloadShape) -> &'static str {
+    match workload_shape {
+        crate::http_stress::HttpWorkloadShape::Unique => "success-throughput",
+        crate::http_stress::HttpWorkloadShape::HotSet(_)
+        | crate::http_stress::HttpWorkloadShape::SingleHotKey => "repeat-stream-diagnostic",
+    }
 }
 
 struct PostgresHarness {
@@ -400,12 +413,13 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
         p95_micros: percentile(&latency, 95.0),
         p99_micros: percentile(&latency, 99.0),
         max_micros: latency.max(),
-        ingress_depth_max,
-        shard_depth_max,
-        append_latency_p95_micros: percentile(&append_latency, 95.0),
-        ring_wait_p95_micros: 0,
-        projection_lag,
-        outbox_lag,
+        ingress_depth_max: Some(ingress_depth_max),
+        ingress_depth_estimated_max: None,
+        shard_depth_max: Some(shard_depth_max),
+        append_latency_p95_micros: Some(percentile(&append_latency, 95.0)),
+        ring_wait_p95_micros: Some(0),
+        projection_lag: Some(projection_lag),
+        outbox_lag: Some(outbox_lag),
         metrics_scrape_successes: 0,
         metrics_scrape_failures: 0,
         metrics_sample_count: 0,
@@ -414,6 +428,7 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
         core_count: system.cpus().len().max(1),
         profile_name: config.scenario.as_str().to_string(),
         workload_shape: "unique".to_string(),
+        workload_purpose: "success-throughput".to_string(),
         hot_set_size: None,
         warmup_seconds: 0,
         measurement_seconds: elapsed.max(1.0).round() as u64,
@@ -752,9 +767,24 @@ mod tests {
         assert!(report.p50_micros <= report.p95_micros);
         assert!(report.p95_micros <= report.p99_micros);
         assert!(report.p99_micros <= report.max_micros);
-        assert!(report.append_latency_p95_micros <= report.max_micros);
-        assert!(report.projection_lag >= 0);
-        assert!(report.outbox_lag >= 0);
+        assert!(
+            report
+                .append_latency_p95_micros
+                .expect("single-service stress records append latency")
+                <= report.max_micros
+        );
+        assert!(
+            report
+                .projection_lag
+                .expect("single-service stress records projection lag")
+                >= 0
+        );
+        assert!(
+            report
+                .outbox_lag
+                .expect("single-service stress records outbox lag")
+                >= 0
+        );
         assert!((0.0..=1.0).contains(&report.reject_rate));
         assert!(report.cpu_utilization_percent >= 0.0);
         assert!(report.core_count > 0);

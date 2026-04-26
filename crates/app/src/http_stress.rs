@@ -425,11 +425,6 @@ pub async fn run_external_process_http_stress(
     .await?;
     let run_duration_seconds = measurement_started.elapsed().as_secs_f64().max(0.001);
     let _ = sampler.await;
-    let reject_rate = if counters.commands_submitted == 0 {
-        0.0
-    } else {
-        counters.commands_rejected as f64 / counters.commands_submitted as f64
-    };
     let measured = measured
         .lock()
         .expect("metric sampler mutex poisoned")
@@ -447,26 +442,68 @@ pub async fn run_external_process_http_stress(
     };
     let core_count = System::new_all().cpus().len().max(1);
 
-    Ok(StressReport {
+    Ok(stress_report_from_measured(
+        &config,
+        &measured,
+        run_duration_seconds,
+        counters.commands_submitted,
+        counters.commands_succeeded,
+        counters.commands_rejected,
+        counters.commands_failed,
+        cpu_utilization_percent,
+        core_count,
+        percentile(&latency, 50.0),
+        percentile(&latency, 95.0),
+        percentile(&latency, 99.0),
+        latency.max(),
+        cpu_brand,
+    ))
+}
+
+fn stress_report_from_measured(
+    config: &HttpStressConfig,
+    measured: &MeasuredState,
+    run_duration_seconds: f64,
+    commands_submitted: usize,
+    commands_succeeded: usize,
+    commands_rejected: usize,
+    commands_failed: usize,
+    cpu_utilization_percent: f32,
+    core_count: usize,
+    p50_micros: u64,
+    p95_micros: u64,
+    p99_micros: u64,
+    max_micros: u64,
+    cpu_brand: String,
+) -> StressReport {
+    let reject_rate = if commands_submitted == 0 {
+        0.0
+    } else {
+        commands_rejected as f64 / commands_submitted as f64
+    };
+    let ingress_depth_estimated_max = (measured.metrics_scrape_successes == 0)
+        .then_some(config.concurrency.min(commands_submitted));
+    let has_observed_metrics = measured.metrics_scrape_successes > 0;
+
+    StressReport {
         scenario: StressScenario::ExternalProcessHttp,
-        commands_submitted: counters.commands_submitted,
-        commands_succeeded: counters.commands_succeeded,
-        commands_rejected: counters.commands_rejected,
-        commands_failed: counters.commands_failed,
-        throughput_per_second: counters.commands_succeeded as f64 / run_duration_seconds,
-        p50_micros: percentile(&latency, 50.0),
-        p95_micros: percentile(&latency, 95.0),
-        p99_micros: percentile(&latency, 99.0),
-        max_micros: latency.max(),
-        ingress_depth_max: measured
-            .metrics
-            .ingress_depth_max
-            .max(config.concurrency.min(counters.commands_submitted)),
-        shard_depth_max: measured.metrics.shard_depth_max,
-        append_latency_p95_micros: measured.metrics.append_latency_p95_micros,
-        ring_wait_p95_micros: measured.metrics.ring_wait_p95_micros,
-        projection_lag: measured.metrics.projection_lag,
-        outbox_lag: measured.metrics.outbox_lag,
+        commands_submitted,
+        commands_succeeded,
+        commands_rejected,
+        commands_failed,
+        throughput_per_second: commands_succeeded as f64 / run_duration_seconds,
+        p50_micros,
+        p95_micros,
+        p99_micros,
+        max_micros,
+        ingress_depth_max: has_observed_metrics.then_some(measured.metrics.ingress_depth_max),
+        ingress_depth_estimated_max,
+        shard_depth_max: has_observed_metrics.then_some(measured.metrics.shard_depth_max),
+        append_latency_p95_micros: has_observed_metrics
+            .then_some(measured.metrics.append_latency_p95_micros),
+        ring_wait_p95_micros: has_observed_metrics.then_some(measured.metrics.ring_wait_p95_micros),
+        projection_lag: has_observed_metrics.then_some(measured.metrics.projection_lag),
+        outbox_lag: has_observed_metrics.then_some(measured.metrics.outbox_lag),
         metrics_scrape_successes: measured.metrics_scrape_successes,
         metrics_scrape_failures: measured.metrics_scrape_failures,
         metrics_sample_count: measured.metrics_sample_count,
@@ -475,6 +512,8 @@ pub async fn run_external_process_http_stress(
         core_count,
         profile_name: config.profile.as_str().to_string(),
         workload_shape: config.workload_shape.as_str().to_string(),
+        workload_purpose: crate::stress::workload_purpose_for_shape(config.workload_shape)
+            .to_string(),
         hot_set_size: config.hot_set_size,
         warmup_seconds: config.warmup_seconds,
         measurement_seconds: config.measurement_seconds,
@@ -485,8 +524,8 @@ pub async fn run_external_process_http_stress(
         host_os: std::env::consts::OS,
         host_arch: std::env::consts::ARCH,
         cpu_brand,
-        cpu_usage_samples: measured.cpu_usage_samples,
-    })
+        cpu_usage_samples: measured.cpu_usage_samples.clone(),
+    }
 }
 
 async fn execute_http_window(
@@ -1137,7 +1176,22 @@ mod tests {
             cpu_brand: "test-cpu".to_string(),
         };
 
-        let report = stress_report_from_measured(&config, &measured, 2.0, 7, 5, 1, 1, 3);
+        let report = stress_report_from_measured(
+            &config,
+            &measured,
+            2.0,
+            7,
+            5,
+            1,
+            1,
+            10.0,
+            3,
+            11,
+            22,
+            33,
+            44,
+            "test-cpu".to_string(),
+        );
 
         assert_eq!(None, report.ingress_depth_max);
         assert_eq!(Some(2), report.ingress_depth_estimated_max);
@@ -1145,8 +1199,11 @@ mod tests {
 
     #[test]
     fn execute_http_window_does_not_use_fixed_one_millisecond_submit_tick() {
-        let source = include_str!("http_stress.rs");
-        assert!(!source.contains("interval(Duration::from_millis(1))"));
+        let source = include_str!("http_stress.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source section");
+        assert!(!source.contains("sleep(Duration::from_millis(1))"));
     }
 
     #[test]
@@ -1288,11 +1345,16 @@ es_append_latency_seconds_count{outcome="committed"} 30
             report.metrics_sample_count,
             report.metrics_scrape_successes + report.metrics_scrape_failures
         );
-        assert!(report.projection_lag >= 0);
-        assert!(report.outbox_lag >= 0);
+        if let Some(projection_lag) = report.projection_lag {
+            assert!(projection_lag >= 0);
+        }
+        if let Some(outbox_lag) = report.outbox_lag {
+            assert!(outbox_lag >= 0);
+        }
         assert!((0.0..=1.0).contains(&report.reject_rate));
         assert_eq!("smoke", report.profile_name);
         assert_eq!("unique", report.workload_shape);
+        assert_eq!("success-throughput", report.workload_purpose);
         assert_eq!(None, report.hot_set_size);
         assert!(report.run_duration_seconds > 0.0);
         assert_eq!(2, report.concurrency);
