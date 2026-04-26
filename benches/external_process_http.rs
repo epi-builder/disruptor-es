@@ -19,9 +19,7 @@ fn external_process_http_smoke(criterion: &mut Criterion) {
         bench.iter(|| {
             let report = runtime
                 .block_on(app::http_stress::run_external_process_http_stress(
-                    app::http_stress::HttpStressConfig::from_profile(
-                        app::http_stress::HttpStressProfile::Smoke,
-                    ),
+                    app::http_stress::HttpStressConfig::smoke(),
                 ))
                 .expect("external-process HTTP stress run");
             black_box(report.throughput_per_second);

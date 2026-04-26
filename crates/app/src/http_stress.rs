@@ -85,6 +85,17 @@ impl HttpStressProfile {
     }
 }
 
+/// Request key distribution for the external HTTP harness.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HttpWorkloadShape {
+    /// Every request uses its own partition-key family.
+    Unique,
+    /// Requests reuse a bounded family of keys.
+    HotSet(usize),
+    /// All requests reuse the same key family.
+    SingleHotKey,
+}
+
 /// External-process HTTP stress knobs with bounded steady-state controls.
 #[derive(Clone, Debug)]
 pub struct HttpStressConfig {
@@ -104,6 +115,10 @@ pub struct HttpStressConfig {
     pub ingress_capacity: usize,
     /// Per-shard ring size.
     pub ring_size: usize,
+    /// Request key distribution used by the harness.
+    pub workload_shape: HttpWorkloadShape,
+    /// Optional hot-set size retained for CLI/report metadata.
+    pub hot_set_size: Option<usize>,
 }
 
 impl HttpStressConfig {
@@ -119,6 +134,8 @@ impl HttpStressConfig {
                 shard_count: 2,
                 ingress_capacity: 8,
                 ring_size: 16,
+                workload_shape: HttpWorkloadShape::Unique,
+                hot_set_size: None,
             },
             HttpStressProfile::Baseline => Self {
                 profile,
@@ -129,6 +146,8 @@ impl HttpStressConfig {
                 shard_count: 4,
                 ingress_capacity: 256,
                 ring_size: 256,
+                workload_shape: HttpWorkloadShape::Unique,
+                hot_set_size: None,
             },
             HttpStressProfile::Burst => Self {
                 profile,
@@ -139,6 +158,8 @@ impl HttpStressConfig {
                 shard_count: 4,
                 ingress_capacity: 128,
                 ring_size: 256,
+                workload_shape: HttpWorkloadShape::Unique,
+                hot_set_size: None,
             },
             HttpStressProfile::HotKey => Self {
                 profile,
@@ -149,6 +170,8 @@ impl HttpStressConfig {
                 shard_count: 2,
                 ingress_capacity: 128,
                 ring_size: 128,
+                workload_shape: HttpWorkloadShape::SingleHotKey,
+                hot_set_size: None,
             },
         }
     }
@@ -167,6 +190,27 @@ impl HttpStressConfig {
         ensure_in_range("shard_count", self.shard_count, 1..=64)?;
         ensure_in_range("ingress_capacity", self.ingress_capacity, 1..=65_536)?;
         ensure_in_range("ring_size", self.ring_size, 2..=65_536)?;
+        if let Some(hot_set_size) = self.hot_set_size {
+            ensure_in_range("hot_set_size", hot_set_size, 1..=4_096)?;
+        }
+        match self.workload_shape {
+            HttpWorkloadShape::Unique | HttpWorkloadShape::SingleHotKey => {
+                if self.hot_set_size.is_some() {
+                    return Err(anyhow!(
+                        "hot_set_size is only valid when workload_shape is hot-set"
+                    ));
+                }
+            }
+            HttpWorkloadShape::HotSet(size) => {
+                let configured = self.hot_set_size.unwrap_or(size);
+                ensure_in_range("hot_set_size", configured, 1..=4_096)?;
+                if configured != size {
+                    return Err(anyhow!(
+                        "hot_set_size must match workload_shape hot-set size"
+                    ));
+                }
+            }
+        }
         if !self.ring_size.is_power_of_two() {
             return Err(anyhow!("ring_size must be a power of two"));
         }
@@ -186,6 +230,15 @@ struct ExternalProcessHarness {
     listen_addr: SocketAddr,
     prometheus_addr: SocketAddr,
     client: Client,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct RequestIdentity {
+    order_id: String,
+    user_id: String,
+    product_id: String,
+    sku: String,
+    identity_index: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -264,21 +317,55 @@ impl ExternalProcessHarness {
 
 /// Builds a stable order command fixture for the external-process HTTP path.
 pub fn canonical_place_order_request(prefix: &str, index: usize) -> CanonicalPlaceOrderRequest {
+    canonical_place_order_request_for_shape(prefix, index, HttpWorkloadShape::Unique, None)
+}
+
+fn canonical_place_order_request_for_shape(
+    prefix: &str,
+    index: usize,
+    workload_shape: HttpWorkloadShape,
+    hot_set_size: Option<usize>,
+) -> CanonicalPlaceOrderRequest {
+    let identity = request_identity_for_index(prefix, index, workload_shape, hot_set_size);
     let base = 1_000_000_u128 + index as u128 * 10;
     CanonicalPlaceOrderRequest {
         tenant_id: "tenant-a".to_owned(),
         idempotency_key: format!("{prefix}-idem-{index}"),
         command_id: Uuid::from_u128(base),
         correlation_id: Uuid::from_u128(base + 1),
-        order_id: format!("{prefix}-order-{index}"),
-        user_id: format!("{prefix}-user-{index}"),
+        order_id: identity.order_id,
+        user_id: identity.user_id,
         user_active: true,
         lines: vec![CanonicalOrderLine {
-            product_id: format!("{prefix}-product-{index}"),
-            sku: format!("SKU-{prefix}-{index}"),
+            product_id: identity.product_id,
+            sku: identity.sku,
             quantity: 1,
             product_available: true,
         }],
+    }
+}
+
+fn request_identity_for_index(
+    prefix: &str,
+    index: usize,
+    workload_shape: HttpWorkloadShape,
+    hot_set_size: Option<usize>,
+) -> RequestIdentity {
+    let identity_index = match workload_shape {
+        HttpWorkloadShape::Unique => index,
+        HttpWorkloadShape::HotSet(size) => {
+            let bounded = hot_set_size.unwrap_or(size).max(1);
+            index % bounded
+        }
+        HttpWorkloadShape::SingleHotKey => 0,
+    };
+
+    RequestIdentity {
+        order_id: format!("{prefix}-order-{identity_index}"),
+        user_id: format!("{prefix}-user-{identity_index}"),
+        product_id: format!("{prefix}-product-{identity_index}"),
+        sku: format!("SKU-{prefix}-{identity_index}"),
+        identity_index,
     }
 }
 
@@ -398,19 +485,17 @@ async fn execute_http_window(
         start_index.saturating_add(config.command_count)
     };
     let deadline = Instant::now() + duration;
-    let mut submit_tick = interval(Duration::from_millis(1));
-    submit_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
         while in_flight.len() < config.concurrency
             && next_index < max_index
             && Instant::now() < deadline
         {
-            submit_tick.tick().await;
-            if Instant::now() >= deadline {
-                break;
-            }
-
-            let request = canonical_place_order_request("external-http-stress", next_index);
+            let request = canonical_place_order_request_for_shape(
+                "external-http-stress",
+                next_index,
+                config.workload_shape,
+                config.hot_set_size,
+            );
             let client = harness.client.clone();
             let listen_addr = harness.listen_addr;
             in_flight
@@ -420,14 +505,10 @@ async fn execute_http_window(
         }
 
         if in_flight.is_empty() {
-            if Instant::now() >= deadline || next_index >= max_index {
-                break;
-            }
-            submit_tick.tick().await;
-            continue;
+            break;
         }
 
-        if Instant::now() >= deadline {
+        if Instant::now() >= deadline || next_index >= max_index {
             break;
         }
 
@@ -473,6 +554,7 @@ fn record_join_result(
     match outcome.status {
         StatusCode::OK => counters.commands_succeeded += 1,
         StatusCode::TOO_MANY_REQUESTS => counters.commands_rejected += 1,
+        StatusCode::BAD_REQUEST => counters.commands_failed += 1,
         status => {
             return Err(anyhow!(
                 "unexpected external-process stress status {status}"
@@ -513,7 +595,7 @@ async fn place_order_with_client(
         if payload["reply"]["type"] != "placed" {
             return Err(anyhow!("unexpected success reply payload: {body}"));
         }
-    } else if status != StatusCode::TOO_MANY_REQUESTS {
+    } else if status != StatusCode::TOO_MANY_REQUESTS && status != StatusCode::BAD_REQUEST {
         return Err(anyhow!("unexpected HTTP status {status}: {body}"));
     }
 

@@ -2,7 +2,7 @@
 
 use anyhow::{Context, anyhow, bail};
 
-const HTTP_STRESS_USAGE: &str = "usage: app serve | app stress-smoke | app http-stress [--profile smoke|baseline|burst|hot-key] [--warmup-seconds <u64>] [--measure-seconds <u64>] [--concurrency <usize>] [--command-count <usize>] [--shard-count <usize>] [--ingress-capacity <usize>] [--ring-size <usize>]";
+const HTTP_STRESS_USAGE: &str = "usage: app serve | app stress-smoke | app http-stress [--profile smoke|baseline|burst|hot-key] [--workload-shape unique|hot-set|single-hot-key] [--hot-set-size <usize>] [--warmup-seconds <u64>] [--measure-seconds <u64>] [--concurrency <usize>] [--command-count <usize>] [--shard-count <usize>] [--ingress-capacity <usize>] [--ring-size <usize>]";
 
 fn stress_report_json(report: &app::stress::StressReport) -> serde_json::Value {
     serde_json::json!({
@@ -52,6 +52,20 @@ fn parse_profile(value: &str) -> anyhow::Result<app::http_stress::HttpStressProf
     }
 }
 
+fn parse_workload_shape(
+    value: &str,
+    hot_set_size: Option<usize>,
+) -> anyhow::Result<app::http_stress::HttpWorkloadShape> {
+    match value {
+        "unique" => Ok(app::http_stress::HttpWorkloadShape::Unique),
+        "hot-set" => Ok(app::http_stress::HttpWorkloadShape::HotSet(
+            hot_set_size.unwrap_or(8),
+        )),
+        "single-hot-key" => Ok(app::http_stress::HttpWorkloadShape::SingleHotKey),
+        _ => bail!("invalid value for --workload-shape: {value}\n{HTTP_STRESS_USAGE}"),
+    }
+}
+
 fn parse_usize_flag(flag: &str, value: &str) -> anyhow::Result<usize> {
     value
         .parse::<usize>()
@@ -71,6 +85,8 @@ where
 {
     let mut remaining = args.into_iter();
     let mut config = app::http_stress::HttpStressConfig::smoke();
+    let mut workload_shape_override: Option<String> = None;
+    let mut hot_set_size_override: Option<usize> = None;
 
     while let Some(flag) = remaining.next() {
         let flag = flag.as_ref();
@@ -83,6 +99,8 @@ where
             "--profile" => {
                 config = app::http_stress::HttpStressConfig::from_profile(parse_profile(value)?);
             }
+            "--workload-shape" => workload_shape_override = Some(value.to_string()),
+            "--hot-set-size" => hot_set_size_override = Some(parse_usize_flag(flag, value)?),
             "--warmup-seconds" => config.warmup_seconds = parse_u64_flag(flag, value)?,
             "--measure-seconds" => config.measurement_seconds = parse_u64_flag(flag, value)?,
             "--concurrency" => config.concurrency = parse_usize_flag(flag, value)?,
@@ -92,6 +110,24 @@ where
             "--ring-size" => config.ring_size = parse_usize_flag(flag, value)?,
             _ => bail!("unknown flag: {flag}\n{HTTP_STRESS_USAGE}"),
         }
+    }
+
+    if let Some(raw_shape) = workload_shape_override.as_deref() {
+        config.workload_shape = parse_workload_shape(raw_shape, hot_set_size_override)?;
+        config.hot_set_size = match (config.workload_shape, hot_set_size_override) {
+            (app::http_stress::HttpWorkloadShape::HotSet(size), Some(explicit)) => {
+                Some(explicit.max(size))
+            }
+            (app::http_stress::HttpWorkloadShape::HotSet(size), None) => Some(size),
+            (
+                app::http_stress::HttpWorkloadShape::Unique
+                | app::http_stress::HttpWorkloadShape::SingleHotKey,
+                explicit,
+            ) => explicit,
+        };
+    } else if let Some(hot_set_size) = hot_set_size_override {
+        config.workload_shape = app::http_stress::HttpWorkloadShape::HotSet(hot_set_size);
+        config.hot_set_size = Some(hot_set_size);
     }
 
     config.validate()?;
@@ -107,6 +143,8 @@ mod tests {
     #[test]
     fn http_stress_usage_lists_phase13_flags() {
         assert!(HTTP_STRESS_USAGE.contains("--profile"));
+        assert!(HTTP_STRESS_USAGE.contains("--workload-shape"));
+        assert!(HTTP_STRESS_USAGE.contains("--hot-set-size"));
         assert!(HTTP_STRESS_USAGE.contains("--warmup-seconds"));
         assert!(HTTP_STRESS_USAGE.contains("--measure-seconds"));
         assert!(HTTP_STRESS_USAGE.contains("--concurrency"));
