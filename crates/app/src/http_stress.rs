@@ -260,7 +260,6 @@ impl ExternalProcessHarness {
             client,
         })
     }
-
 }
 
 /// Builds a stable order command fixture for the external-process HTTP path.
@@ -290,22 +289,26 @@ pub async fn run_external_process_http_stress(
     config.validate()?;
     let harness = ExternalProcessHarness::spawn(&config).await?;
     let measured = Arc::new(Mutex::new(MeasuredState::default()));
-    let sampler = spawn_metric_sampler(
-        harness.client.clone(),
-        harness.prometheus_addr,
-        measured.clone(),
-        config.measurement_seconds,
-    );
-
-    execute_http_window(
+    let warmup_counters = execute_http_window(
         &harness,
         &config,
         Duration::from_secs(config.warmup_seconds),
         None,
         false,
+        0,
     )
     .await?;
+    let append_latency_baseline = wait_for_metrics_body(&harness.client, harness.prometheus_addr)
+        .await
+        .ok();
     reset_measured_state(&measured);
+    let sampler = spawn_metric_sampler(
+        harness.client.clone(),
+        harness.prometheus_addr,
+        measured.clone(),
+        append_latency_baseline,
+        config.measurement_seconds,
+    );
 
     let measurement_started = Instant::now();
     let mut latency = Histogram::<u64>::new(3).context("creating HTTP latency histogram")?;
@@ -315,11 +318,11 @@ pub async fn run_external_process_http_stress(
         Duration::from_secs(config.measurement_seconds),
         Some(&mut latency),
         true,
+        warmup_counters.commands_submitted,
     )
     .await?;
-    let _ = sampler.await;
-
     let run_duration_seconds = measurement_started.elapsed().as_secs_f64().max(0.001);
+    let _ = sampler.await;
     let reject_rate = if counters.commands_submitted == 0 {
         0.0
     } else {
@@ -384,22 +387,22 @@ async fn execute_http_window(
     duration: Duration,
     mut latency: Option<&mut Histogram<u64>>,
     enforce_drain_policy: bool,
+    start_index: usize,
 ) -> anyhow::Result<WindowCounters> {
     let mut counters = WindowCounters::default();
     let mut in_flight = JoinSet::new();
-    let mut next_index = 0_usize;
+    let mut next_index = start_index;
+    let max_index = if config.command_count == 0 {
+        usize::MAX
+    } else {
+        start_index.saturating_add(config.command_count)
+    };
     let deadline = Instant::now() + duration;
     let mut submit_tick = interval(Duration::from_millis(1));
     submit_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    let max_commands = if config.command_count == 0 {
-        usize::MAX
-    } else {
-        config.command_count
-    };
-
     loop {
         while in_flight.len() < config.concurrency
-            && next_index < max_commands
+            && next_index < max_index
             && Instant::now() < deadline
         {
             submit_tick.tick().await;
@@ -410,15 +413,14 @@ async fn execute_http_window(
             let request = canonical_place_order_request("external-http-stress", next_index);
             let client = harness.client.clone();
             let listen_addr = harness.listen_addr;
-            in_flight.spawn(async move {
-                place_order_with_client(client, listen_addr, request).await
-            });
+            in_flight
+                .spawn(async move { place_order_with_client(client, listen_addr, request).await });
             counters.commands_submitted += 1;
             next_index += 1;
         }
 
         if in_flight.is_empty() {
-            if Instant::now() >= deadline || next_index >= max_commands {
+            if Instant::now() >= deadline || next_index >= max_index {
                 break;
             }
             submit_tick.tick().await;
@@ -471,7 +473,11 @@ fn record_join_result(
     match outcome.status {
         StatusCode::OK => counters.commands_succeeded += 1,
         StatusCode::TOO_MANY_REQUESTS => counters.commands_rejected += 1,
-        status => return Err(anyhow!("unexpected external-process stress status {status}")),
+        status => {
+            return Err(anyhow!(
+                "unexpected external-process stress status {status}"
+            ));
+        }
     }
     Ok(())
 }
@@ -521,17 +527,20 @@ fn spawn_metric_sampler(
     client: Client,
     prometheus_addr: SocketAddr,
     measured: Arc<Mutex<MeasuredState>>,
+    append_latency_baseline: Option<String>,
     measurement_seconds: u64,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_millis(250));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        let deadline = Instant::now() + Duration::from_secs(measurement_seconds.max(1) + 10);
+        let deadline = Instant::now() + Duration::from_secs(measurement_seconds.max(1));
         let mut system = System::new_all();
 
         while Instant::now() < deadline {
             ticker.tick().await;
-            if let Ok(snapshot) = scrape_metrics(&client, prometheus_addr).await {
+            if let Ok(snapshot) =
+                scrape_metrics(&client, prometheus_addr, append_latency_baseline.as_deref()).await
+            {
                 let mut state = measured.lock().expect("metric sampler mutex poisoned");
                 state.metrics.ingress_depth_max = state
                     .metrics
@@ -565,20 +574,9 @@ fn spawn_metric_sampler(
 async fn scrape_metrics(
     client: &Client,
     prometheus_addr: SocketAddr,
+    append_latency_baseline: Option<&str>,
 ) -> anyhow::Result<MetricSnapshot> {
-    let response = http_request(
-        client,
-        prometheus_addr,
-        Method::GET,
-        "/metrics",
-        Option::<&()>::None,
-    )
-    .await
-    .context("requesting Prometheus metrics from app serve child")?;
-    let body = response
-        .text()
-        .await
-        .context("reading Prometheus metrics body")?;
+    let body = scrape_metrics_body(client, prometheus_addr).await?;
 
     let ingress_depth_max = max_metric_value(&body, "es_ingress_depth").unwrap_or(0.0) as usize;
     let shard_depth_max = max_metric_value(&body, "es_shard_queue_depth").unwrap_or(0.0) as usize;
@@ -588,15 +586,55 @@ async fn scrape_metrics(
     Ok(MetricSnapshot {
         ingress_depth_max,
         shard_depth_max,
-        append_latency_p95_micros: histogram_p95_micros(
-            &body,
-            "es_append_latency_seconds",
-            Some(("outcome", "committed")),
-        )
-        .unwrap_or(0),
+        append_latency_p95_micros: append_latency_baseline
+            .and_then(|baseline| {
+                histogram_p95_delta_micros(
+                    baseline,
+                    &body,
+                    "es_append_latency_seconds",
+                    Some(("outcome", "committed")),
+                )
+            })
+            .unwrap_or(0),
         projection_lag,
         outbox_lag,
     })
+}
+
+async fn scrape_metrics_body(
+    client: &Client,
+    prometheus_addr: SocketAddr,
+) -> anyhow::Result<String> {
+    let response = http_request(
+        client,
+        prometheus_addr,
+        Method::GET,
+        "/metrics",
+        Option::<&()>::None,
+    )
+    .await
+    .context("requesting Prometheus metrics from app serve child")?;
+    response
+        .text()
+        .await
+        .context("reading Prometheus metrics body")
+}
+
+async fn wait_for_metrics_body(
+    client: &Client,
+    prometheus_addr: SocketAddr,
+) -> anyhow::Result<String> {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match scrape_metrics_body(client, prometheus_addr).await {
+            Ok(body) => return Ok(body),
+            Err(error) if Instant::now() < deadline => {
+                let _ = error;
+                sleep(Duration::from_millis(100)).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
 }
 
 async fn start_postgres() -> anyhow::Result<PostgresHarness> {
@@ -648,11 +686,6 @@ fn app_binary() -> anyhow::Result<PathBuf> {
         .parent()
         .and_then(|deps| deps.parent())
         .context("resolving target directory for app binary")?;
-    let binary = debug_dir.join("app");
-    if binary.exists() {
-        return Ok(binary);
-    }
-
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|crates| crates.parent())
@@ -662,6 +695,13 @@ fn app_binary() -> anyhow::Result<PathBuf> {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("debug");
+    let binary = debug_dir.join("app");
+    build_app_binary(&workspace_root, profile)?;
+
+    Ok(binary)
+}
+
+fn build_app_binary(workspace_root: &std::path::Path, profile: &str) -> anyhow::Result<()> {
     let mut command = Command::new("cargo");
     command.arg("build").arg("-p").arg("app");
     if profile == "release" {
@@ -675,7 +715,7 @@ fn app_binary() -> anyhow::Result<PathBuf> {
         return Err(anyhow!("building app binary failed with {status}"));
     }
 
-    Ok(binary)
+    Ok(())
 }
 
 fn child_logs(child: &mut Child) -> String {
@@ -772,25 +812,23 @@ fn max_metric_value(metrics: &str, metric_name: &str) -> Option<f64> {
         .max_by(f64::total_cmp)
 }
 
-fn histogram_p95_micros(
-    metrics: &str,
+fn histogram_p95_delta_micros(
+    before: &str,
+    after: &str,
     metric_name: &str,
     label_filter: Option<(&str, &str)>,
 ) -> Option<u64> {
     let count_name = format!("{metric_name}_count");
-    let bucket_name = format!("{metric_name}_bucket");
-    let total = metrics.lines().find_map(|line| {
-        if !line.starts_with(&count_name) || !matches_labels(line, label_filter) {
-            return None;
-        }
-        parse_metric_value(line).map(|value| value as u64)
-    })?;
+    let before_total = metric_count(before, &count_name, label_filter).unwrap_or(0);
+    let after_total = metric_count(after, &count_name, label_filter)?;
+    let total = after_total.saturating_sub(before_total);
     if total == 0 {
         return Some(0);
     }
 
     let target = (total as f64 * 0.95).ceil() as u64;
-    metrics
+    let bucket_name = format!("{metric_name}_bucket");
+    after
         .lines()
         .filter(|line| line.starts_with(&bucket_name))
         .filter(|line| matches_labels(line, label_filter))
@@ -799,12 +837,45 @@ fn histogram_p95_micros(
             if upper == "+Inf" {
                 return None;
             }
-            let cumulative = parse_metric_value(line)? as u64;
+            let after_cumulative = parse_metric_value(line)? as u64;
+            let before_cumulative =
+                metric_bucket_count(before, &bucket_name, label_filter, upper).unwrap_or(0);
+            let delta = after_cumulative.saturating_sub(before_cumulative);
             let seconds = upper.parse::<f64>().ok()?;
-            Some((seconds, cumulative))
+            Some((seconds, delta))
         })
         .find(|(_, cumulative)| *cumulative >= target)
         .map(|(seconds, _)| (seconds * 1_000_000.0) as u64)
+}
+
+fn metric_count(
+    metrics: &str,
+    count_name: &str,
+    label_filter: Option<(&str, &str)>,
+) -> Option<u64> {
+    metrics.lines().find_map(|line| {
+        if !line.starts_with(count_name) || !matches_labels(line, label_filter) {
+            return None;
+        }
+        parse_metric_value(line).map(|value| value as u64)
+    })
+}
+
+fn metric_bucket_count(
+    metrics: &str,
+    bucket_name: &str,
+    label_filter: Option<(&str, &str)>,
+    upper_bound: &str,
+) -> Option<u64> {
+    metrics.lines().find_map(|line| {
+        if !line.starts_with(bucket_name)
+            || !matches_labels(line, label_filter)
+            || label_value(line, "le") != Some(upper_bound)
+        {
+            return None;
+        }
+        parse_metric_value(line).map(|value| value as u64)
+    })
 }
 
 fn matches_labels(line: &str, label_filter: Option<(&str, &str)>) -> bool {
@@ -865,7 +936,7 @@ where
 mod tests {
     use super::{
         HttpStressConfig, HttpStressProfile, canonical_place_order_request,
-        run_external_process_http_stress,
+        histogram_p95_delta_micros, run_external_process_http_stress,
     };
     use crate::stress::StressScenario;
 
@@ -971,6 +1042,34 @@ mod tests {
         assert_eq!(smoke.ring_size, bench.ring_size);
     }
 
+    #[test]
+    fn append_latency_histogram_delta_excludes_warmup_buckets() {
+        let before = r#"
+es_append_latency_seconds_bucket{outcome="committed",le="0.001"} 5
+es_append_latency_seconds_bucket{outcome="committed",le="0.005"} 10
+es_append_latency_seconds_bucket{outcome="committed",le="0.01"} 10
+es_append_latency_seconds_bucket{outcome="committed",le="+Inf"} 10
+es_append_latency_seconds_count{outcome="committed"} 10
+"#;
+        let after = r#"
+es_append_latency_seconds_bucket{outcome="committed",le="0.001"} 5
+es_append_latency_seconds_bucket{outcome="committed",le="0.005"} 10
+es_append_latency_seconds_bucket{outcome="committed",le="0.01"} 30
+es_append_latency_seconds_bucket{outcome="committed",le="+Inf"} 30
+es_append_latency_seconds_count{outcome="committed"} 30
+"#;
+
+        assert_eq!(
+            Some(10_000),
+            histogram_p95_delta_micros(
+                before,
+                after,
+                "es_append_latency_seconds",
+                Some(("outcome", "committed")),
+            )
+        );
+    }
+
     #[tokio::test]
     async fn external_process_http_stress_smoke() -> anyhow::Result<()> {
         let report = run_external_process_http_stress(HttpStressConfig::smoke()).await?;
@@ -991,7 +1090,10 @@ mod tests {
         assert_eq!("smoke", report.profile_name);
         assert!(report.run_duration_seconds > 0.0);
         assert_eq!(2, report.concurrency);
-        assert_eq!("stop-new-requests-then-drain-in-flight", report.deadline_policy);
+        assert_eq!(
+            "stop-new-requests-then-drain-in-flight",
+            report.deadline_policy
+        );
         assert_eq!(5, report.drain_timeout_seconds);
         assert_eq!(std::env::consts::OS, report.host_os);
         assert_eq!(std::env::consts::ARCH, report.host_arch);
