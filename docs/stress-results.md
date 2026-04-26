@@ -103,7 +103,7 @@ Measured-window deadline semantics are fixed for comparability: the runner stops
 
 ### Phase 13.1 Result
 
-See [13.1-03-SUMMARY.md](/Users/epikem/dev/projects/disruptor-es/.planning/phases/13.1-disruptor-throughput-bottleneck-investigation-and-runtime-st/13.1-03-SUMMARY.md) for the archived layer comparison, shard-count evidence, and the current dominant throughput ceiling classification.
+See [13.1-03-SUMMARY.md](/Users/epikem/dev/projects/disruptor-es/.planning/phases/13.1-disruptor-throughput-bottleneck-investigation-and-runtime-st/13.1-03-SUMMARY.md) for the archived layer comparison, shard-count evidence, and the current dominant throughput ceiling classification. Phase 13.1 classifies the current dominant throughput ceiling as `live HTTP`.
 
 Required steady-state output fields:
 
