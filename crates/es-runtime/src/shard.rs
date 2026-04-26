@@ -219,9 +219,12 @@ impl<A: Aggregate> ShardState<A> {
             tenant_id: envelope.metadata.tenant_id.clone(),
             stream_id: envelope.stream_id.clone(),
         };
+        let expected_revision = A::expected_revision(&envelope.command);
 
         let current_state = if let Some(cached) = self.cache.get(&cache_key) {
             cached.clone()
+        } else if expected_revision == es_core::ExpectedRevision::NoStream {
+            A::State::default()
         } else {
             match rehydrate_state(
                 store,
