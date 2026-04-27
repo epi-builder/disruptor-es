@@ -1,42 +1,39 @@
-   Compiling disruptor-es-benchmarks v0.1.0 (/Users/epikem/dev/projects/disruptor-es)
-    Finished `bench` profile [optimized] target(s) in 26.49s
+    Finished `bench` profile [optimized] target(s) in 0.68s
      Running benches/storage_only.rs (target/release/deps/storage_only-e9357ea2a0864100)
 Gnuplot not found, using plotters backend
 Benchmarking storage_only_append
 Benchmarking storage_only_append: Warming up for 3.0000 s
-Benchmarking storage_only_append: Collecting 10 samples in estimated 5.3092 s (770 iterations)
+Benchmarking storage_only_append: Collecting 10 samples in estimated 5.3045 s (660 iterations)
 Benchmarking storage_only_append: Analyzing
-storage_only_append     time:   [6.6486 ms 6.7972 ms 7.0410 ms]
-                        change: [−4.2647% −2.2205% −0.0595%] (p = 0.07 > 0.05)
-                        No change in performance detected.
+storage_only_append     time:   [6.4643 ms 6.5430 ms 6.6162 ms]
+                        change: [−7.5551% −5.5400% −3.4106%] (p = 0.00 < 0.05)
+                        Performance has improved.
 
 Benchmarking storage_only_occ_conflict
 Benchmarking storage_only_occ_conflict: Warming up for 3.0000 s
-Benchmarking storage_only_occ_conflict: Collecting 10 samples in estimated 5.1961 s (1155 iterations)
+Benchmarking storage_only_occ_conflict: Collecting 10 samples in estimated 5.0516 s (1320 iterations)
 Benchmarking storage_only_occ_conflict: Analyzing
 storage_only_occ_conflict
-                        time:   [3.8043 ms 3.8393 ms 3.8707 ms]
-                        change: [−6.6803% −4.7292% −2.9943%] (p = 0.00 < 0.05)
-                        Performance has improved.
-Found 2 outliers among 10 measurements (20.00%)
-  2 (20.00%) low mild
+                        time:   [3.8599 ms 3.9051 ms 3.9359 ms]
+                        change: [+0.2109% +1.7504% +3.3647%] (p = 0.05 > 0.05)
+                        No change in performance detected.
 
 Benchmarking storage_only_dedupe
 Benchmarking storage_only_dedupe: Warming up for 3.0000 s
-Benchmarking storage_only_dedupe: Collecting 10 samples in estimated 5.0937 s (1595 iterations)
+Benchmarking storage_only_dedupe: Collecting 10 samples in estimated 5.0284 s (1540 iterations)
 Benchmarking storage_only_dedupe: Analyzing
-storage_only_dedupe     time:   [3.1219 ms 3.1548 ms 3.1985 ms]
-                        change: [−7.3763% −5.7209% −4.0185%] (p = 0.00 < 0.05)
-                        Performance has improved.
+storage_only_dedupe     time:   [3.1536 ms 3.1946 ms 3.2359 ms]
+                        change: [−0.2057% +1.5689% +3.2140%] (p = 0.10 > 0.05)
+                        No change in performance detected.
 
 Benchmarking storage_only_global_read
 Benchmarking storage_only_global_read: Warming up for 3.0000 s
-Benchmarking storage_only_global_read: Collecting 10 samples in estimated 5.0556 s (3300 iterations)
+Benchmarking storage_only_global_read: Collecting 10 samples in estimated 5.0452 s (3300 iterations)
 Benchmarking storage_only_global_read: Analyzing
 storage_only_global_read
-                        time:   [1.4884 ms 1.5055 ms 1.5191 ms]
-                        change: [−5.6142% −3.3651% −1.2049%] (p = 0.01 < 0.05)
-                        Performance has improved.
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) low mild
+                        time:   [1.5165 ms 1.5301 ms 1.5540 ms]
+                        change: [+0.5029% +2.0362% +3.7744%] (p = 0.03 < 0.05)
+                        Change within noise threshold.
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild
 

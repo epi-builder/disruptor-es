@@ -1,31 +1,20 @@
-    Blocking waiting for file lock on package cache
-    Blocking waiting for file lock on package cache
-    Blocking waiting for file lock on package cache
-   Compiling es-runtime v0.1.0 (/Users/epikem/dev/projects/disruptor-es/crates/es-runtime)
-   Compiling adapter-http v0.1.0 (/Users/epikem/dev/projects/disruptor-es/crates/adapter-http)
-   Compiling app v0.1.0 (/Users/epikem/dev/projects/disruptor-es/crates/app)
-   Compiling disruptor-es-benchmarks v0.1.0 (/Users/epikem/dev/projects/disruptor-es)
-    Finished `bench` profile [optimized] target(s) in 19.07s
+    Finished `bench` profile [optimized] target(s) in 0.73s
      Running benches/ring_only.rs (target/release/deps/ring_only-8da2c5e24193545f)
 Gnuplot not found, using plotters backend
 Benchmarking ring_only_publish_poll
 Benchmarking ring_only_publish_poll: Warming up for 3.0000 s
-Benchmarking ring_only_publish_poll: Collecting 10 samples in estimated 5.0000 s (61M iterations)
+Benchmarking ring_only_publish_poll: Collecting 10 samples in estimated 5.0000 s (66M iterations)
 Benchmarking ring_only_publish_poll: Analyzing
-ring_only_publish_poll  time:   [84.476 ns 92.209 ns 99.571 ns]
-                        change: [+11.058% +16.438% +22.311%] (p = 0.00 < 0.05)
-                        Performance has regressed.
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+ring_only_publish_poll  time:   [75.630 ns 76.206 ns 76.719 ns]
+                        change: [−18.497% −14.013% −10.060%] (p = 0.00 < 0.05)
+                        Performance has improved.
 
 Benchmarking ring_only_hot_key_publish_poll
 Benchmarking ring_only_hot_key_publish_poll: Warming up for 3.0000 s
-Benchmarking ring_only_hot_key_publish_poll: Collecting 10 samples in estimated 5.0000 s (60M iterations)
+Benchmarking ring_only_hot_key_publish_poll: Collecting 10 samples in estimated 5.0000 s (63M iterations)
 Benchmarking ring_only_hot_key_publish_poll: Analyzing
 ring_only_hot_key_publish_poll
-                        time:   [85.515 ns 88.021 ns 91.155 ns]
-                        change: [+7.8863% +10.581% +14.267%] (p = 0.00 < 0.05)
-                        Performance has regressed.
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+                        time:   [80.120 ns 83.451 ns 91.829 ns]
+                        change: [−2.5574% +10.703% +24.821%] (p = 0.21 > 0.05)
+                        No change in performance detected.
 

@@ -1,5 +1,4 @@
-   Compiling disruptor-es-benchmarks v0.1.0 (/Users/epikem/dev/projects/disruptor-es)
-    Finished `bench` profile [optimized] target(s) in 4.51s
+    Finished `bench` profile [optimized] target(s) in 0.68s
      Running benches/adapter_only.rs (target/release/deps/adapter_only-3ee23eb02c52ed2b)
 Gnuplot not found, using plotters backend
 Benchmarking adapter_only_decode_envelope_submit
@@ -7,18 +6,18 @@ Benchmarking adapter_only_decode_envelope_submit: Warming up for 3.0000 s
 Benchmarking adapter_only_decode_envelope_submit: Collecting 10 samples in estimated 5.0001 s (2.5M iterations)
 Benchmarking adapter_only_decode_envelope_submit: Analyzing
 adapter_only_decode_envelope_submit
-                        time:   [2.1192 µs 2.1253 µs 2.1327 µs]
-                        change: [−2.3642% −1.8038% −1.2674%] (p = 0.00 < 0.05)
-                        Performance has improved.
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) low mild
+                        time:   [2.1433 µs 2.1490 µs 2.1545 µs]
+                        change: [+0.5760% +1.0920% +1.6695%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
 
 Benchmarking adapter_only_burst_overload
 Benchmarking adapter_only_burst_overload: Warming up for 3.0000 s
-Benchmarking adapter_only_burst_overload: Collecting 10 samples in estimated 5.0001 s (1.2M iterations)
+Benchmarking adapter_only_burst_overload: Collecting 10 samples in estimated 5.0002 s (1.1M iterations)
 Benchmarking adapter_only_burst_overload: Analyzing
 adapter_only_burst_overload
-                        time:   [4.2964 µs 4.4581 µs 4.5963 µs]
-                        change: [−0.5999% +1.8160% +4.8730%] (p = 0.25 > 0.05)
+                        time:   [4.3362 µs 4.3665 µs 4.3895 µs]
+                        change: [−4.4243% −1.6791% +0.8888%] (p = 0.27 > 0.05)
                         No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 
