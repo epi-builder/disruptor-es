@@ -266,12 +266,31 @@ Plans:
 - [x] 13.1-05-PLAN.md — Correct live HTTP report semantics so observed metrics, estimated fallbacks, and repeated-stream diagnostics are explicitly separated.
 - [x] 13.1-06-PLAN.md — Regenerate storage and baseline comparison evidence under the corrected semantics and document scrape-gated ceiling rules.
 
+### Phase 13.2: Phase 13.1 Performance Evidence Recheck and Root-Cause Closure (INSERTED)
+
+**Goal:** Reopen the uncertain parts of Phase 13.1's low-throughput investigation, replace any `inconclusive` archive claims with reproducible observed evidence where possible, and either classify the dominant full-service throughput ceiling with enough data for final sign-off or explicitly document the remaining measurement blocker as milestone-critical work.
+**Requirements**: RUNTIME-01, RUNTIME-02, RUNTIME-05, TEST-03, TEST-04, OBS-02
+**Gap Closure**: Resolves the concern that Phase 13.1 did not fully prove the cause of low live HTTP throughput because key Prometheus scrape evidence was missing and the final ceiling classification remained `inconclusive`.
+**Depends on:** Phase 13.1
+**Success Criteria** (what must be TRUE):
+  1. Phase 13.1's `inconclusive` statements are audited against raw artifacts, docs, and code so every uncertain claim is listed with the exact missing or weak evidence.
+  2. The Prometheus scrape/readiness path is rerun or repaired enough that live HTTP stress reports include observed ingress depth, shard depth, append latency, and resource metadata, or the phase records a concrete blocker with reproduction steps.
+  3. Layer-comparison evidence is regenerated under corrected scrape semantics for ring-only, runtime-only, storage-only, adapter-only, and live HTTP lanes.
+  4. The dominant throughput ceiling is reclassified from observed data, not estimates, across HTTP/client harness, adapter admission, shard runtime, disruptor handoff, aggregate decision, storage append, projection/outbox, and measurement configuration.
+  5. Any confirmed implementation or harness bottleneck found during the recheck is fixed or converted into an explicit Phase 14 archive blocker; no uncertain performance claim remains hidden as accepted debt.
+**Plans:** 3 plans
+
+Plans:
+- [ ] 13.2-01-PLAN.md — Audit every uncertain Phase 13.1 claim and prove or repair the live HTTP smoke scrape path.
+- [ ] 13.2-02-PLAN.md — Regenerate the authoritative layer-comparison artifacts and close any remaining baseline scrape blocker.
+- [ ] 13.2-03-PLAN.md — Reclassify the throughput ceiling from regenerated evidence or convert the remaining gap into an explicit Phase 14 blocker.
+
 ### Phase 14: Milestone Debt Closure and Archive Sign-Off
 
 **Goal:** Finish every remaining milestone-critical validation and hardening task, even when that requires reopening prior phase artifacts, so v1 archive happens with no known goal-critical debt still parked outside the closure path.
 **Requirements**: STORE-03, RUNTIME-05, DOM-04, DOM-05, INT-04, TEST-02
 **Gap Closure**: Resolves partial Nyquist validation and any milestone-critical commerce lifecycle hardening still standing after the HTTP/evidence work is done.
-**Depends on:** Phase 13.1
+**Depends on:** Phase 13.2
 **Success Criteria** (what must be TRUE):
   1. Partial Nyquist phases 02, 04, 06, and 07 are fully closed by new validation evidence or by reopening and repairing their underlying phase artifacts.
   2. Commerce lifecycle command-ID hardening is implemented wherever milestone acceptance still depends on it, or the underlying risk is disproven by targeted verification so no open milestone debt remains.
@@ -287,7 +306,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 13.1 → 14
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 13.1 → 13.2 → 14
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -305,4 +324,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 12. External-Process HTTP E2E, Stress, and Benchmark Closure | 2/2 | Complete   | 2026-04-25 |
 | 13. Live External-Process HTTP Steady-State Stress Testing | 2/2 | Complete    | 2026-04-26 |
 | 13.1. Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization | 6/6 | Complete    | 2026-04-26 |
+| 13.2. Phase 13.1 Performance Evidence Recheck and Root-Cause Closure | 0/0 | Pending | - |
 | 14. Milestone Debt Closure and Archive Sign-Off | 0/2 | Pending | - |
