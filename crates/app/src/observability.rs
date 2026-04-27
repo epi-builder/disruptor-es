@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 
 use anyhow::Context;
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use metrics_exporter_prometheus::PrometheusBuilder;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{Resource, trace::SdkTracerProvider};
@@ -74,17 +74,13 @@ pub const ALLOWED_METRIC_LABELS: &[&str] = &[
 ];
 
 /// Initialize global tracing and metrics exporters for the composed application.
-pub fn init_observability(config: ObservabilityConfig) -> anyhow::Result<Option<PrometheusHandle>> {
-    let prometheus = if let Some(listen_addr) = config.prometheus_listen {
-        Some(
-            PrometheusBuilder::new()
-                .with_http_listener(listen_addr)
-                .install_recorder()
-                .context("installing Prometheus metrics recorder")?,
-        )
-    } else {
-        None
-    };
+pub fn init_observability(config: ObservabilityConfig) -> anyhow::Result<()> {
+    if let Some(listen_addr) = config.prometheus_listen {
+        PrometheusBuilder::new()
+            .with_http_listener(listen_addr)
+            .install()
+            .context("installing Prometheus metrics exporter")?;
+    }
 
     let env_filter = EnvFilter::try_new(config.env_filter.as_str())
         .with_context(|| format!("parsing tracing env filter `{}`", config.env_filter))?;
@@ -132,7 +128,7 @@ pub fn init_observability(config: ObservabilityConfig) -> anyhow::Result<Option<
             .context("installing compact tracing subscriber")?;
     }
 
-    Ok(prometheus)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -189,5 +185,15 @@ mod tests {
                 "bounded label marked forbidden: {label_name}",
             );
         }
+    }
+
+    #[test]
+    fn prometheus_listener_uses_exporter_install_path() {
+        let source = include_str!("observability.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source section");
+        assert!(source.contains(".install()"));
+        assert!(!source.contains(".install_recorder()"));
     }
 }

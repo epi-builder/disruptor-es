@@ -69,7 +69,7 @@ pub async fn run_from_env() -> anyhow::Result<()> {
 
 /// Runs the official service path.
 pub async fn run(config: ServeConfig) -> anyhow::Result<()> {
-    let _prometheus = init_observability(config.observability.clone())?;
+    init_observability(config.observability.clone())?;
 
     let pool = PgPoolOptions::new()
         .max_connections(10)

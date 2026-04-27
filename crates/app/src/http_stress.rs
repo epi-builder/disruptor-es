@@ -268,6 +268,7 @@ struct MeasuredState {
     metrics_scrape_successes: u64,
     metrics_scrape_failures: u64,
     metrics_sample_count: u64,
+    last_metrics_scrape_error: Option<String>,
     cpu_usage_samples: Vec<f32>,
     cpu_brand: String,
 }
@@ -402,13 +403,13 @@ pub async fn run_external_process_http_stress(
     .await?;
     let append_latency_baseline = wait_for_metrics_body(&harness.client, harness.prometheus_addr)
         .await
-        .ok();
+        .context("waiting for Prometheus metrics readiness before measurement")?;
     reset_measured_state(&measured);
     let sampler = spawn_metric_sampler(
         harness.client.clone(),
         harness.prometheus_addr,
         measured.clone(),
-        append_latency_baseline,
+        Some(append_latency_baseline),
         config.measurement_seconds,
     );
 
@@ -429,6 +430,7 @@ pub async fn run_external_process_http_stress(
         .lock()
         .expect("metric sampler mutex poisoned")
         .clone();
+    ensure_metrics_scrapes_observed(&measured)?;
     let cpu_utilization_percent = measured.cpu_usage_samples.last().copied().unwrap_or(0.0);
     let cpu_brand = if measured.cpu_brand.is_empty() {
         let system = System::new_all();
@@ -526,6 +528,22 @@ fn stress_report_from_measured(
         cpu_brand,
         cpu_usage_samples: measured.cpu_usage_samples.clone(),
     }
+}
+
+fn ensure_metrics_scrapes_observed(measured: &MeasuredState) -> anyhow::Result<()> {
+    if measured.metrics_scrape_successes > 0 {
+        return Ok(());
+    }
+
+    let last_error = measured
+        .last_metrics_scrape_error
+        .as_deref()
+        .unwrap_or("unknown scrape error");
+    Err(anyhow!(
+        "Prometheus metrics scraping never succeeded during the measured window (failures={}, samples={}, last_error={last_error})",
+        measured.metrics_scrape_failures,
+        measured.metrics_sample_count
+    ))
 }
 
 async fn execute_http_window(
@@ -734,7 +752,9 @@ async fn scrape_metrics(
             })
             .unwrap_or(0),
         ring_wait_p95_micros: ring_wait_baseline
-            .and_then(|baseline| histogram_p95_delta_micros(baseline, &body, "es_ring_wait_seconds", None))
+            .and_then(|baseline| {
+                histogram_p95_delta_micros(baseline, &body, "es_ring_wait_seconds", None)
+            })
             .unwrap_or(0),
         projection_lag,
         outbox_lag,
@@ -750,17 +770,23 @@ fn record_metrics_scrape_result(
         Ok(snapshot) => {
             state.metrics_scrape_successes += 1;
             state.metrics_sample_count += 1;
-            state.metrics.ingress_depth_max =
-                state.metrics.ingress_depth_max.max(snapshot.ingress_depth_max);
-            state.metrics.shard_depth_max = state.metrics.shard_depth_max.max(snapshot.shard_depth_max);
+            state.last_metrics_scrape_error = None;
+            state.metrics.ingress_depth_max = state
+                .metrics
+                .ingress_depth_max
+                .max(snapshot.ingress_depth_max);
+            state.metrics.shard_depth_max =
+                state.metrics.shard_depth_max.max(snapshot.shard_depth_max);
             state.metrics.append_latency_p95_micros = snapshot.append_latency_p95_micros;
             state.metrics.ring_wait_p95_micros = snapshot.ring_wait_p95_micros;
-            state.metrics.projection_lag = state.metrics.projection_lag.max(snapshot.projection_lag);
+            state.metrics.projection_lag =
+                state.metrics.projection_lag.max(snapshot.projection_lag);
             state.metrics.outbox_lag = state.metrics.outbox_lag.max(snapshot.outbox_lag);
         }
-        Err(_) => {
+        Err(error) => {
             state.metrics_scrape_failures += 1;
             state.metrics_sample_count += 1;
+            state.last_metrics_scrape_error = Some(format!("{error:#}"));
         }
     }
 }
@@ -1100,8 +1126,9 @@ where
 mod tests {
     use super::{
         HttpStressConfig, HttpStressProfile, HttpWorkloadShape, MeasuredState, MetricSnapshot,
-        canonical_place_order_request, histogram_p95_delta_micros, record_metrics_scrape_result,
-        request_identity_for_index, run_external_process_http_stress, stress_report_from_measured,
+        canonical_place_order_request, ensure_metrics_scrapes_observed, histogram_p95_delta_micros,
+        record_metrics_scrape_result, request_identity_for_index, run_external_process_http_stress,
+        stress_report_from_measured,
     };
     use crate::stress::StressScenario;
     use std::sync::{Arc, Mutex};
@@ -1119,7 +1146,8 @@ mod tests {
     #[test]
     fn hot_key_profile_reuses_one_partition_key() {
         let config = HttpStressConfig::from_profile(HttpStressProfile::HotKey);
-        let first = request_identity_for_index("hot", 0, config.workload_shape, config.hot_set_size);
+        let first =
+            request_identity_for_index("hot", 0, config.workload_shape, config.hot_set_size);
         let second =
             request_identity_for_index("hot", 11, config.workload_shape, config.hot_set_size);
 
@@ -1155,6 +1183,28 @@ mod tests {
         assert_eq!(0, state.metrics_scrape_successes);
         assert_eq!(1, state.metrics_scrape_failures);
         assert_eq!(1, state.metrics_sample_count);
+        assert_eq!(
+            Some("scrape failed".to_string()),
+            state.last_metrics_scrape_error
+        );
+    }
+
+    #[test]
+    fn zero_successful_metrics_scrapes_return_an_error() {
+        let error = ensure_metrics_scrapes_observed(&MeasuredState {
+            metrics: MetricSnapshot::default(),
+            metrics_scrape_successes: 0,
+            metrics_scrape_failures: 3,
+            metrics_sample_count: 3,
+            last_metrics_scrape_error: Some("connection refused".to_string()),
+            cpu_usage_samples: Vec::new(),
+            cpu_brand: String::new(),
+        })
+        .expect_err("missing scrape successes should fail");
+
+        let rendered = format!("{error:#}");
+        assert!(rendered.contains("never succeeded"));
+        assert!(rendered.contains("connection refused"));
     }
 
     #[test]
@@ -1172,6 +1222,7 @@ mod tests {
             metrics_scrape_successes: 0,
             metrics_scrape_failures: 2,
             metrics_sample_count: 2,
+            last_metrics_scrape_error: Some("connection refused".to_string()),
             cpu_usage_samples: vec![10.0],
             cpu_brand: "test-cpu".to_string(),
         };
@@ -1345,6 +1396,7 @@ es_append_latency_seconds_count{outcome="committed"} 30
             report.metrics_sample_count,
             report.metrics_scrape_successes + report.metrics_scrape_failures
         );
+        assert!(report.metrics_scrape_successes > 0);
         if let Some(projection_lag) = report.projection_lag {
             assert!(projection_lag >= 0);
         }
