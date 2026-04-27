@@ -1,23 +1,21 @@
-    Finished `bench` profile [optimized] target(s) in 0.68s
+    Finished `bench` profile [optimized] target(s) in 0.61s
      Running benches/adapter_only.rs (target/release/deps/adapter_only-3ee23eb02c52ed2b)
 Gnuplot not found, using plotters backend
 Benchmarking adapter_only_decode_envelope_submit
 Benchmarking adapter_only_decode_envelope_submit: Warming up for 3.0000 s
-Benchmarking adapter_only_decode_envelope_submit: Collecting 10 samples in estimated 5.0001 s (2.5M iterations)
+Benchmarking adapter_only_decode_envelope_submit: Collecting 10 samples in estimated 5.0001 s (2.6M iterations)
 Benchmarking adapter_only_decode_envelope_submit: Analyzing
 adapter_only_decode_envelope_submit
-                        time:   [2.1433 µs 2.1490 µs 2.1545 µs]
-                        change: [+0.5760% +1.0920% +1.6695%] (p = 0.00 < 0.05)
-                        Change within noise threshold.
+                        time:   [2.0774 µs 2.0815 µs 2.0888 µs]
+                        change: [−3.1379% −2.6758% −2.1131%] (p = 0.00 < 0.05)
+                        Performance has improved.
 
 Benchmarking adapter_only_burst_overload
 Benchmarking adapter_only_burst_overload: Warming up for 3.0000 s
-Benchmarking adapter_only_burst_overload: Collecting 10 samples in estimated 5.0002 s (1.1M iterations)
+Benchmarking adapter_only_burst_overload: Collecting 10 samples in estimated 5.0001 s (1.1M iterations)
 Benchmarking adapter_only_burst_overload: Analyzing
 adapter_only_burst_overload
-                        time:   [4.3362 µs 4.3665 µs 4.3895 µs]
-                        change: [−4.4243% −1.6791% +0.8888%] (p = 0.27 > 0.05)
+                        time:   [4.3662 µs 4.3887 µs 4.4050 µs]
+                        change: [−0.1473% +0.5326% +1.1643%] (p = 0.15 > 0.05)
                         No change in performance detected.
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
 
