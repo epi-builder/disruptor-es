@@ -116,6 +116,12 @@ Measured-window deadline semantics are fixed for comparability: the runner stops
 
 See [13.1-03-SUMMARY.md](/Users/epikem/dev/projects/disruptor-es/.planning/phases/13.1-disruptor-throughput-bottleneck-investigation-and-runtime-st/13.1-03-SUMMARY.md) for the archived layer comparison and prior shard-count evidence. After Plan 13.1-06, only classify the current dominant throughput ceiling more narrowly than `inconclusive` when the cited baseline live HTTP artifacts each report `metrics_scrape_successes > 0`.
 
+### Phase 13.2 Result
+
+Phase 13.2 reran the baseline comparison and replaced the stale zero-scrape archive story. The current archive-safe baseline evidence is `target/phase-13.1/layer-comparison/live-http-unique.json`, `target/phase-13.1/layer-comparison/live-http-shard-1.json`, and `target/phase-13.1/layer-comparison/live-http-shard-8.json` as regenerated under `PHASE13_1_COMPARE_MODE=baseline bash scripts/compare-stress-layers.sh`, with rerun conditions recorded in `.planning/phases/13.2-phase-13-1-performance-evidence-recheck-and-root-cause-closu/13.2-BASELINE-REGEN.md` and `.planning/phases/13.2-phase-13-1-performance-evidence-recheck-and-root-cause-closu/13.2-SCRAPE-REPRO.md`.
+
+Those regenerated baseline files now report `metrics_scrape_successes > 0` in every cited live HTTP success-throughput artifact, so the archive-safe ceiling classification is no longer `inconclusive`. The current Phase 13.2 label is `storage append / durable command path`: ring-only and adapter-only remain far faster, `ring_wait_p95_micros` stays `0`, projection/outbox lag stays `0`, and the one-shard lane slows materially before the eight-shard lanes flatten near the durable service ceiling. Do not reuse any pre-Phase-13.2 zero-scrape `live-http-*.json` files for archive-facing ceiling claims.
+
 Required steady-state output fields:
 
 - `throughput_per_second`
