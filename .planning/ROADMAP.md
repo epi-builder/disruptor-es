@@ -278,12 +278,14 @@ Plans:
   3. Layer-comparison evidence is regenerated under corrected scrape semantics for ring-only, runtime-only, storage-only, adapter-only, and live HTTP lanes.
   4. The dominant throughput ceiling is reclassified from observed data, not estimates, across HTTP/client harness, adapter admission, shard runtime, disruptor handoff, aggregate decision, storage append, projection/outbox, and measurement configuration.
   5. Any confirmed implementation or harness bottleneck found during the recheck is fixed or converted into an explicit Phase 14 archive blocker; no uncertain performance claim remains hidden as accepted debt.
-**Plans:** 3 plans
+**Plans:** 3/5 plans complete
 
 Plans:
-- [ ] 13.2-01-PLAN.md — Audit every uncertain Phase 13.1 claim and prove or repair the live HTTP smoke scrape path.
-- [ ] 13.2-02-PLAN.md — Regenerate the authoritative layer-comparison artifacts and close any remaining baseline scrape blocker.
-- [ ] 13.2-03-PLAN.md — Reclassify the throughput ceiling from regenerated evidence or convert the remaining gap into an explicit Phase 14 blocker.
+- [x] 13.2-01-PLAN.md — Audit every uncertain Phase 13.1 claim and prove or repair the live HTTP smoke scrape path.
+- [x] 13.2-02-PLAN.md — Regenerate the authoritative layer-comparison artifacts and close any remaining baseline scrape blocker.
+- [x] 13.2-03-PLAN.md — Reclassify the throughput ceiling from regenerated evidence or convert the remaining gap into an explicit Phase 14 blocker.
+- [ ] 13.2-04-PLAN.md — Repair append-latency availability semantics, lane metadata, hot-key diagnostics, and regenerated evidence artifacts.
+- [ ] 13.2-05-PLAN.md — Reconcile closure docs and blocker disposition against the repaired evidence contract.
 
 ### Phase 14: Milestone Debt Closure and Archive Sign-Off
 
@@ -324,5 +326,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 12. External-Process HTTP E2E, Stress, and Benchmark Closure | 2/2 | Complete   | 2026-04-25 |
 | 13. Live External-Process HTTP Steady-State Stress Testing | 2/2 | Complete    | 2026-04-26 |
 | 13.1. Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization | 6/6 | Complete    | 2026-04-26 |
-| 13.2. Phase 13.1 Performance Evidence Recheck and Root-Cause Closure | 0/0 | Pending | - |
+| 13.2. Phase 13.1 Performance Evidence Recheck and Root-Cause Closure | 3/5 | In Progress | - |
 | 14. Milestone Debt Closure and Archive Sign-Off | 0/2 | Pending | - |
