@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Ready to plan Phase 14 milestone-debt-closure-and-archive-sign-off
-last_updated: "2026-04-26T22:42:18.647Z"
-last_activity: 2026-04-26
+stopped_at: Ready to plan 13.1-disruptor-throughput-bottleneck-investigation-and-runtime-st
+last_updated: "2026-04-27T14:11:05.619Z"
+last_activity: 2026-04-27 -- Phase 13.2 planning complete
 progress:
-  total_phases: 15
+  total_phases: 16
   completed_phases: 14
-  total_plans: 48
+  total_plans: 51
   completed_plans: 48
-  percent: 100
+  percent: 94
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-19)
 
 **Core value:** Provide a reusable, production-shaped Rust service template where committed events are the source of truth and `disruptor-rs` is used only as the in-process ordered execution engine.
-**Current focus:** Phase 14 — milestone-debt-closure-and-archive-sign-off
+**Current focus:** Phase 13.2 — phase-13-1-performance-evidence-recheck-and-root-cause-closu
 
 ## Current Position
 
-Phase: 14 (milestone-debt-closure-and-archive-sign-off)
+Phase: 13.2 (phase-13-1-performance-evidence-recheck-and-root-cause-closu)
 Plan: Not started
-Status: Ready to plan Phase 14
-Last activity: 2026-04-26
+Status: Ready to execute
+Last activity: 2026-04-27 -- Phase 13.2 planning complete
 
-Progress: [██████████] 100%
+Progress: [████████░░] 88%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [██████████] 100%
 | 12 | 2 | - | - |
 | 13 | 2 | - | - |
 | 13.1 | 6 | - | - |
+| 13.2 | 0 | - | - |
 | 14 | 2 | - | - |
 
 **Recent Trend:**
@@ -171,6 +172,7 @@ Recent decisions affecting current work:
   - Phase 12 completed canonical external-process HTTP E2E/stress/benchmark coverage.
   - Phase 13 will add steady-state live HTTP stress testing that excludes startup/container overhead from performance estimates.
   - Phase 13.1 will investigate why Phase 13 throughput is much lower than expected for disruptor-style execution and improve the runtime, storage, adapter, or stress harness where evidence identifies bottlenecks.
+  - Phase 13.2 will reopen the uncertain Phase 13.1 evidence, especially scrape-gated `inconclusive` claims, and force a data-backed throughput-ceiling classification or explicit archive blocker.
   - Phase 14 will close milestone-critical validation and hardening work before archive sign-off.
 
 ### Roadmap Evolution
@@ -178,10 +180,11 @@ Recent decisions affecting current work:
 - Live External-Process HTTP Steady-State Stress Testing was added, then reordered to Phase 13 so it runs before milestone debt closure.
 - Milestone Debt Closure and Archive Sign-Off moved to Phase 14 as the final v1 archive gate.
 - Phase 13.1 inserted after Phase 13: Disruptor Throughput Bottleneck Investigation and Runtime Stress Optimization (URGENT)
+- Phase 13.2 inserted after Phase 13.1: Phase 13.1 Performance Evidence Recheck and Root-Cause Closure (URGENT)
 
 ### Blockers/Concerns
 
-Milestone closure now depends on Phases 11-14, including inserted Phase 13.1 performance bottleneck closure; no milestone-critical gap may remain as accepted debt at archive time.
+Milestone closure now depends on Phases 11-14, including inserted Phase 13.1 and 13.2 performance evidence closure; no milestone-critical gap may remain as accepted debt at archive time.
 
 ## Quick Tasks Completed
 
