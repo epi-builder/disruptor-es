@@ -16,11 +16,11 @@ use es_core::{CommandMetadata, ExpectedRevision, StreamId, StreamRevision, Tenan
 use es_store_postgres::{AppendOutcome, AppendRequest, NewEvent, PostgresEventStore};
 use serde_json::json;
 use sqlx::{PgPool, postgres::PgPoolOptions};
-use time::OffsetDateTime;
-use tokio::sync::OnceCell;
-use tokio::runtime::Runtime;
 use testcontainers::{ContainerAsync, ImageExt, runners::AsyncRunner};
 use testcontainers_modules::postgres::Postgres;
+use time::OffsetDateTime;
+use tokio::runtime::Runtime;
+use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 static STORAGE_BENCH_HARNESS: OnceCell<StorageBenchHarness> = OnceCell::const_new();

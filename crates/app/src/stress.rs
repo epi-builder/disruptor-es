@@ -215,7 +215,9 @@ pub struct StressReport {
 }
 
 /// Classify whether a workload shape is normal throughput evidence or a repeat-stream diagnostic.
-pub fn workload_purpose_for_shape(workload_shape: crate::http_stress::HttpWorkloadShape) -> &'static str {
+pub fn workload_purpose_for_shape(
+    workload_shape: crate::http_stress::HttpWorkloadShape,
+) -> &'static str {
     match workload_shape {
         crate::http_stress::HttpWorkloadShape::Unique => "success-throughput",
         crate::http_stress::HttpWorkloadShape::HotSet(_)

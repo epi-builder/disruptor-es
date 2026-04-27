@@ -720,8 +720,8 @@ async fn accepted_but_undispatched_commands_receive_unavailable_on_shutdown() {
 
     let codec = CounterCodec::default();
     let config = CommandEngineConfig::new(1, 8, 8).expect("config");
-    let engine = CommandEngine::<CounterAggregate, _, _>::new(config, store.clone(), codec)
-        .expect("engine");
+    let engine =
+        CommandEngine::<CounterAggregate, _, _>::new(config, store.clone(), codec).expect("engine");
     let gateway = engine.gateway();
     let shutdown = Arc::new(Notify::new());
 
@@ -756,12 +756,18 @@ async fn accepted_but_undispatched_commands_receive_unavailable_on_shutdown() {
     );
 
     release_first.send(()).expect("release first");
-    let first_outcome = first_reply.await.expect("first reply").expect("first success");
+    let first_outcome = first_reply
+        .await
+        .expect("first reply")
+        .expect("first success");
     assert_eq!(1, first_outcome.reply);
 
     let _ = release_second.send(());
     let run_result = engine_task.await.expect("engine task joined");
-    assert!(run_result.is_ok(), "engine run should finish once worker drains");
+    assert!(
+        run_result.is_ok(),
+        "engine run should finish once worker drains"
+    );
 }
 
 #[tokio::test]
@@ -770,8 +776,8 @@ async fn dispatched_commands_finish_before_engine_shutdown_returns() {
     let store = FakeStore::with_delayed_commit(wait_for_release);
     let codec = CounterCodec::default();
     let config = CommandEngineConfig::new(1, 8, 8).expect("config");
-    let engine = CommandEngine::<CounterAggregate, _, _>::new(config, store.clone(), codec)
-        .expect("engine");
+    let engine =
+        CommandEngine::<CounterAggregate, _, _>::new(config, store.clone(), codec).expect("engine");
     let gateway = engine.gateway();
     let shutdown = Arc::new(Notify::new());
 
@@ -804,7 +810,10 @@ async fn dispatched_commands_finish_before_engine_shutdown_returns() {
     let outcome = reply.await.expect("reply").expect("success");
     assert_eq!(4, outcome.reply);
     let run_result = engine_task.await.expect("engine task joined");
-    assert!(run_result.is_ok(), "engine should return after dispatched work finishes");
+    assert!(
+        run_result.is_ok(),
+        "engine should return after dispatched work finishes"
+    );
 }
 
 #[tokio::test]
@@ -857,14 +866,16 @@ async fn parallel_shard_workers_process_distinct_routes_concurrently() {
 
     let codec = CounterCodec::default();
     let config = CommandEngineConfig::new(2, 8, 8).expect("config");
-    let mut engine = CommandEngine::<CounterAggregate, _, _>::new(config, store.clone(), codec)
-        .expect("engine");
+    let mut engine =
+        CommandEngine::<CounterAggregate, _, _>::new(config, store.clone(), codec).expect("engine");
 
     let (first_envelope, first_reply) = envelope_for("tenant-a", "counter-1", "idem-1", 1);
     let (second_envelope, second_reply) = envelope_for("tenant-a", "counter-2", "idem-2", 2);
     let first_gateway = engine.gateway();
     let second_gateway = first_gateway.clone();
-    first_gateway.try_submit(first_envelope).expect("submit first");
+    first_gateway
+        .try_submit(first_envelope)
+        .expect("submit first");
     second_gateway
         .try_submit(second_envelope)
         .expect("submit second");

@@ -206,19 +206,18 @@ mod tests {
         ])
         .expect("cli args parse");
 
-        assert_eq!(app::http_stress::HttpWorkloadShape::HotSet(8), config.workload_shape);
+        assert_eq!(
+            app::http_stress::HttpWorkloadShape::HotSet(8),
+            config.workload_shape
+        );
         assert_eq!(Some(8), config.hot_set_size);
     }
 
     #[test]
     fn http_stress_cli_accepts_single_hot_key_workload_shape() {
-        let config = parse_http_stress_args([
-            "--profile",
-            "smoke",
-            "--workload-shape",
-            "single-hot-key",
-        ])
-        .expect("cli args parse");
+        let config =
+            parse_http_stress_args(["--profile", "smoke", "--workload-shape", "single-hot-key"])
+                .expect("cli args parse");
 
         assert_eq!(
             app::http_stress::HttpWorkloadShape::SingleHotKey,
@@ -348,9 +347,11 @@ mod tests {
 
     #[test]
     fn repeated_stream_shapes_are_marked_diagnostic_only() {
-        let hot_set = app::stress::workload_purpose_for_shape(app::http_stress::HttpWorkloadShape::HotSet(8));
-        let single_hot_key =
-            app::stress::workload_purpose_for_shape(app::http_stress::HttpWorkloadShape::SingleHotKey);
+        let hot_set =
+            app::stress::workload_purpose_for_shape(app::http_stress::HttpWorkloadShape::HotSet(8));
+        let single_hot_key = app::stress::workload_purpose_for_shape(
+            app::http_stress::HttpWorkloadShape::SingleHotKey,
+        );
 
         assert_eq!("repeat-stream-diagnostic", hot_set);
         assert_eq!("repeat-stream-diagnostic", single_hot_key);

@@ -126,8 +126,7 @@ where
     }
 
     /// Dispatches one accepted command onto its owning shard worker, if one is available.
-    pub async fn process_one(&mut self) -> RuntimeResult<bool>
-    {
+    pub async fn process_one(&mut self) -> RuntimeResult<bool> {
         let Some(routed) = self.receiver.recv().await else {
             return Ok(false);
         };
@@ -137,8 +136,7 @@ where
     }
 
     /// Runs the dispatcher loop until shutdown is requested or ingress closes.
-    pub async fn run(mut self, shutdown: Arc<Notify>) -> RuntimeResult<()>
-    {
+    pub async fn run(mut self, shutdown: Arc<Notify>) -> RuntimeResult<()> {
         let mut shutting_down = false;
 
         loop {
@@ -179,8 +177,7 @@ where
         }
     }
 
-    async fn dispatch_routed(&self, routed: RoutedCommand<A>) -> RuntimeResult<()>
-    {
+    async fn dispatch_routed(&self, routed: RoutedCommand<A>) -> RuntimeResult<()> {
         let shard_index = routed.shard_id.value();
         let span = info_span!(
             "command_engine.dispatch",
