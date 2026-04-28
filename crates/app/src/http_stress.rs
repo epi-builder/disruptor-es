@@ -1249,6 +1249,55 @@ mod tests {
     }
 
     #[test]
+    fn append_latency_unavailable_is_explicit_when_histogram_delta_is_missing() {
+        let config = HttpStressConfig::from_profile(HttpStressProfile::Smoke);
+        let measured = MeasuredState {
+            metrics: MetricSnapshot {
+                ingress_depth_max: 1,
+                shard_depth_max: 3,
+                append_latency_p95_micros: 0,
+                ring_wait_p95_micros: 34,
+                projection_lag: 2,
+                outbox_lag: 1,
+            },
+            metrics_scrape_successes: 2,
+            metrics_scrape_failures: 0,
+            metrics_sample_count: 2,
+            last_metrics_scrape_error: None,
+            cpu_usage_samples: vec![10.0],
+            cpu_brand: "test-cpu".to_string(),
+        };
+
+        let report = stress_report_from_measured(
+            &config,
+            &measured,
+            2.0,
+            7,
+            5,
+            1,
+            1,
+            10.0,
+            3,
+            11,
+            22,
+            33,
+            44,
+            "test-cpu".to_string(),
+        );
+
+        assert_eq!(None, report.append_latency_p95_micros);
+        assert!(!report.append_latency_observed);
+        assert_eq!(0, report.append_latency_sample_count_delta);
+        assert_eq!(
+            Some("zero_histogram_delta".to_string()),
+            report.append_latency_unavailable_reason
+        );
+        assert_eq!(config.shard_count, report.shard_count);
+        assert_eq!(config.ingress_capacity, report.ingress_capacity);
+        assert_eq!(config.ring_size, report.ring_size);
+    }
+
+    #[test]
     fn execute_http_window_does_not_use_fixed_one_millisecond_submit_tick() {
         let source = include_str!("http_stress.rs")
             .split("#[cfg(test)]")

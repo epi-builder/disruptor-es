@@ -243,6 +243,9 @@ mod tests {
             ingress_depth_estimated_max: None,
             shard_depth_max: Some(1),
             append_latency_p95_micros: Some(50),
+            append_latency_observed: true,
+            append_latency_sample_count_delta: 12,
+            append_latency_unavailable_reason: None,
             ring_wait_p95_micros: Some(60),
             projection_lag: Some(0),
             outbox_lag: Some(0),
@@ -260,6 +263,9 @@ mod tests {
             measurement_seconds: 2,
             run_duration_seconds: 2.0,
             concurrency: 2,
+            shard_count: 4,
+            ingress_capacity: 256,
+            ring_size: 256,
             deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
             drain_timeout_seconds: 5,
             host_os: "macos",
@@ -278,6 +284,12 @@ mod tests {
         assert_eq!(2, json["measurement_seconds"]);
         assert_eq!(2.0, json["run_duration_seconds"]);
         assert_eq!(2, json["concurrency"]);
+        assert_eq!(4, json["shard_count"]);
+        assert_eq!(256, json["ingress_capacity"]);
+        assert_eq!(256, json["ring_size"]);
+        assert_eq!(true, json["append_latency_observed"]);
+        assert_eq!(12, json["append_latency_sample_count_delta"]);
+        assert!(json["append_latency_unavailable_reason"].is_null());
         assert_eq!(60, json["ring_wait_p95_micros"]);
         assert_eq!(7, json["metrics_scrape_successes"]);
         assert_eq!(1, json["metrics_scrape_failures"]);
@@ -314,6 +326,9 @@ mod tests {
             ingress_depth_estimated_max: Some(8),
             shard_depth_max: None,
             append_latency_p95_micros: None,
+            append_latency_observed: false,
+            append_latency_sample_count_delta: 0,
+            append_latency_unavailable_reason: Some("zero_histogram_delta".to_string()),
             ring_wait_p95_micros: None,
             projection_lag: None,
             outbox_lag: None,
@@ -331,6 +346,9 @@ mod tests {
             measurement_seconds: 2,
             run_duration_seconds: 2.0,
             concurrency: 8,
+            shard_count: 2,
+            ingress_capacity: 8,
+            ring_size: 16,
             deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
             drain_timeout_seconds: 5,
             host_os: "macos",
@@ -343,6 +361,13 @@ mod tests {
 
         assert!(json["ingress_depth_max"].is_null());
         assert_eq!(8, json["ingress_depth_estimated_max"]);
+        assert!(json["append_latency_p95_micros"].is_null());
+        assert_eq!(false, json["append_latency_observed"]);
+        assert_eq!(0, json["append_latency_sample_count_delta"]);
+        assert_eq!(
+            "zero_histogram_delta",
+            json["append_latency_unavailable_reason"]
+        );
     }
 
     #[test]
