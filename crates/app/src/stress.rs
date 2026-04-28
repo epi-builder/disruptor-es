@@ -1,5 +1,6 @@
 //! Single-service integrated stress runner.
 
+use std::collections::BTreeMap;
 use std::{
     future::Future,
     pin::Pin,
@@ -212,6 +213,10 @@ pub struct StressReport {
     pub ingress_capacity: usize,
     /// Per-shard ring size for this lane.
     pub ring_size: usize,
+    /// Count of observed failure classes during the measured window.
+    pub failure_kind_counts: BTreeMap<String, u64>,
+    /// Bounded sample failures for diagnostic artifacts.
+    pub sample_failures: Vec<FailureSample>,
     /// Comparable deadline policy label.
     pub deadline_policy: String,
     /// Bounded drain timeout after the measured deadline.
@@ -224,6 +229,19 @@ pub struct StressReport {
     pub cpu_brand: String,
     /// Repeated CPU usage samples captured during the measured window.
     pub cpu_usage_samples: Vec<f32>,
+}
+
+/// Bounded diagnostic sample for an individual failed request.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct FailureSample {
+    /// Bounded failure classification.
+    pub kind: String,
+    /// HTTP status code when the failure came back through the API.
+    pub status_code: Option<u16>,
+    /// Stable API error code when present in the JSON response body.
+    pub api_error_code: Option<String>,
+    /// Bounded human-readable failure summary.
+    pub message: String,
 }
 
 /// Classify whether a workload shape is normal throughput evidence or a repeat-stream diagnostic.
@@ -454,6 +472,8 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
         shard_count: config.shard_count,
         ingress_capacity: config.ingress_capacity,
         ring_size: config.ring_size,
+        failure_kind_counts: BTreeMap::new(),
+        sample_failures: Vec::new(),
         deadline_policy: "complete-finite-batch".to_string(),
         drain_timeout_seconds: 0,
         host_os: std::env::consts::OS,

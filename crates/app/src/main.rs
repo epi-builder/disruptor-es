@@ -45,6 +45,8 @@ fn stress_report_json(report: &app::stress::StressReport) -> serde_json::Value {
         "shard_count": report.shard_count,
         "ingress_capacity": report.ingress_capacity,
         "ring_size": report.ring_size,
+        "failure_kind_counts": report.failure_kind_counts,
+        "sample_failures": report.sample_failures,
         "deadline_policy": report.deadline_policy,
         "drain_timeout_seconds": report.drain_timeout_seconds,
         "host_os": report.host_os,

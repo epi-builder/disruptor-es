@@ -17,7 +17,9 @@ rm -f "$OUTPUT_DIR/live-http-single-hot-key.json"
 
 assert_report_semantics_ready() {
   rg -q 'ingress_depth_estimated_max' crates/app/src/main.rs
+  rg -q 'append_latency_unavailable_reason' crates/app/src/main.rs
   rg -q 'workload_purpose' crates/app/src/main.rs
+  rg -q 'failure_kind_counts' crates/app/src/main.rs
 }
 
 run_text_lane() {

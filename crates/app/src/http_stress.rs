@@ -1,5 +1,6 @@
 //! External-process HTTP stress runner and canonical request fixtures.
 
+use std::collections::BTreeMap;
 use std::{
     env,
     io::Read,
@@ -13,7 +14,7 @@ use std::{
 use anyhow::{Context, anyhow};
 use hdrhistogram::Histogram;
 use reqwest::{Client, Method, StatusCode};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use sysinfo::System;
 use testcontainers::{ContainerAsync, ImageExt, runners::AsyncRunner};
@@ -24,7 +25,9 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::stress::{StressReport, StressScenario};
+use crate::stress::{FailureSample, StressReport, StressScenario};
+
+const MAX_FAILURE_SAMPLES: usize = 5;
 
 /// Canonical order-line request used by external-process tests and workloads.
 #[derive(Clone, Debug, Serialize)]
@@ -277,8 +280,15 @@ struct MeasuredState {
 
 #[derive(Debug)]
 struct RequestOutcome {
-    status: StatusCode,
     latency_micros: u64,
+    result: RequestResult,
+}
+
+#[derive(Debug)]
+enum RequestResult {
+    Success,
+    Rejected(RequestFailure),
+    Failed(RequestFailure),
 }
 
 #[derive(Debug, Default)]
@@ -287,6 +297,43 @@ struct WindowCounters {
     commands_succeeded: usize,
     commands_rejected: usize,
     commands_failed: usize,
+    failure_kind_counts: BTreeMap<String, u64>,
+    sample_failures: Vec<FailureSample>,
+}
+
+type RequestFailure = FailureSample;
+
+#[derive(Debug, Deserialize)]
+struct ApiErrorEnvelope {
+    error: ApiErrorPayload,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiErrorPayload {
+    code: String,
+    message: String,
+}
+
+impl WindowCounters {
+    fn record_failure(&mut self, failure: RequestFailure) {
+        self.commands_failed += 1;
+        self.record_diagnostic_sample(failure);
+    }
+
+    fn record_rejection(&mut self, failure: RequestFailure) {
+        self.commands_rejected += 1;
+        self.record_diagnostic_sample(failure);
+    }
+
+    fn record_diagnostic_sample(&mut self, failure: RequestFailure) {
+        *self
+            .failure_kind_counts
+            .entry(failure.kind.clone())
+            .or_insert(0) += 1;
+        if self.sample_failures.len() < MAX_FAILURE_SAMPLES {
+            self.sample_failures.push(failure);
+        }
+    }
 }
 
 impl Drop for ExternalProcessHarness {
@@ -449,6 +496,7 @@ pub async fn run_external_process_http_stress(
     Ok(stress_report_from_measured(
         &config,
         &measured,
+        &counters,
         run_duration_seconds,
         counters.commands_submitted,
         counters.commands_succeeded,
@@ -467,6 +515,7 @@ pub async fn run_external_process_http_stress(
 fn stress_report_from_measured(
     config: &HttpStressConfig,
     measured: &MeasuredState,
+    counters: &WindowCounters,
     run_duration_seconds: f64,
     commands_submitted: usize,
     commands_succeeded: usize,
@@ -546,6 +595,8 @@ fn stress_report_from_measured(
         shard_count: config.shard_count,
         ingress_capacity: config.ingress_capacity,
         ring_size: config.ring_size,
+        failure_kind_counts: counters.failure_kind_counts.clone(),
+        sample_failures: counters.sample_failures.clone(),
         deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
         drain_timeout_seconds: 5,
         host_os: std::env::consts::OS,
@@ -650,19 +701,36 @@ fn record_join_result(
     counters: &mut WindowCounters,
     latency: &mut Option<&mut Histogram<u64>>,
 ) -> anyhow::Result<()> {
-    let outcome = result.context("joining external-process HTTP request task")??;
+    let outcome = match result {
+        Ok(Ok(outcome)) => outcome,
+        Ok(Err(error)) => {
+            counters.record_failure(RequestFailure {
+                kind: "transport".to_string(),
+                status_code: None,
+                api_error_code: None,
+                message: truncate_failure_message(&format!("{error:#}")),
+            });
+            return Ok(());
+        }
+        Err(error) => {
+            counters.record_failure(RequestFailure {
+                kind: "internal".to_string(),
+                status_code: None,
+                api_error_code: None,
+                message: truncate_failure_message(&format!(
+                    "request task join error: {error}"
+                )),
+            });
+            return Ok(());
+        }
+    };
     if let Some(histogram) = latency.as_deref_mut() {
         histogram.record(outcome.latency_micros)?;
     }
-    match outcome.status {
-        StatusCode::OK => counters.commands_succeeded += 1,
-        StatusCode::TOO_MANY_REQUESTS => counters.commands_rejected += 1,
-        StatusCode::BAD_REQUEST => counters.commands_failed += 1,
-        status => {
-            return Err(anyhow!(
-                "unexpected external-process stress status {status}"
-            ));
-        }
+    match outcome.result {
+        RequestResult::Success => counters.commands_succeeded += 1,
+        RequestResult::Rejected(failure) => counters.record_rejection(failure),
+        RequestResult::Failed(failure) => counters.record_failure(failure),
     }
     Ok(())
 }
@@ -678,33 +746,66 @@ async fn place_order_with_client(
     request: CanonicalPlaceOrderRequest,
 ) -> anyhow::Result<RequestOutcome> {
     let started = Instant::now();
-    let response = http_request(
+    let response = match http_request(
         &client,
         listen_addr,
         Method::POST,
         "/commands/orders/place",
         Some(&request),
     )
-    .await?;
+    .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            return Ok(RequestOutcome {
+                latency_micros: micros(started.elapsed()),
+                result: RequestResult::Failed(RequestFailure {
+                    kind: "transport".to_string(),
+                    status_code: None,
+                    api_error_code: None,
+                    message: truncate_failure_message(&format!("{error:#}")),
+                }),
+            });
+        }
+    };
     let status = response.status();
     let body = response
         .text()
         .await
         .context("reading external-process stress response body")?;
 
-    if status == StatusCode::OK {
-        let payload: serde_json::Value =
-            serde_json::from_str(&body).context("decoding success response JSON")?;
-        if payload["reply"]["type"] != "placed" {
-            return Err(anyhow!("unexpected success reply payload: {body}"));
+    let result = if status == StatusCode::OK {
+        match serde_json::from_str::<serde_json::Value>(&body) {
+            Ok(payload) if payload["reply"]["type"] == "placed" => RequestResult::Success,
+            Ok(payload) => RequestResult::Failed(RequestFailure {
+                kind: "internal".to_string(),
+                status_code: Some(status.as_u16()),
+                api_error_code: None,
+                message: truncate_failure_message(&format!(
+                    "unexpected success reply payload: {payload}"
+                )),
+            }),
+            Err(error) => RequestResult::Failed(RequestFailure {
+                kind: "internal".to_string(),
+                status_code: Some(status.as_u16()),
+                api_error_code: None,
+                message: truncate_failure_message(&format!(
+                    "decoding success response JSON failed: {error}"
+                )),
+            }),
         }
-    } else if status != StatusCode::TOO_MANY_REQUESTS && status != StatusCode::BAD_REQUEST {
-        return Err(anyhow!("unexpected HTTP status {status}: {body}"));
-    }
+    } else {
+        let failure = classify_failure_response(status, &body);
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            RequestResult::Rejected(failure)
+        } else {
+            RequestResult::Failed(failure)
+        }
+    };
 
     Ok(RequestOutcome {
-        status,
         latency_micros: micros(started.elapsed()),
+        result,
     })
 }
 
@@ -1101,8 +1202,57 @@ fn append_latency_unavailable_reason(
     };
     match histogram_count_delta(baseline, body, metric_name, label_filter) {
         Some(0) => Some("zero_histogram_delta"),
-        Some(_) => None,
+        Some(_) => {
+            if histogram_p95_delta_micros(baseline, body, metric_name, label_filter).is_some() {
+                None
+            } else {
+                Some("missing_histogram_count")
+            }
+        }
         None => Some("missing_histogram_count"),
+    }
+}
+
+fn classify_failure_response(status: StatusCode, body: &str) -> RequestFailure {
+    let parsed = serde_json::from_str::<ApiErrorEnvelope>(body).ok();
+    let api_error_code = parsed.as_ref().map(|payload| payload.error.code.clone());
+    let message = parsed
+        .as_ref()
+        .map(|payload| payload.error.message.clone())
+        .unwrap_or_else(|| body.trim().to_string());
+    let kind = classify_failure_kind(status, api_error_code.as_deref());
+
+    RequestFailure {
+        kind: kind.to_string(),
+        status_code: Some(status.as_u16()),
+        api_error_code,
+        message: truncate_failure_message(&message),
+    }
+}
+
+fn classify_failure_kind(status: StatusCode, api_error_code: Option<&str>) -> &'static str {
+    match (status, api_error_code) {
+        (StatusCode::CONFLICT, Some("conflict")) | (StatusCode::CONFLICT, None) => "conflict",
+        (StatusCode::BAD_REQUEST, Some("domain")) => "domain",
+        (StatusCode::BAD_REQUEST, Some("invalid_request")) => "invalid_request",
+        (StatusCode::TOO_MANY_REQUESTS, Some("overloaded"))
+        | (StatusCode::TOO_MANY_REQUESTS, None) => "overloaded",
+        (StatusCode::SERVICE_UNAVAILABLE, Some("unavailable"))
+        | (StatusCode::SERVICE_UNAVAILABLE, None) => "unavailable",
+        (StatusCode::INTERNAL_SERVER_ERROR, Some("internal"))
+        | (StatusCode::INTERNAL_SERVER_ERROR, None) => "internal",
+        (StatusCode::BAD_REQUEST, Some(_)) => "domain",
+        _ => "unexpected_status",
+    }
+}
+
+fn truncate_failure_message(message: &str) -> String {
+    const MAX_CHARS: usize = 160;
+    let truncated: String = message.chars().take(MAX_CHARS).collect();
+    if message.chars().count() > MAX_CHARS {
+        format!("{truncated}...")
+    } else {
+        truncated
     }
 }
 
@@ -1194,11 +1344,14 @@ where
 mod tests {
     use super::{
         HttpStressConfig, HttpStressProfile, HttpWorkloadShape, MeasuredState, MetricSnapshot,
-        canonical_place_order_request, ensure_metrics_scrapes_observed, histogram_p95_delta_micros,
-        record_metrics_scrape_result, request_identity_for_index, run_external_process_http_stress,
-        stress_report_from_measured,
+        RequestFailure, WindowCounters, append_latency_unavailable_reason,
+        canonical_place_order_request, classify_failure_response,
+        ensure_metrics_scrapes_observed, histogram_p95_delta_micros, record_metrics_scrape_result,
+        request_identity_for_index, run_external_process_http_stress, stress_report_from_measured,
     };
     use crate::stress::StressScenario;
+    use reqwest::StatusCode;
+    use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
 
     #[test]
@@ -1300,6 +1453,7 @@ mod tests {
         let report = stress_report_from_measured(
             &config,
             &measured,
+            &WindowCounters::default(),
             2.0,
             7,
             5,
@@ -1343,6 +1497,7 @@ mod tests {
         let report = stress_report_from_measured(
             &config,
             &measured,
+            &WindowCounters::default(),
             2.0,
             7,
             5,
@@ -1500,6 +1655,34 @@ es_append_latency_seconds_count{outcome="committed"} 30
     }
 
     #[test]
+    fn append_latency_unavailable_reason_marks_missing_bucket_coverage() {
+        let before = r#"
+es_append_latency_seconds_bucket{outcome="committed",le="0.001"} 0
+es_append_latency_seconds_bucket{outcome="committed",le="0.005"} 0
+es_append_latency_seconds_bucket{outcome="committed",le="0.01"} 0
+es_append_latency_seconds_bucket{outcome="committed",le="+Inf"} 0
+es_append_latency_seconds_count{outcome="committed"} 0
+"#;
+        let after = r#"
+es_append_latency_seconds_bucket{outcome="committed",le="0.001"} 40
+es_append_latency_seconds_bucket{outcome="committed",le="0.005"} 70
+es_append_latency_seconds_bucket{outcome="committed",le="0.01"} 90
+es_append_latency_seconds_bucket{outcome="committed",le="+Inf"} 100
+es_append_latency_seconds_count{outcome="committed"} 100
+"#;
+
+        assert_eq!(
+            Some("missing_histogram_count"),
+            append_latency_unavailable_reason(
+                Some(before),
+                after,
+                "es_append_latency_seconds",
+                Some(("outcome", "committed")),
+            )
+        );
+    }
+
+    #[test]
     fn conflict_responses_are_classified_for_hot_key_diagnostics() {
         let failure = classify_failure_response(
             StatusCode::CONFLICT,
@@ -1619,6 +1802,8 @@ es_append_latency_seconds_count{outcome="committed"} 30
             shard_count: 2,
             ingress_capacity: 8,
             ring_size: 16,
+            failure_kind_counts: BTreeMap::new(),
+            sample_failures: Vec::new(),
             deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
             drain_timeout_seconds: 5,
             host_os: std::env::consts::OS,
