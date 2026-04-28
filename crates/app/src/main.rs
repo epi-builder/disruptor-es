@@ -152,6 +152,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use app::stress::{StressReport, StressScenario};
 
     use super::{HTTP_STRESS_USAGE, parse_http_stress_args, stress_report_json};
@@ -274,6 +276,13 @@ mod tests {
             shard_count: 4,
             ingress_capacity: 256,
             ring_size: 256,
+            failure_kind_counts: BTreeMap::from([(String::from("conflict"), 3_u64)]),
+            sample_failures: vec![app::stress::FailureSample {
+                kind: "conflict".to_string(),
+                status_code: Some(409),
+                api_error_code: Some("conflict".to_string()),
+                message: "stream conflict".to_string(),
+            }],
             deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
             drain_timeout_seconds: 5,
             host_os: "macos",
@@ -295,6 +304,9 @@ mod tests {
         assert_eq!(4, json["shard_count"]);
         assert_eq!(256, json["ingress_capacity"]);
         assert_eq!(256, json["ring_size"]);
+        assert_eq!(3, json["failure_kind_counts"]["conflict"]);
+        assert_eq!("conflict", json["sample_failures"][0]["kind"]);
+        assert_eq!(409, json["sample_failures"][0]["status_code"]);
         assert_eq!(true, json["append_latency_observed"]);
         assert_eq!(12, json["append_latency_sample_count_delta"]);
         assert!(json["append_latency_unavailable_reason"].is_null());
@@ -357,6 +369,8 @@ mod tests {
             shard_count: 2,
             ingress_capacity: 8,
             ring_size: 16,
+            failure_kind_counts: BTreeMap::new(),
+            sample_failures: Vec::new(),
             deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
             drain_timeout_seconds: 5,
             host_os: "macos",

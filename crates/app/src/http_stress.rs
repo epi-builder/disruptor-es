@@ -1499,6 +1499,39 @@ es_append_latency_seconds_count{outcome="committed"} 30
         );
     }
 
+    #[test]
+    fn conflict_responses_are_classified_for_hot_key_diagnostics() {
+        let failure = classify_failure_response(
+            StatusCode::CONFLICT,
+            r#"{"error":{"code":"conflict","message":"stream conflict for order-1: expected no-stream, actual 1"}}"#,
+        );
+
+        assert_eq!("conflict", failure.kind);
+        assert_eq!(Some(409), failure.status_code);
+        assert_eq!(Some("conflict".to_string()), failure.api_error_code);
+        assert!(failure.message.contains("stream conflict"));
+    }
+
+    #[test]
+    fn failure_samples_are_bounded_while_counts_keep_growing() {
+        let mut counters = WindowCounters::default();
+        for index in 0..7 {
+            let failure = RequestFailure {
+                kind: "conflict".to_string(),
+                status_code: Some(409),
+                api_error_code: Some("conflict".to_string()),
+                message: format!("stream conflict #{index}"),
+            };
+            counters.record_failure(failure);
+        }
+
+        assert_eq!(7, counters.commands_failed);
+        assert_eq!(Some(&7), counters.failure_kind_counts.get("conflict"));
+        assert_eq!(5, counters.sample_failures.len());
+        assert_eq!("stream conflict #0", counters.sample_failures[0].message);
+        assert_eq!("stream conflict #4", counters.sample_failures[4].message);
+    }
+
     #[tokio::test]
     async fn external_process_http_stress_smoke() -> anyhow::Result<()> {
         let report = run_external_process_http_stress(HttpStressConfig::smoke()).await?;
