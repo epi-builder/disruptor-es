@@ -166,6 +166,12 @@ pub struct StressReport {
     pub shard_depth_max: Option<usize>,
     /// Append-path latency p95 in microseconds when observed.
     pub append_latency_p95_micros: Option<u64>,
+    /// Whether append latency was directly observed from measured histogram samples.
+    pub append_latency_observed: bool,
+    /// Histogram sample delta used to compute append latency during the measured window.
+    pub append_latency_sample_count_delta: u64,
+    /// Low-cardinality reason why append latency could not be observed.
+    pub append_latency_unavailable_reason: Option<String>,
     /// Ring wait p95 in microseconds when observed.
     pub ring_wait_p95_micros: Option<u64>,
     /// Projection lag sampled outside the command success gate when observed.
@@ -200,6 +206,12 @@ pub struct StressReport {
     pub run_duration_seconds: f64,
     /// Measured-window submitter concurrency.
     pub concurrency: usize,
+    /// Local runtime shard count for this lane.
+    pub shard_count: usize,
+    /// Bounded ingress capacity for this lane.
+    pub ingress_capacity: usize,
+    /// Per-shard ring size for this lane.
+    pub ring_size: usize,
     /// Comparable deadline policy label.
     pub deadline_policy: String,
     /// Bounded drain timeout after the measured deadline.
@@ -419,6 +431,9 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
         ingress_depth_estimated_max: None,
         shard_depth_max: Some(shard_depth_max),
         append_latency_p95_micros: Some(percentile(&append_latency, 95.0)),
+        append_latency_observed: true,
+        append_latency_sample_count_delta: append_latency.len(),
+        append_latency_unavailable_reason: None,
         ring_wait_p95_micros: Some(0),
         projection_lag: Some(projection_lag),
         outbox_lag: Some(outbox_lag),
@@ -436,6 +451,9 @@ pub async fn run_single_service_stress(config: StressConfig) -> anyhow::Result<S
         measurement_seconds: elapsed.max(1.0).round() as u64,
         run_duration_seconds: elapsed,
         concurrency: config.concurrency,
+        shard_count: config.shard_count,
+        ingress_capacity: config.ingress_capacity,
+        ring_size: config.ring_size,
         deadline_policy: "complete-finite-batch".to_string(),
         drain_timeout_seconds: 0,
         host_os: std::env::consts::OS,

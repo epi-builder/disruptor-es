@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 //! Thin binary shell for runnable service and stress-smoke entrypoints.
 
 use anyhow::{Context, anyhow, bail};
@@ -20,6 +22,9 @@ fn stress_report_json(report: &app::stress::StressReport) -> serde_json::Value {
         "ingress_depth_estimated_max": report.ingress_depth_estimated_max,
         "shard_depth_max": report.shard_depth_max,
         "append_latency_p95_micros": report.append_latency_p95_micros,
+        "append_latency_observed": report.append_latency_observed,
+        "append_latency_sample_count_delta": report.append_latency_sample_count_delta,
+        "append_latency_unavailable_reason": report.append_latency_unavailable_reason,
         "ring_wait_p95_micros": report.ring_wait_p95_micros,
         "projection_lag": report.projection_lag,
         "outbox_lag": report.outbox_lag,
@@ -37,6 +42,9 @@ fn stress_report_json(report: &app::stress::StressReport) -> serde_json::Value {
         "measurement_seconds": report.measurement_seconds,
         "run_duration_seconds": report.run_duration_seconds,
         "concurrency": report.concurrency,
+        "shard_count": report.shard_count,
+        "ingress_capacity": report.ingress_capacity,
+        "ring_size": report.ring_size,
         "deadline_policy": report.deadline_policy,
         "drain_timeout_seconds": report.drain_timeout_seconds,
         "host_os": report.host_os,

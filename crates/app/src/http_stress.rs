@@ -256,7 +256,9 @@ struct RequestIdentity {
 struct MetricSnapshot {
     ingress_depth_max: usize,
     shard_depth_max: usize,
-    append_latency_p95_micros: u64,
+    append_latency_p95_micros: Option<u64>,
+    append_latency_sample_count_delta: u64,
+    append_latency_unavailable_reason: Option<&'static str>,
     ring_wait_p95_micros: u64,
     projection_lag: i64,
     outbox_lag: i64,
@@ -486,6 +488,24 @@ fn stress_report_from_measured(
     let ingress_depth_estimated_max = (measured.metrics_scrape_successes == 0)
         .then_some(config.concurrency.min(commands_submitted));
     let has_observed_metrics = measured.metrics_scrape_successes > 0;
+    let (
+        append_latency_p95_micros,
+        append_latency_observed,
+        append_latency_sample_count_delta,
+        append_latency_unavailable_reason,
+    ) = if has_observed_metrics {
+        (
+            measured.metrics.append_latency_p95_micros,
+            measured.metrics.append_latency_p95_micros.is_some(),
+            measured.metrics.append_latency_sample_count_delta,
+            measured
+                .metrics
+                .append_latency_unavailable_reason
+                .map(str::to_string),
+        )
+    } else {
+        (None, false, 0, Some("no_successful_scrapes".to_string()))
+    };
 
     StressReport {
         scenario: StressScenario::ExternalProcessHttp,
@@ -501,8 +521,10 @@ fn stress_report_from_measured(
         ingress_depth_max: has_observed_metrics.then_some(measured.metrics.ingress_depth_max),
         ingress_depth_estimated_max,
         shard_depth_max: has_observed_metrics.then_some(measured.metrics.shard_depth_max),
-        append_latency_p95_micros: has_observed_metrics
-            .then_some(measured.metrics.append_latency_p95_micros),
+        append_latency_p95_micros,
+        append_latency_observed,
+        append_latency_sample_count_delta,
+        append_latency_unavailable_reason,
         ring_wait_p95_micros: has_observed_metrics.then_some(measured.metrics.ring_wait_p95_micros),
         projection_lag: has_observed_metrics.then_some(measured.metrics.projection_lag),
         outbox_lag: has_observed_metrics.then_some(measured.metrics.outbox_lag),
@@ -521,6 +543,9 @@ fn stress_report_from_measured(
         measurement_seconds: config.measurement_seconds,
         run_duration_seconds,
         concurrency: config.concurrency,
+        shard_count: config.shard_count,
+        ingress_capacity: config.ingress_capacity,
+        ring_size: config.ring_size,
         deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
         drain_timeout_seconds: 5,
         host_os: std::env::consts::OS,
@@ -741,21 +766,35 @@ async fn scrape_metrics(
     Ok(MetricSnapshot {
         ingress_depth_max,
         shard_depth_max,
-        append_latency_p95_micros: append_latency_baseline
+        append_latency_p95_micros: append_latency_baseline.and_then(|baseline| {
+            histogram_p95_delta_micros(
+                baseline,
+                &body,
+                "es_append_latency_seconds",
+                Some(("outcome", "committed")),
+            )
+        }),
+        append_latency_sample_count_delta: append_latency_baseline
             .and_then(|baseline| {
-                histogram_p95_delta_micros(
+                histogram_count_delta(
                     baseline,
                     &body,
                     "es_append_latency_seconds",
                     Some(("outcome", "committed")),
                 )
             })
-            .unwrap_or(0),
+            .unwrap_or_default(),
+        append_latency_unavailable_reason: append_latency_unavailable_reason(
+            append_latency_baseline,
+            &body,
+            "es_append_latency_seconds",
+            Some(("outcome", "committed")),
+        ),
         ring_wait_p95_micros: ring_wait_baseline
             .and_then(|baseline| {
                 histogram_p95_delta_micros(baseline, &body, "es_ring_wait_seconds", None)
             })
-            .unwrap_or(0),
+            .unwrap_or_default(),
         projection_lag,
         outbox_lag,
     })
@@ -778,6 +817,10 @@ fn record_metrics_scrape_result(
             state.metrics.shard_depth_max =
                 state.metrics.shard_depth_max.max(snapshot.shard_depth_max);
             state.metrics.append_latency_p95_micros = snapshot.append_latency_p95_micros;
+            state.metrics.append_latency_sample_count_delta =
+                snapshot.append_latency_sample_count_delta;
+            state.metrics.append_latency_unavailable_reason =
+                snapshot.append_latency_unavailable_reason;
             state.metrics.ring_wait_p95_micros = snapshot.ring_wait_p95_micros;
             state.metrics.projection_lag =
                 state.metrics.projection_lag.max(snapshot.projection_lag);
@@ -1008,12 +1051,9 @@ fn histogram_p95_delta_micros(
     metric_name: &str,
     label_filter: Option<(&str, &str)>,
 ) -> Option<u64> {
-    let count_name = format!("{metric_name}_count");
-    let before_total = metric_count(before, &count_name, label_filter).unwrap_or(0);
-    let after_total = metric_count(after, &count_name, label_filter)?;
-    let total = after_total.saturating_sub(before_total);
+    let total = histogram_count_delta(before, after, metric_name, label_filter)?;
     if total == 0 {
-        return Some(0);
+        return None;
     }
 
     let target = (total as f64 * 0.95).ceil() as u64;
@@ -1029,13 +1069,41 @@ fn histogram_p95_delta_micros(
             }
             let after_cumulative = parse_metric_value(line)? as u64;
             let before_cumulative =
-                metric_bucket_count(before, &bucket_name, label_filter, upper).unwrap_or(0);
+                metric_bucket_count(before, &bucket_name, label_filter, upper).unwrap_or_default();
             let delta = after_cumulative.saturating_sub(before_cumulative);
             let seconds = upper.parse::<f64>().ok()?;
             Some((seconds, delta))
         })
         .find(|(_, cumulative)| *cumulative >= target)
         .map(|(seconds, _)| (seconds * 1_000_000.0) as u64)
+}
+
+fn histogram_count_delta(
+    before: &str,
+    after: &str,
+    metric_name: &str,
+    label_filter: Option<(&str, &str)>,
+) -> Option<u64> {
+    let count_name = format!("{metric_name}_count");
+    let before_total = metric_count(before, &count_name, label_filter).unwrap_or_default();
+    let after_total = metric_count(after, &count_name, label_filter)?;
+    Some(after_total.saturating_sub(before_total))
+}
+
+fn append_latency_unavailable_reason(
+    append_latency_baseline: Option<&str>,
+    body: &str,
+    metric_name: &str,
+    label_filter: Option<(&str, &str)>,
+) -> Option<&'static str> {
+    let Some(baseline) = append_latency_baseline else {
+        return Some("missing_histogram_count");
+    };
+    match histogram_count_delta(baseline, body, metric_name, label_filter) {
+        Some(0) => Some("zero_histogram_delta"),
+        Some(_) => None,
+        None => Some("missing_histogram_count"),
+    }
 }
 
 fn metric_count(
@@ -1214,7 +1282,9 @@ mod tests {
             metrics: MetricSnapshot {
                 ingress_depth_max: 0,
                 shard_depth_max: 3,
-                append_latency_p95_micros: 55,
+                append_latency_p95_micros: Some(55),
+                append_latency_sample_count_delta: 9,
+                append_latency_unavailable_reason: None,
                 ring_wait_p95_micros: 34,
                 projection_lag: 2,
                 outbox_lag: 1,
@@ -1255,7 +1325,9 @@ mod tests {
             metrics: MetricSnapshot {
                 ingress_depth_max: 1,
                 shard_depth_max: 3,
-                append_latency_p95_micros: 0,
+                append_latency_p95_micros: None,
+                append_latency_sample_count_delta: 0,
+                append_latency_unavailable_reason: Some("zero_histogram_delta"),
                 ring_wait_p95_micros: 34,
                 projection_lag: 2,
                 outbox_lag: 1,
@@ -1491,6 +1563,9 @@ es_append_latency_seconds_count{outcome="committed"} 30
             ingress_depth_estimated_max: None,
             shard_depth_max: Some(1),
             append_latency_p95_micros: Some(1),
+            append_latency_observed: true,
+            append_latency_sample_count_delta: 1,
+            append_latency_unavailable_reason: None,
             ring_wait_p95_micros: Some(1),
             projection_lag: Some(0),
             outbox_lag: Some(0),
@@ -1508,6 +1583,9 @@ es_append_latency_seconds_count{outcome="committed"} 30
             measurement_seconds: 2,
             run_duration_seconds: 2.0,
             concurrency: 2,
+            shard_count: 2,
+            ingress_capacity: 8,
+            ring_size: 16,
             deadline_policy: "stop-new-requests-then-drain-in-flight".to_string(),
             drain_timeout_seconds: 5,
             host_os: std::env::consts::OS,
