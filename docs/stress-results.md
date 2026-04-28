@@ -76,6 +76,8 @@ Interpret live HTTP queue-depth and ceiling evidence with these rules:
 - `ingress_depth_max` and the other scrape-derived fields are observed-only values. They describe what the metrics endpoint actually reported, not what concurrency or submission count might imply.
 - `ingress_depth_estimated_max` is a fallback hint for missing scrape data, not a measured queue-depth result.
 - Any ceiling classification narrower than `inconclusive` requires `metrics_scrape_successes > 0` in every cited baseline live HTTP artifact. If a cited baseline file has zero successful scrapes, the ceiling stays `inconclusive`.
+- Any archive claim that names append behavior must also cite `append_latency_observed`, `append_latency_p95_micros`, `append_latency_sample_count_delta`, and `append_latency_unavailable_reason`. If `append_latency_observed` is `false`, do not narrow the ceiling to a storage-append claim.
+- When comparing success-throughput lanes, cite the embedded lane metadata `shard_count`, `ingress_capacity`, and `ring_size` from the JSON itself instead of relying on filenames or shell flags.
 - `live-http-single-hot-key-diagnostic.json` is diagnostic-only and must stay out of baseline success-throughput comparisons.
 
 Explain the throughput ceiling in terms of the slowest measured layer: durable PostgreSQL append, HTTP overhead, bounded admission, or command-path side effects. Do not attribute every shortfall to the disruptor ring when the slower lane is elsewhere.
@@ -120,7 +122,7 @@ See [13.1-03-SUMMARY.md](/Users/epikem/dev/projects/disruptor-es/.planning/phase
 
 Phase 13.2 reran the baseline comparison and replaced the stale zero-scrape archive story. The current archive-safe baseline evidence is `target/phase-13.1/layer-comparison/live-http-unique.json`, `target/phase-13.1/layer-comparison/live-http-shard-1.json`, and `target/phase-13.1/layer-comparison/live-http-shard-8.json` as regenerated under `PHASE13_1_COMPARE_MODE=baseline bash scripts/compare-stress-layers.sh`, with rerun conditions recorded in `.planning/phases/13.2-phase-13-1-performance-evidence-recheck-and-root-cause-closu/13.2-BASELINE-REGEN.md` and `.planning/phases/13.2-phase-13-1-performance-evidence-recheck-and-root-cause-closu/13.2-SCRAPE-REPRO.md`.
 
-Those regenerated baseline files now report `metrics_scrape_successes > 0` in every cited live HTTP success-throughput artifact, so the archive-safe ceiling classification is no longer `inconclusive`. The current Phase 13.2 label is `storage append / durable command path`: ring-only and adapter-only remain far faster, `ring_wait_p95_micros` stays `0`, projection/outbox lag stays `0`, and the one-shard lane slows materially before the eight-shard lanes flatten near the durable service ceiling. Do not reuse any pre-Phase-13.2 zero-scrape `live-http-*.json` files for archive-facing ceiling claims.
+Those regenerated baseline files now report `metrics_scrape_successes > 0` in every cited live HTTP success-throughput artifact, so the archive-safe ceiling classification is no longer `inconclusive`. The current Phase 13.2 label is `durable command path (append latency unavailable in live HTTP artifacts)`: ring-only and adapter-only remain far faster, `ring_wait_p95_micros` stays `0`, projection/outbox lag stays `0`, the one-shard lane (`shard_count = 1`, `ingress_capacity = 256`, `ring_size = 256`) slows materially before the eight-shard lanes, and every cited success-throughput artifact reports `append_latency_observed = false` with `append_latency_unavailable_reason = "missing_histogram_count"`. That means `storage-only.txt` is still an inferential comparison, not direct live HTTP append proof. Do not reuse any pre-Phase-13.2 zero-scrape `live-http-*.json` files for archive-facing ceiling claims.
 
 Required steady-state output fields:
 
@@ -134,8 +136,14 @@ Required steady-state output fields:
 - `commands_failed`
 - `reject_rate`
 - `append_latency_p95_micros`
+- `append_latency_observed`
+- `append_latency_sample_count_delta`
+- `append_latency_unavailable_reason`
 - `ingress_depth_max`
 - `shard_depth_max`
+- `shard_count`
+- `ingress_capacity`
+- `ring_size`
 - `projection_lag`
 - `outbox_lag`
 - `cpu_utilization_percent`
@@ -150,6 +158,8 @@ Required steady-state output fields:
 - `host_os`
 - `host_arch`
 - `cpu_brand`
+- `failure_kind_counts`
+- `sample_failures`
 
 ### Criterion Smoke / Baseline Comparison
 
